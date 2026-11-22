@@ -1396,14 +1396,22 @@ struct GravMockNotchOverlay: View {
     }
 }
 
-// MARK: - Space 2: Preferences & Startup (Live Bound to PreferencesStore)
+// MARK: - Space 2: Preferences & Startup (1:1 macOS System Settings Bound Live to PreferencesStore)
 
 struct GravMockPreferencesScene: View {
     @ObservedObject var state: GravOnboardingState
     let preferences: PreferencesStore
 
+    @State private var selectedSection: String = "General"
     @State private var isRestoreHovered = false
-    @State private var isDoneHovered = false
+
+    private let macSystemBlue = Color(red: 0x0A / 255.0, green: 0x84 / 255.0, blue: 0xFF / 255.0)
+    private let macSystemGreen = Color(red: 0x30 / 255.0, green: 0xD1 / 255.0, blue: 0x58 / 255.0)
+    private let macSystemOrange = Color(red: 0xFF / 255.0, green: 0x9F / 255.0, blue: 0x0A / 255.0)
+    private let macSystemRed = Color(red: 0xFF / 255.0, green: 0x45 / 255.0, blue: 0x3A / 255.0)
+    private let macSystemPink = Color(red: 0xFF / 255.0, green: 0x2D / 255.0, blue: 0x55 / 255.0)
+    private let macSystemIndigo = Color(red: 0x5E / 255.0, green: 0x5C / 255.0, blue: 0xE6 / 255.0)
+    private let macSystemGray = Color(red: 0x6E / 255.0, green: 0x6E / 255.0, blue: 0x73 / 255.0)
 
     var body: some View {
         ZStack {
@@ -1411,299 +1419,406 @@ struct GravMockPreferencesScene: View {
 
             VStack(spacing: 0) {
                 settingsWindow
-                    .padding(.top, GravMockScene.windowTopInset + 16)
-                    .padding(.horizontal, GravMockScene.windowInset)
+                    .padding(.top, GravMockScene.windowTopInset + 10)
+                    .padding(.horizontal, GravMockScene.windowInset - 8)
 
                 Spacer(minLength: 0)
             }
         }
     }
 
+    /// 1:1 pixel-faithful macOS System Settings dark-mode window matching native Tahoe/Sequoia
+    /// chrome: Capsule search field, identity header, color-coded glossy sidebar rows with
+    /// macOS System Blue highlight, floating Liquid Glass `< | >` nav pill, centered hero header
+    /// card, and grouped inset toggle cards bound live to `PreferencesStore`.
     private var settingsWindow: some View {
         HStack(spacing: 0) {
-            // Left Full-Height macOS System Settings Sidebar
-            VStack(alignment: .leading, spacing: 6) {
-                GravMockTrafficLights(size: 9.5, spacing: 6)
+            // Left Full-Height Native macOS System Settings Sidebar
+            VStack(alignment: .leading, spacing: 0) {
+                GravMockTrafficLights(size: 9, spacing: 5.5)
                     .padding(.horizontal, 12)
-                    .padding(.top, 12)
-                    .padding(.bottom, 2)
+                    .padding(.top, 11)
+                    .padding(.bottom, 10)
 
-                // Search Field
-                HStack(spacing: 4) {
+                // Capsule Search Pill (exact macOS System Settings style)
+                HStack(spacing: 4.5) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 8.5))
-                        .foregroundStyle(Color.white.opacity(0.38))
+                        .font(.system(size: 8.5, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.42))
                     Text("Search")
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(Color.white.opacity(0.38))
+                        .font(.system(size: 9.5, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.42))
                     Spacer()
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3.5)
-                .background(
-                    Radius.rect(Radius.controlXS)
-                        .fill(Color.white.opacity(0.07))
-                )
                 .padding(.horizontal, 8)
-
-                // Grav App Identity Row
-                HStack(spacing: 7) {
-                    GravAppIconTile(size: 20)
-                    VStack(alignment: .leading, spacing: 0.5) {
-                        Text("Grav")
-                            .font(.system(size: 9.5, weight: .semibold))
-                            .foregroundStyle(GravMockPalette.ink)
-                        Text("Telemetry HUD")
-                            .font(.system(size: 7.5))
-                            .foregroundStyle(GravMockPalette.inkTertiary)
-                    }
-                }
+                .frame(height: 21)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.085))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                        )
+                )
                 .padding(.horizontal, 9)
-                .padding(.top, 3)
+                .padding(.bottom, 10)
 
-                Rectangle()
-                    .fill(GravMockPalette.chromeRule)
-                    .frame(height: 0.5)
-                    .padding(.horizontal, 8)
+                // Identity Header Row (exact Apple Account / App row proportions)
+                HStack(spacing: 8) {
+                    GravAppIconTile(size: 26)
+                        .clipShape(Circle())
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Grav")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.94))
+                        Text("Antigravity Telemetry")
+                            .font(.system(size: 8, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.48))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
 
-                VStack(spacing: 2) {
-                    sidebarItem(icon: "gearshape.fill", title: "Startup & HUD", badgeColor: GravMockPalette.gravTeal, isSelected: true)
-                    sidebarItem(icon: "macbook", title: "Notch Behavior", badgeColor: GravMockPalette.macBlue, isSelected: false)
-                    sidebarItem(icon: "square.on.square.dashed", title: "Liquid Glass", badgeColor: Color(white: 0.42), isSelected: false)
-                    sidebarItem(icon: "waveform.path.ecg", title: "Local Telemetry", badgeColor: GravMockPalette.gravEmerald, isSelected: false)
+                // Group 1: Connectivity & Core
+                VStack(spacing: 1.5) {
+                    sidebarItem(icon: "macbook", title: "Notch HUD", badgeColor: macSystemBlue)
+                    sidebarItem(icon: "waveform.path.ecg", title: "Telemetry", badgeColor: macSystemGreen)
+                    sidebarItem(icon: "bolt.fill", title: "Shortcuts", badgeColor: macSystemOrange)
+                }
+                .padding(.bottom, 9)
+
+                // Group 2: General (Selected in vivid macOS System Blue) & System Sections
+                VStack(spacing: 1.5) {
+                    sidebarItem(icon: "gearshape.fill", title: "General", badgeColor: macSystemGray)
+                    sidebarItem(icon: "circle.lefthalf.filled", title: "Appearance", badgeColor: Color(white: 0.24))
+                    sidebarItem(icon: "point.3.connected.trianglepath.dotted", title: "Swarm & Agents", badgeColor: macSystemIndigo)
+                    sidebarItem(icon: "bell.badge.fill", title: "Notifications", badgeColor: macSystemRed)
+                    sidebarItem(icon: "speaker.wave.2.fill", title: "Sound & Haptics", badgeColor: macSystemPink)
                 }
 
-                Spacer()
+                Spacer(minLength: 0)
             }
-            .frame(width: 140)
-            .background(GravMockPalette.chromeSidebar)
+            .frame(width: 158)
+            .background(Color(red: 0.118, green: 0.122, blue: 0.130))
 
             Rectangle()
-                .fill(GravMockPalette.chromeRule)
-                .frame(width: 0.5)
+                .fill(Color.black.opacity(0.65))
+                .frame(width: 0.75)
 
-            // Right Detail Pane bound LIVE to PreferencesStore
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 8) {
-                    HStack(spacing: 6) {
+            // Right Detail Pane (True System Settings Dark Canvas)
+            VStack(alignment: .leading, spacing: 10) {
+                // Floating Liquid Glass `< | >` Navigation Pill (exact Tahoe/Sequoia chrome)
+                HStack {
+                    HStack(spacing: 0) {
                         Image(systemName: "chevron.left")
-                            .foregroundStyle(Color.white.opacity(0.42))
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(Color.white.opacity(0.16))
-                    }
-                    .font(.system(size: 9.5, weight: .semibold))
-
-                    Text("Startup & HUD")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(GravMockPalette.ink)
-
-                    Spacer()
-
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(GravMockPalette.gravEmerald)
-                            .frame(width: 5, height: 5)
-                        Text("Live")
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.56))
+                            .foregroundStyle(Color.white.opacity(0.46))
+                            .frame(width: 22, height: 21)
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.14))
+                            .frame(width: 0.5, height: 11)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.24))
+                            .frame(width: 22, height: 21)
                     }
-                }
-                .padding(.horizontal, 14)
-                .frame(height: 36)
-                .background(GravMockPalette.chromeBar)
-
-                Rectangle()
-                    .fill(GravMockPalette.chromeRule)
-                    .frame(height: 0.5)
-
-                VStack(spacing: 0) {
-                    preferenceRow(
-                        title: "Launch at Login",
-                        detail: "Start Grav silently in your menu bar when macOS boots.",
-                        isOn: Binding(
-                            get: { preferences.launchAtLogin },
-                            set: { newValue in
-                                preferences.launchAtLogin = newValue
-                                state.markPreferencesReviewed()
-                            }
-                        )
-                    )
-
-                    rowDivider
-
-                    preferenceRow(
-                        title: "Auto-Peek on Events",
-                        detail: "Briefly glance the notch on thinking bursts, edits, and command exits.",
-                        isOn: Binding(
-                            get: { preferences.autoPeekOnEvents },
-                            set: { newValue in
-                                preferences.autoPeekOnEvents = newValue
-                                state.markPreferencesReviewed()
-                            }
-                        )
-                    )
-
-                    rowDivider
-
-                    preferenceRow(
-                        title: "Hover to Expand Notch",
-                        detail: "Open the 3-tab telemetry HUD when resting your pointer on the notch.",
-                        isOn: Binding(
-                            get: { preferences.hoverToExpand },
-                            set: { newValue in
-                                preferences.hoverToExpand = newValue
-                                state.markPreferencesReviewed()
-                            }
-                        )
-                    )
-
-                    rowDivider
-
-                    preferenceRow(
-                        title: "Liquid Glass Chrome",
-                        detail: "Use native macOS glass refraction across controls and settings.",
-                        isOn: Binding(
-                            get: { preferences.useLiquidGlass },
-                            set: { newValue in
-                                preferences.useLiquidGlass = newValue
-                                state.markPreferencesReviewed()
-                            }
-                        )
-                    )
-                }
-                .background(GravMockPalette.chromeCard)
-                .clipShape(Radius.rect(Radius.controlM))
-                .overlay(
-                    Radius.rect(Radius.controlM)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
-                )
-                .padding(.horizontal, 14)
-                .padding(.top, 12)
-
-                Spacer(minLength: 8)
-
-                Rectangle()
-                    .fill(GravMockPalette.chromeRule)
-                    .frame(height: 0.5)
-
-                // Footer
-                HStack(spacing: 8) {
-                    Button {
-                        withAnimation(GravMotionPreferences.shared.spec(.hover).animation) {
-                            preferences.autoPeekOnEvents = true
-                            preferences.hoverToExpand = true
-                            preferences.useLiquidGlass = true
-                            state.markPreferencesReviewed()
-                        }
-                    } label: {
-                        Text("Restore Defaults")
-                            .font(.system(size: 9.5, weight: .medium))
-                            .foregroundStyle(GravMockPalette.ink.opacity(0.86))
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
-                            .background(
-                                Radius.rect(Radius.controlXS)
-                                    .fill(isRestoreHovered ? Color.white.opacity(0.14) : Color.white.opacity(0.08))
-                                    .overlay(
-                                        Radius.rect(Radius.controlXS)
-                                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
-                                    )
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5)
                             )
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { isRestoreHovered = $0 }
+                    )
 
                     Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 9)
 
-                    Button {
-                        state.markPreferencesReviewed()
-                    } label: {
-                        Text("Looks Good")
-                            .font(.system(size: 9.5, weight: .semibold))
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 4)
-                            .background(
-                                Radius.rect(Radius.controlXS)
-                                    .fill(isDoneHovered ? GravMockPalette.gravTeal.opacity(0.88) : GravMockPalette.gravTeal)
-                            )
+                // Scrollable Content Area matching System Settings vertical rhythm
+                VStack(spacing: 8) {
+                    // Centered Hero Header Card (exact System Settings `General` hero card)
+                    VStack(spacing: 5) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8.5, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color(white: 0.58), Color(white: 0.38)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .frame(width: 34, height: 34)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8.5, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.5)
+                                )
+                                .shadow(color: Color.black.opacity(0.32), radius: 4, y: 2)
+
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 18, weight: .regular))
+                                .foregroundStyle(Color.white.opacity(0.95))
+                        }
+
+                        Text(selectedSection)
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundStyle(Color.white.opacity(0.96))
+
+                        Text("Manage startup behavior, notch triggers, and live Antigravity telemetry preferences for your Mac.")
+                            .font(.system(size: 8.5, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.56))
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(1.5)
+                            .frame(maxWidth: 270)
                     }
-                    .buttonStyle(.plain)
-                    .onHover { isDoneHovered = $0 }
+                    .padding(.vertical, 11)
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(red: 0.118, green: 0.122, blue: 0.130))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
+                            )
+                    )
+
+                    // Inset Grouped Card 1 (Live-bound toggles with System Settings glossy icon tiles)
+                    VStack(spacing: 0) {
+                        systemSettingsToggleRow(
+                            icon: "power",
+                            iconColor: macSystemGray,
+                            title: "Launch at Login",
+                            isOn: Binding(
+                                get: { preferences.launchAtLogin },
+                                set: { newValue in
+                                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                                    preferences.launchAtLogin = newValue
+                                    state.markPreferencesReviewed()
+                                }
+                            )
+                        )
+
+                        settingsGroupDivider
+
+                        systemSettingsToggleRow(
+                            icon: "macbook",
+                            iconColor: macSystemBlue,
+                            title: "Hover to Expand Notch",
+                            isOn: Binding(
+                                get: { preferences.hoverToExpand },
+                                set: { newValue in
+                                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                                    preferences.hoverToExpand = newValue
+                                    state.markPreferencesReviewed()
+                                }
+                            )
+                        )
+
+                        settingsGroupDivider
+
+                        systemSettingsToggleRow(
+                            icon: "waveform.path.ecg",
+                            iconColor: macSystemGreen,
+                            title: "Auto-Peek on Events",
+                            isOn: Binding(
+                                get: { preferences.autoPeekOnEvents },
+                                set: { newValue in
+                                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                                    preferences.autoPeekOnEvents = newValue
+                                    state.markPreferencesReviewed()
+                                }
+                            )
+                        )
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(red: 0.118, green: 0.122, blue: 0.130))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
+                            )
+                    )
+
+                    // Inset Grouped Card 2 (Liquid Glass + Restore Defaults)
+                    VStack(spacing: 0) {
+                        systemSettingsToggleRow(
+                            icon: "square.on.square",
+                            iconColor: macSystemIndigo,
+                            title: "Liquid Glass Chrome",
+                            isOn: Binding(
+                                get: { preferences.useLiquidGlass },
+                                set: { newValue in
+                                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                                    preferences.useLiquidGlass = newValue
+                                    state.markPreferencesReviewed()
+                                }
+                            )
+                        )
+
+                        settingsGroupDivider
+
+                        Button {
+                            GravOnboardingWelcomeAudio.shared.playButtonTap()
+                            withAnimation(GravMotionPreferences.shared.spec(.hover).animation) {
+                                preferences.autoPeekOnEvents = true
+                                preferences.hoverToExpand = true
+                                preferences.useLiquidGlass = true
+                                state.markPreferencesReviewed()
+                            }
+                        } label: {
+                            HStack(spacing: 9) {
+                                settingsRowGlyph(icon: "arrow.counterclockwise", color: macSystemGray)
+
+                                Text("Restore Recommended Defaults")
+                                    .font(.system(size: 9.8, weight: .regular))
+                                    .foregroundStyle(Color.white.opacity(0.90))
+
+                                Spacer(minLength: 8)
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 8.5, weight: .semibold))
+                                    .foregroundStyle(Color.white.opacity(0.32))
+                            }
+                            .padding(.horizontal, 10)
+                            .frame(height: 31)
+                            .background(isRestoreHovered ? Color.white.opacity(0.04) : Color.clear)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { isRestoreHovered = $0 }
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(red: 0.118, green: 0.122, blue: 0.130))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
+                            )
+                    )
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(GravMockPalette.chromeBar)
+
+                Spacer(minLength: 0)
             }
-            .background(GravMockPalette.chrome)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(red: 0.088, green: 0.092, blue: 0.100))
         }
-        .frame(width: 512, height: 322)
-        .clipShape(Radius.rect(Radius.card))
+        .frame(width: 530, height: 356)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
-            Radius.rect(Radius.card)
-                .strokeBorder(GravMockPalette.chromeEdge, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.55), radius: 28, x: 0, y: 14)
-        .shadow(color: Color.black.opacity(0.22), radius: 5, x: 0, y: 2)
+        .shadow(color: Color.black.opacity(0.62), radius: 30, x: 0, y: 16)
+        .shadow(color: Color.black.opacity(0.24), radius: 5, x: 0, y: 2)
     }
 
-    private var rowDivider: some View {
+    private var settingsGroupDivider: some View {
         Rectangle()
-            .fill(GravMockPalette.chromeRule)
+            .fill(Color.white.opacity(0.07))
             .frame(height: 0.5)
-            .padding(.leading, 12)
+            .padding(.leading, 36)
     }
 
-    private func sidebarItem(icon: String, title: String, badgeColor: Color, isSelected: Bool) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(Color.white)
-                .frame(width: 15, height: 15)
-                .background(
-                    Radius.rect(Radius.ornament)
-                        .fill(isSelected ? Color.white.opacity(0.24) : badgeColor)
+    private func settingsRowGlyph(icon: String, color: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4.5, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [color, color.opacity(0.78)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
-            Text(title)
-                .font(.system(size: 9, weight: isSelected ? .semibold : .regular))
-                .foregroundStyle(isSelected ? Color.white : GravMockPalette.ink.opacity(0.82))
-                .lineLimit(1)
-            Spacer()
+                .frame(width: 17, height: 17)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4.5, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.4)
+                )
+
+            Image(systemName: icon)
+                .font(.system(size: 8.5, weight: .semibold))
+                .foregroundStyle(Color.white)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        .background(
-            Radius.rect(Radius.controlXS)
-                .fill(isSelected ? GravMockPalette.gravTeal : Color.clear)
-        )
-        .padding(.horizontal, 7)
     }
 
-    private func preferenceRow(title: String, detail: String, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 1.5) {
+    private func sidebarItem(icon: String, title: String, badgeColor: Color) -> some View {
+        let isSelected = selectedSection == title
+        return Button {
+            GravOnboardingWelcomeAudio.shared.playButtonTap()
+            selectedSection = title
+        } label: {
+            HStack(spacing: 6.5) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4.2, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [badgeColor, badgeColor.opacity(0.80)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 16, height: 16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4.2, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.4)
+                        )
+
+                    Image(systemName: icon)
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                }
+
                 Text(title)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(GravMockPalette.ink)
-                Text(detail)
-                    .font(.system(size: 8.5))
-                    .foregroundStyle(GravMockPalette.inkTertiary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: 9.5, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.86))
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 6.5)
+            .frame(height: 22)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? macSystemBlue : Color.clear)
+            )
+            .padding(.horizontal, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func systemSettingsToggleRow(
+        icon: String,
+        iconColor: Color,
+        title: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(spacing: 9) {
+            settingsRowGlyph(icon: icon, color: iconColor)
+
+            Text(title)
+                .font(.system(size: 9.8, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.92))
 
             Spacer(minLength: 8)
 
-            // Pure-SwiftUI macOS switch so 3D Spaces transitions stay 120fps with zero AppKit layout thrash
-            MockMacOSToggle(isOn: isOn)
+            MockMacOSToggle(isOn: isOn, accentColor: macSystemBlue)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 10)
+        .frame(height: 31)
     }
 }
 
 private struct MockMacOSToggle: View {
     @Binding var isOn: Bool
+    var accentColor: Color = Color(red: 0x0A / 255.0, green: 0x84 / 255.0, blue: 0xFF / 255.0)
 
     var body: some View {
         Button {
@@ -1713,13 +1828,13 @@ private struct MockMacOSToggle: View {
         } label: {
             ZStack(alignment: isOn ? .trailing : .leading) {
                 Capsule(style: .continuous)
-                    .fill(isOn ? GravMockPalette.gravTeal : Color.white.opacity(0.16))
-                    .frame(width: 28, height: 16)
+                    .fill(isOn ? accentColor : Color.white.opacity(0.18))
+                    .frame(width: 26, height: 15)
 
                 Circle()
                     .fill(Color.white)
-                    .frame(width: 12.5, height: 12.5)
-                    .shadow(color: Color.black.opacity(0.18), radius: 1.5, y: 0.5)
+                    .frame(width: 11.5, height: 11.5)
+                    .shadow(color: Color.black.opacity(0.22), radius: 1.5, y: 0.5)
                     .padding(1.75)
             }
         }

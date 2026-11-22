@@ -60,6 +60,7 @@ public final class AntigravityTelemetryStore {
     private var truncatedHydrationTask: Task<Void, Never>?
     private var hydratedFileContents: [String: String] = [:]
     private var lastFinalIdleAt: Date = .distantPast
+    private var isSpeculativeWALWorking: Bool = false
     private var idleDecayTask: Task<Void, Never>?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var sessionGeneration: UInt64 = 0
@@ -514,10 +515,10 @@ public final class AntigravityTelemetryStore {
 
             // Attach live WAL pulse watcher so `Working` -> `Thinking for Ns` activates at 0ms
             // the instant the user submits a prompt in Antigravity (before transcript.jsonl flushes).
-            await walWatcher.startWatching { [weak self] in
+            await walWatcher.startWatching { [weak self] deltaBytes in
                 Task { @MainActor [weak self] in
                     guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
-                    self.handleLiveConversationWALActivity()
+                    self.handleLiveConversationWALActivity(deltaBytes: deltaBytes)
                 }
             }
 
@@ -564,10 +565,10 @@ public final class AntigravityTelemetryStore {
                     self.applySwarmSubagentUpdate(update)
                 }
             }
-            await walWatcher.startWatching { [weak self] in
+            await walWatcher.startWatching { [weak self] deltaBytes in
                 Task { @MainActor [weak self] in
                     guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
-                    self.handleLiveConversationWALActivity()
+                    self.handleLiveConversationWALActivity(deltaBytes: deltaBytes)
                 }
             }
             await tailer.startWatching { [weak self] newSteps in
@@ -618,10 +619,10 @@ public final class AntigravityTelemetryStore {
         }
     }
 
-    private func handleLiveConversationWALActivity() {
-        guard !isHydratingActiveSession, !isPaused else { return }
-        // Ignore the trailing SQLite WAL flush immediately after a final assistant reply settled to `.idle`
-        if Date().timeIntervalSince(lastFinalIdleAt) < 2.2 {
+    private func handleLiveConversationWALActivity(deltaBytes: Int64) {
+        guard !isHydratingActiveSession, !isPaused, deltaBytes >= 4096 else { return }
+        // Ignore post-completion SQLite housekeeping / diff-review writes right after a turn finishes
+        if Date().timeIntervalSince(lastFinalIdleAt) < 5.0 {
             return
         }
 
@@ -629,6 +630,7 @@ public final class AntigravityTelemetryStore {
         case .idle:
             let now = Date()
             currentPhaseStartedAt = now
+            isSpeculativeWALWorking = true
             if GravMotionPreferences.shared.reduceMotion {
                 state = .working(startedAt: now)
             } else {
@@ -755,6 +757,7 @@ public final class AntigravityTelemetryStore {
         }
 
         let previousState = state
+        isSpeculativeWALWorking = false
         state = output.state
 
         if output.state == .idle && previousState != .idle && !suppressPeeks {
@@ -1007,10 +1010,14 @@ public final class AntigravityTelemetryStore {
         if idleDecaySeconds < 5.0 {
             // Preserve fast deterministic timeouts in unit tests
             timeout = isRunningCommand ? max(45.0, idleDecaySeconds * 3.5) : idleDecaySeconds
+        } else if isSpeculativeWALWorking {
+            // Speculative WAL-only `.working` must settle rapidly (9s) if no sustained WAL growth
+            // or transcript step follows, preventing stuck `Thinking for 1m 13s` after idle flushes.
+            timeout = 9.0
         } else if isRunningCommand {
-            timeout = max(60.0, idleDecaySeconds * 5.0)
+            timeout = max(55.0, idleDecaySeconds * 4.5)
         } else {
-            timeout = max(75.0, idleDecaySeconds * 6.0)
+            timeout = max(45.0, idleDecaySeconds * 3.5)
         }
         let delayNanoseconds = UInt64(timeout * 1_000_000_000)
 

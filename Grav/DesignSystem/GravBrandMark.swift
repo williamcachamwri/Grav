@@ -119,8 +119,36 @@ public struct AntigravityLogoView: View {
         self.size = size
     }
 
+    private var resolvedIcon: NSImage? {
+        let icnsPath = "/Applications/Antigravity.app/Contents/Resources/icon.icns"
+        if let icns = NSImage(contentsOfFile: icnsPath) {
+            return icns
+        }
+        if let bundled = NSImage(named: "AntigravityAppIcon") {
+            return bundled
+        }
+        if let icon {
+            return icon
+        }
+        let defaultPath = "/Applications/Antigravity.app"
+        if FileManager.default.fileExists(atPath: defaultPath) {
+            return NSWorkspace.shared.icon(forFile: defaultPath)
+        }
+        return nil
+    }
+
     public var body: some View {
-        GravAppIconTile(size: size)
-            .frame(width: size, height: size)
+        if let nsImage = resolvedIcon {
+            Image(nsImage: nsImage)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size, height: size)
+        } else {
+            Image(systemName: "app.dashed")
+                .font(.system(size: size * 0.65, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.60))
+                .frame(width: size, height: size)
+        }
     }
 }

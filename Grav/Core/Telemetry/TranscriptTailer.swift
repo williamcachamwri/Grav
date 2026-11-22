@@ -375,7 +375,8 @@ public actor ConversationWALWatcher {
     private let watcherQueue: DispatchQueue
     private var fileSource: DispatchSourceFileSystemObject?
     private var dirSource: DispatchSourceFileSystemObject?
-    private var onActivity: (@Sendable () -> Void)?
+    private var onGrowth: (@Sendable (Int64) -> Void)?
+    private var lastWALSize: UInt64 = 0
     private var isWatching: Bool = false
 
     public init(session: ConversationSession) {
@@ -391,21 +392,32 @@ public actor ConversationWALWatcher {
         )
     }
 
-    public func startWatching(onActivity: @escaping @Sendable () -> Void) {
+    public func startWatching(onGrowth: @escaping @Sendable (Int64) -> Void) {
         stopWatching()
-        self.onActivity = onActivity
+        self.onGrowth = onGrowth
         self.isWatching = true
+        self.lastWALSize = currentWALFileSize()
         attachFileSource()
         attachDirectorySource()
     }
 
     public func stopWatching() {
         isWatching = false
-        onActivity = nil
+        onGrowth = nil
+        lastWALSize = 0
         fileSource?.cancel()
         fileSource = nil
         dirSource?.cancel()
         dirSource = nil
+    }
+
+    private func currentWALFileSize() -> UInt64 {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: walURL.path),
+              let num = attrs[.size] as? NSNumber
+        else {
+            return 0
+        }
+        return num.uint64Value
     }
 
     private func attachFileSource() {
@@ -418,7 +430,7 @@ public actor ConversationWALWatcher {
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
-            eventMask: [.write, .extend, .rename, .delete, .attrib],
+            eventMask: [.write, .extend, .rename, .delete],
             queue: watcherQueue
         )
         source.setEventHandler { [weak self] in
@@ -465,7 +477,7 @@ public actor ConversationWALWatcher {
         guard isWatching else { return }
         if fileSource == nil, FileManager.default.fileExists(atPath: walURL.path) {
             attachFileSource()
-            onActivity?()
+            emitGrowthIfNeeded()
         }
     }
 
@@ -474,6 +486,21 @@ public actor ConversationWALWatcher {
         if replaced {
             attachFileSource()
         }
-        onActivity?()
+        emitGrowthIfNeeded()
+    }
+
+    private func emitGrowthIfNeeded() {
+        let newSize = currentWALFileSize()
+        if newSize > lastWALSize {
+            let delta = Int64(newSize - lastWALSize)
+            lastWALSize = newSize
+            // Only signal meaningful streaming payload writes (ignore tiny SQLite checkpoint/metadata touches)
+            if delta >= 4096 {
+                onGrowth?(delta)
+            }
+        } else {
+            // WAL shrunk/checkpointed back to 0 — update baseline without emitting false activity
+            lastWALSize = newSize
+        }
     }
 }

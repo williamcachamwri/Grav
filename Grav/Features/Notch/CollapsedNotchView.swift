@@ -112,8 +112,8 @@ public struct CollapsedNotchView: View {
                     .transition(signalTransition)
 
             case let .inspecting(event):
-                TimelineView(.periodic(from: event.timestamp, by: 1.0)) { context in
-                    if context.date.timeIntervalSince(event.timestamp) >= 5.0 {
+                TimelineView(.periodic(from: store.currentPhaseStartedAt, by: 1.0)) { context in
+                    if context.date.timeIntervalSince(store.currentPhaseStartedAt) >= 5.0 {
                         NotchBars(thinkingWaveStyle)
                     } else {
                         LanguageIconView(path: event.path, changeKind: nil, size: 14)
@@ -122,8 +122,8 @@ public struct CollapsedNotchView: View {
                 .transition(signalTransition)
 
             case let .editing(event):
-                TimelineView(.periodic(from: event.timestamp, by: 1.0)) { context in
-                    if context.date.timeIntervalSince(event.timestamp) >= 5.0 {
+                TimelineView(.periodic(from: store.currentPhaseStartedAt, by: 1.0)) { context in
+                    if context.date.timeIntervalSince(store.currentPhaseStartedAt) >= 5.0 {
                         NotchBars(thinkingWaveStyle)
                     } else {
                         LanguageIconView(path: event.path, changeKind: event.kind, size: 14)
@@ -306,13 +306,13 @@ public struct CollapsedNotchView: View {
     }
 
     private func inspectingTrailingSignal(for event: FileInspectionEvent, compact: Bool) -> some View {
-        TimelineView(.periodic(from: event.timestamp, by: 1.0)) { context in
-            let elapsed = max(0, context.date.timeIntervalSince(event.timestamp))
+        TimelineView(.periodic(from: store.currentPhaseStartedAt, by: 1.0)) { context in
+            let elapsed = max(0, context.date.timeIntervalSince(store.currentPhaseStartedAt))
             if elapsed >= 5.0 {
                 // After clearly showcasing the analyzed file for 5s, smoothly morph to live
                 // `Thinking for Ns` while Antigravity reasons about the next step.
                 NotchThinkingShimmerLabel(
-                    startDate: event.timestamp,
+                    startDate: store.currentPhaseStartedAt,
                     compact: compact,
                     font: .system(size: compact ? 11 : 11.5, weight: .medium),
                     reduceMotion: reduceMotion
@@ -340,10 +340,10 @@ public struct CollapsedNotchView: View {
     }
 
     private func editingTrailingSignal(for event: FileChangeEvent, compact: Bool) -> some View {
-        TimelineView(.periodic(from: event.timestamp, by: 1.0)) { context in
-            if context.date.timeIntervalSince(event.timestamp) >= 5.0 {
+        TimelineView(.periodic(from: store.currentPhaseStartedAt, by: 1.0)) { context in
+            if context.date.timeIntervalSince(store.currentPhaseStartedAt) >= 5.0 {
                 NotchThinkingShimmerLabel(
-                    startDate: event.timestamp,
+                    startDate: store.currentPhaseStartedAt,
                     compact: compact,
                     font: .system(size: compact ? 11 : 11.5, weight: .medium),
                     reduceMotion: reduceMotion
