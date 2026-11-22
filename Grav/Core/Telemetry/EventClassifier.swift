@@ -156,7 +156,18 @@ public struct EventClassifier: Sendable {
             )
         }
 
-        // 4. Transition high-level state
+        // 4. Correlate subsequent tool-result steps (`GENERIC` / background notifications) with pending commands
+        var commandJustFinished = false
+        if !pendingCommands.isEmpty, toolCalls.isEmpty, step.type != "USER_INPUT" {
+            commandJustFinished = correlateCommandResult(
+                step: step,
+                stepDate: stepDate,
+                session: session,
+                into: &output
+            )
+        }
+
+        // 5. Transition high-level state
         if let activeCmd = pendingCommands.last {
             state = .runningCommand(activeCmd)
         } else if let latestFile = output.fileChanges.last {
@@ -173,6 +184,9 @@ public struct EventClassifier: Sendable {
             state = .idle
             burstEditedPaths.removeAll()
             hasPeekedMultiFileBurst = false
+        } else if commandJustFinished {
+            // Command completed; return to `.thinking` if thinking is still active, otherwise `.idle`
+            state = activeThinkingStepIndex != nil ? .thinking : .idle
         }
 
         output.state = state
@@ -401,5 +415,240 @@ public struct EventClassifier: Sendable {
         )
         pendingCommands.append(event)
         output.startedCommands.append(event)
+    }
+
+    // MARK: - Command Result Correlation
+
+    private mutating func correlateCommandResult(
+        step: TranscriptStep,
+        stepDate: Date,
+        session: ConversationSession?,
+        into output: inout EventClassificationOutput
+    ) -> Bool {
+        guard let content = step.content, !content.isEmpty else {
+            return false
+        }
+
+        let exitCode = Self.extractExitCode(from: content)
+        let extractedTaskLogURL = Self.extractTaskLogURL(from: content, session: session)
+        let extractedStepOutputURL = Self.extractStepOutputURL(from: content, stepIndex: step.stepIndex, session: session)
+        let isRunningNotice = Self.looksLikeRunningCommandNotice(content)
+        let hasCommandOutputHeader = content.contains("Command output:")
+
+        // Only match steps that actually represent command output / exit / task status
+        // (avoids consuming `read_file` or `write_file` GENERIC responses)
+        guard exitCode != nil || extractedTaskLogURL != nil || isRunningNotice || hasCommandOutputHeader else {
+            return false
+        }
+
+        // Prefer matching by task log filename if present, otherwise oldest pending command with stepIndex < step.stepIndex
+        let matchIndex: Int?
+        if let taskLogURL = extractedTaskLogURL,
+           let byTaskLog = pendingCommands.firstIndex(where: { $0.taskLogURL?.lastPathComponent == taskLogURL.lastPathComponent })
+        {
+            matchIndex = byTaskLog
+        } else {
+            matchIndex = pendingCommands.firstIndex(where: { $0.stepIndex < step.stepIndex })
+        }
+
+        guard let idx = matchIndex else {
+            return false
+        }
+
+        let existing = pendingCommands[idx]
+        let cleanedOutput = Self.extractCleanCommandOutput(from: content)
+        let mergedLog = cleanedOutput.isEmpty ? existing.logOutput : cleanedOutput
+        let isTruncated = existing.isTruncated
+            || step.isFieldTruncated("content")
+            || content.localizedCaseInsensitiveContains("output was truncated")
+        let resolvedTaskLogURL = extractedTaskLogURL ?? existing.taskLogURL
+        let resolvedStepOutputURL = extractedStepOutputURL ?? existing.stepOutputURL
+
+        if let code = exitCode {
+            let status: CommandStatus = (code == 0) ? .succeeded : .failed
+            let completedAt = Self.extractCompletedDate(from: content) ?? stepDate
+            let completedEvent = CommandExecutionEvent(
+                id: existing.id,
+                stepIndex: existing.stepIndex,
+                resultStepIndex: step.stepIndex,
+                commandLine: existing.commandLine,
+                summary: existing.summary,
+                status: status,
+                exitCode: code,
+                startedAt: existing.startedAt,
+                completedAt: completedAt,
+                logOutput: mergedLog,
+                isTruncated: isTruncated,
+                taskLogURL: resolvedTaskLogURL,
+                stepOutputURL: resolvedStepOutputURL
+            )
+
+            pendingCommands.remove(at: idx)
+            output.updatedCommands.append(completedEvent)
+
+            if code == 0 {
+                output.peekEvents.append(.commandCompleted(completedEvent.displayTitle, code))
+            } else {
+                output.peekEvents.append(.commandFailed(completedEvent.displayTitle, code))
+            }
+            return true
+        }
+
+        // Still running (e.g., backgrounded with a `task-<id>.log` reference)
+        let runningEvent = CommandExecutionEvent(
+            id: existing.id,
+            stepIndex: existing.stepIndex,
+            resultStepIndex: existing.resultStepIndex ?? step.stepIndex,
+            commandLine: existing.commandLine,
+            summary: existing.summary,
+            status: .running,
+            exitCode: nil,
+            startedAt: existing.startedAt,
+            completedAt: nil,
+            logOutput: mergedLog,
+            isTruncated: isTruncated,
+            taskLogURL: resolvedTaskLogURL,
+            stepOutputURL: resolvedStepOutputURL
+        )
+        pendingCommands[idx] = runningEvent
+        output.updatedCommands.append(runningEvent)
+        return false
+    }
+
+    // MARK: - Command Output Parsers
+
+    public static func extractExitCode(from content: String) -> Int? {
+        let patterns = [
+            #"Command exited with code\s+(-?\d+)"#,
+            #"exited with (?:code|status)\s+(-?\d+)"#,
+            #"Exit code:\s*(-?\d+)"#,
+        ]
+
+        let nsContent = content as NSString
+        let fullRange = NSRange(location: 0, length: nsContent.length)
+
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                  let match = regex.firstMatch(in: content, options: [], range: fullRange),
+                  match.numberOfRanges >= 2
+            else {
+                continue
+            }
+            let codeString = nsContent.substring(with: match.range(at: 1))
+            if let code = Int(codeString) {
+                return code
+            }
+        }
+        return nil
+    }
+
+    public static func extractTaskLogURL(from content: String, session: ConversationSession?) -> URL? {
+        let nsContent = content as NSString
+        let fullRange = NSRange(location: 0, length: nsContent.length)
+
+        // Check for full path first (e.g., `/.../tasks/task-12.log` or `file:///.../tasks/task-12.log`)
+        if let fullPathRegex = try? NSRegularExpression(
+            pattern: #"(?:file://)?(/[^\s"'`<>]+/tasks/task-[A-Za-z0-9._-]+\.log)"#,
+            options: []
+        ),
+           let match = fullPathRegex.firstMatch(in: content, options: [], range: fullRange),
+           match.numberOfRanges >= 2
+        {
+            let path = nsContent.substring(with: match.range(at: 1))
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".,;:)]}"))
+            return URL(fileURLWithPath: path)
+        }
+
+        // Check for relative `task-<id>.log` filename
+        if let nameRegex = try? NSRegularExpression(
+            pattern: #"\b(task-[A-Za-z0-9._-]+\.log)\b"#,
+            options: []
+        ),
+           let match = nameRegex.firstMatch(in: content, options: [], range: fullRange),
+           match.numberOfRanges >= 2
+        {
+            let filename = nsContent.substring(with: match.range(at: 1))
+            if let session {
+                return session.tasksDirectoryURL.appendingPathComponent(filename)
+            }
+            return URL(fileURLWithPath: filename)
+        }
+
+        return nil
+    }
+
+    public static func extractStepOutputURL(
+        from content: String,
+        stepIndex: Int,
+        session: ConversationSession?
+    ) -> URL? {
+        let nsContent = content as NSString
+        let fullRange = NSRange(location: 0, length: nsContent.length)
+
+        if let regex = try? NSRegularExpression(
+            pattern: #"(?:file://)?(/[^\s"'`<>]+/\.system_generated/steps/\d+/output\.txt)"#,
+            options: []
+        ),
+           let match = regex.firstMatch(in: content, options: [], range: fullRange),
+           match.numberOfRanges >= 2
+        {
+            let path = nsContent.substring(with: match.range(at: 1))
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".,;:)]}"))
+            return URL(fileURLWithPath: path)
+        }
+
+        if let session {
+            let candidate = session.stepsDirectoryURL
+                .appendingPathComponent("\(stepIndex)", isDirectory: true)
+                .appendingPathComponent("output.txt")
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+
+        return nil
+    }
+
+    public static func extractCompletedDate(from content: String) -> Date? {
+        let nsContent = content as NSString
+        let fullRange = NSRange(location: 0, length: nsContent.length)
+        guard let regex = try? NSRegularExpression(
+            pattern: #"Completed At:\s*([^\s\r\n]+)"#,
+            options: []
+        ),
+              let match = regex.firstMatch(in: content, options: [], range: fullRange),
+              match.numberOfRanges >= 2
+        else {
+            return nil
+        }
+        let dateString = nsContent.substring(with: match.range(at: 1))
+        return TranscriptDateParser.parse(dateString)
+    }
+
+    public static func extractCleanCommandOutput(from content: String) -> String {
+        let stripped = ANSIStripper.strip(content)
+        if let markerRange = stripped.range(of: "Command output:\n") {
+            return String(stripped[markerRange.upperBound...])
+                .trimmingCharacters(in: .newlines)
+        }
+
+        // Filter standard Antigravity metadata headers when no explicit `Command output:` header exists
+        let lines = stripped.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let filtered = lines.filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("Created At:") { return false }
+            if trimmed.hasPrefix("Completed At:") { return false }
+            if trimmed.hasPrefix("Command exited with code ") { return false }
+            return true
+        }
+        return filtered.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func looksLikeRunningCommandNotice(_ content: String) -> Bool {
+        let lowered = content.lowercased()
+        return lowered.contains("still running")
+            || lowered.contains("running in the background")
+            || lowered.contains("background task")
+            || lowered.contains("command is running")
     }
 }
