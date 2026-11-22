@@ -1,45 +1,90 @@
+import AppKit
 import Foundation
 import Observation
 import ServiceManagement
+import SwiftUI
 
-/// User-configurable preferences for Grav's Notch HUD, telemetry behavior, and macOS integration.
+/// User preference for app appearance (System / Light / Dark), matching Snapzy's `AppearanceMode`.
+public enum GravAppearanceMode: String, CaseIterable, Identifiable, Sendable {
+    case system = "System"
+    case light = "Light"
+    case dark = "Dark"
+
+    public var id: String { rawValue }
+
+    public var displayName: String { rawValue }
+
+    public var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+
+    public var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
+/// Shared UserDefaults keys used across `PreferencesStore`, `@AppStorage`, and Liquid Glass surfaces.
+public enum GravPreferenceKeys {
+    public static let hasCompletedOnboarding = "grav.hasCompletedOnboarding"
+    public static let hoverToExpand = "grav.hoverToExpand"
+    public static let autoPeekOnEvents = "grav.autoPeekOnEvents"
+    public static let isNotchPinned = "grav.isNotchPinned"
+    public static let isTelemetryPaused = "grav.isTelemetryPaused"
+    public static let launchAtLogin = "grav.launchAtLogin"
+    public static let useLiquidGlass = "grav.useLiquidGlass"
+    public static let appearanceMode = "grav.appearanceMode"
+    public static let showMenuBarIcon = "grav.showMenuBarIcon"
+}
+
+/// User-configurable preferences for Grav's Notch HUD, Liquid Glass, Appearance, and macOS integration.
 @MainActor
 @Observable
 public final class PreferencesStore {
-    private enum Keys {
-        static let hasCompletedOnboarding = "grav.hasCompletedOnboarding"
-        static let hoverToExpand = "grav.hoverToExpand"
-        static let autoPeekOnEvents = "grav.autoPeekOnEvents"
-        static let isNotchPinned = "grav.isNotchPinned"
-        static let isTelemetryPaused = "grav.isTelemetryPaused"
-        static let launchAtLogin = "grav.launchAtLogin"
-    }
-
     private let defaults: UserDefaults
 
     public var hasCompletedOnboarding: Bool {
-        didSet { defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding) }
+        didSet { defaults.set(hasCompletedOnboarding, forKey: GravPreferenceKeys.hasCompletedOnboarding) }
     }
 
     public var hoverToExpand: Bool {
-        didSet { defaults.set(hoverToExpand, forKey: Keys.hoverToExpand) }
+        didSet { defaults.set(hoverToExpand, forKey: GravPreferenceKeys.hoverToExpand) }
     }
 
     public var autoPeekOnEvents: Bool {
-        didSet { defaults.set(autoPeekOnEvents, forKey: Keys.autoPeekOnEvents) }
+        didSet { defaults.set(autoPeekOnEvents, forKey: GravPreferenceKeys.autoPeekOnEvents) }
     }
 
     public var isNotchPinned: Bool {
-        didSet { defaults.set(isNotchPinned, forKey: Keys.isNotchPinned) }
+        didSet { defaults.set(isNotchPinned, forKey: GravPreferenceKeys.isNotchPinned) }
     }
 
     public var isTelemetryPaused: Bool {
-        didSet { defaults.set(isTelemetryPaused, forKey: Keys.isTelemetryPaused) }
+        didSet { defaults.set(isTelemetryPaused, forKey: GravPreferenceKeys.isTelemetryPaused) }
+    }
+
+    public var useLiquidGlass: Bool {
+        didSet { defaults.set(useLiquidGlass, forKey: GravPreferenceKeys.useLiquidGlass) }
+    }
+
+    public var appearanceMode: GravAppearanceMode {
+        didSet { defaults.set(appearanceMode.rawValue, forKey: GravPreferenceKeys.appearanceMode) }
+    }
+
+    public var showMenuBarIcon: Bool {
+        didSet { defaults.set(showMenuBarIcon, forKey: GravPreferenceKeys.showMenuBarIcon) }
     }
 
     public var launchAtLogin: Bool {
         didSet {
-            defaults.set(launchAtLogin, forKey: Keys.launchAtLogin)
+            defaults.set(launchAtLogin, forKey: GravPreferenceKeys.launchAtLogin)
             applyLaunchAtLogin(launchAtLogin)
         }
     }
@@ -48,14 +93,24 @@ public final class PreferencesStore {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
-        self.hoverToExpand = defaults.object(forKey: Keys.hoverToExpand) as? Bool ?? true
-        self.autoPeekOnEvents = defaults.object(forKey: Keys.autoPeekOnEvents) as? Bool ?? true
-        self.isNotchPinned = defaults.bool(forKey: Keys.isNotchPinned)
-        self.isTelemetryPaused = defaults.bool(forKey: Keys.isTelemetryPaused)
+        self.hasCompletedOnboarding = defaults.bool(forKey: GravPreferenceKeys.hasCompletedOnboarding)
+        self.hoverToExpand = defaults.object(forKey: GravPreferenceKeys.hoverToExpand) as? Bool ?? true
+        self.autoPeekOnEvents = defaults.object(forKey: GravPreferenceKeys.autoPeekOnEvents) as? Bool ?? true
+        self.isNotchPinned = defaults.bool(forKey: GravPreferenceKeys.isNotchPinned)
+        self.isTelemetryPaused = defaults.bool(forKey: GravPreferenceKeys.isTelemetryPaused)
+        self.useLiquidGlass = defaults.object(forKey: GravPreferenceKeys.useLiquidGlass) as? Bool ?? true
+        self.showMenuBarIcon = defaults.object(forKey: GravPreferenceKeys.showMenuBarIcon) as? Bool ?? true
 
-        if defaults.object(forKey: Keys.launchAtLogin) != nil {
-            self.launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
+        if let rawAppearance = defaults.string(forKey: GravPreferenceKeys.appearanceMode),
+           let parsed = GravAppearanceMode(rawValue: rawAppearance)
+        {
+            self.appearanceMode = parsed
+        } else {
+            self.appearanceMode = .system
+        }
+
+        if defaults.object(forKey: GravPreferenceKeys.launchAtLogin) != nil {
+            self.launchAtLogin = defaults.bool(forKey: GravPreferenceKeys.launchAtLogin)
         } else {
             self.launchAtLogin = SMAppService.mainApp.status == .enabled
         }
