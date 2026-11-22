@@ -61,6 +61,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.showOnboarding(replay: true)
             }
         )
+        settings.onToggleNotch = { [weak self] in
+            self?.notchHUD?.toggle()
+        }
         self.settingsWindowController = settings
 
         let hud = NotchHUDCoordinator(
