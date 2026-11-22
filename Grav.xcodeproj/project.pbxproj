@@ -1,0 +1,479 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0BE5AA7A5521E678F4B05B0D /* GravApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5F5B9A0520058DBE81E4F2 /* GravApp.swift */; };
+		22A3279FBBE55A4BEA886A3C /* NotchKit in Frameworks */ = {isa = PBXBuildFile; productRef = A2A348B0E7334E8657975F89 /* NotchKit */; };
+		735491AB9A43E5AC54BB29DC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E6357267E8D76DE704A2A302 /* Assets.xcassets */; };
+		EA2B3A3250ED1702F87B8ED5 /* GravTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37DA580982DE272E3EAD3937 /* GravTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		74841C7AB5FC3D718629A0C5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 635F08C483E3BAA743DAE6B1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2C32C046D9A6665A8FD452DC;
+			remoteInfo = Grav;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		33E3A022801BA5E9D7B462BA /* GravTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GravTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		37DA580982DE272E3EAD3937 /* GravTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravTests.swift; sourceTree = "<group>"; };
+		5E5F5B9A0520058DBE81E4F2 /* GravApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravApp.swift; sourceTree = "<group>"; };
+		618357C061B15C3E8E80913D /* Grav.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Grav.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E6357267E8D76DE704A2A302 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		62AA91946C44E32768711D31 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22A3279FBBE55A4BEA886A3C /* NotchKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		07FF02856C7DA43AAF06DA42 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				E6357267E8D76DE704A2A302 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		1F613DBF97A95E7B65E40907 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				618357C061B15C3E8E80913D /* Grav.app */,
+				33E3A022801BA5E9D7B462BA /* GravTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		69E51BFF9D37DD69D65DFE23 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				5E5F5B9A0520058DBE81E4F2 /* GravApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		ABF3C73822A61CEDBAB11739 /* GravTests */ = {
+			isa = PBXGroup;
+			children = (
+				37DA580982DE272E3EAD3937 /* GravTests.swift */,
+			);
+			path = GravTests;
+			sourceTree = "<group>";
+		};
+		DAE907FD7D0A55F337283AB9 /* Grav */ = {
+			isa = PBXGroup;
+			children = (
+				69E51BFF9D37DD69D65DFE23 /* App */,
+				07FF02856C7DA43AAF06DA42 /* Resources */,
+			);
+			path = Grav;
+			sourceTree = "<group>";
+		};
+		EB73C4C8F242D073F7681A53 = {
+			isa = PBXGroup;
+			children = (
+				DAE907FD7D0A55F337283AB9 /* Grav */,
+				ABF3C73822A61CEDBAB11739 /* GravTests */,
+				1F613DBF97A95E7B65E40907 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2C32C046D9A6665A8FD452DC /* Grav */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ACABAA91B4A6A58027279877 /* Build configuration list for PBXNativeTarget "Grav" */;
+			buildPhases = (
+				910290459B5D973F6D9290C6 /* Sources */,
+				8D7B32FE1E9A9CDDA20AF020 /* Resources */,
+				62AA91946C44E32768711D31 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Grav;
+			packageProductDependencies = (
+				A2A348B0E7334E8657975F89 /* NotchKit */,
+			);
+			productName = Grav;
+			productReference = 618357C061B15C3E8E80913D /* Grav.app */;
+			productType = "com.apple.product-type.application";
+		};
+		679BCABD642F7832AD47955C /* GravTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 398C4AC9172CE14B81D2F631 /* Build configuration list for PBXNativeTarget "GravTests" */;
+			buildPhases = (
+				70A9D5EFA364059FC1883F53 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				30EECA9D0CA1C8FBCF0E87B1 /* PBXTargetDependency */,
+			);
+			name = GravTests;
+			packageProductDependencies = (
+			);
+			productName = GravTests;
+			productReference = 33E3A022801BA5E9D7B462BA /* GravTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		635F08C483E3BAA743DAE6B1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					2C32C046D9A6665A8FD452DC = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+					679BCABD642F7832AD47955C = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = DBFBF59E652D12E0760B32CE /* Build configuration list for PBXProject "Grav" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = EB73C4C8F242D073F7681A53;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B6A7BCA83AF2BCA024CA5A54 /* XCRemoteSwiftPackageReference "NotchKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 1F613DBF97A95E7B65E40907 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				2C32C046D9A6665A8FD452DC /* Grav */,
+				679BCABD642F7832AD47955C /* GravTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8D7B32FE1E9A9CDDA20AF020 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				735491AB9A43E5AC54BB29DC /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		70A9D5EFA364059FC1883F53 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EA2B3A3250ED1702F87B8ED5 /* GravTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		910290459B5D973F6D9290C6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0BE5AA7A5521E678F4B05B0D /* GravApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		30EECA9D0CA1C8FBCF0E87B1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2C32C046D9A6665A8FD452DC /* Grav */;
+			targetProxy = 74841C7AB5FC3D718629A0C5 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		5DD1FE76DB253DCA94910872 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grav.telemetry.tests;
+				PRODUCT_NAME = GravTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Grav.app/Contents/MacOS/Grav";
+			};
+			name = Debug;
+		};
+		8B307BC43C28D522FA8906E4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		927189D09E54CB20D0622C76 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grav.telemetry.tests;
+				PRODUCT_NAME = GravTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Grav.app/Contents/MacOS/Grav";
+			};
+			name = Release;
+		};
+		DF39DCC45E29122F14671586 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Grav/Resources/Grav.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Grav/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grav.telemetry;
+				PRODUCT_NAME = Grav;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		E09317900191D08C01196D76 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		E1BD2222C1FDBDE4BE7FBFCE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Grav/Resources/Grav.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Grav/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grav.telemetry;
+				PRODUCT_NAME = Grav;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		398C4AC9172CE14B81D2F631 /* Build configuration list for PBXNativeTarget "GravTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5DD1FE76DB253DCA94910872 /* Debug */,
+				927189D09E54CB20D0622C76 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		ACABAA91B4A6A58027279877 /* Build configuration list for PBXNativeTarget "Grav" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF39DCC45E29122F14671586 /* Debug */,
+				E1BD2222C1FDBDE4BE7FBFCE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DBFBF59E652D12E0760B32CE /* Build configuration list for PBXProject "Grav" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8B307BC43C28D522FA8906E4 /* Debug */,
+				E09317900191D08C01196D76 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B6A7BCA83AF2BCA024CA5A54 /* XCRemoteSwiftPackageReference "NotchKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/duongductrong/NotchKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.3.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A2A348B0E7334E8657975F89 /* NotchKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B6A7BCA83AF2BCA024CA5A54 /* XCRemoteSwiftPackageReference "NotchKit" */;
+			productName = NotchKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 635F08C483E3BAA743DAE6B1 /* Project object */;
+}
