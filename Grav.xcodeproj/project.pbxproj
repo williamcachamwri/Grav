@@ -7,9 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0116BB96D5F38F2C48262403 /* GravPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76FC3CE779D11F7A2EDBEF03 /* GravPalette.swift */; };
+		02FE7E1616846E92273B0631 /* AntigravityTelemetryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E730098AEB351C1ED95E3C /* AntigravityTelemetryStore.swift */; };
 		0BE5AA7A5521E678F4B05B0D /* GravApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5F5B9A0520058DBE81E4F2 /* GravApp.swift */; };
 		22A3279FBBE55A4BEA886A3C /* NotchKit in Frameworks */ = {isa = PBXBuildFile; productRef = A2A348B0E7334E8657975F89 /* NotchKit */; };
+		2D31239101E9F9DC9B4BD2F7 /* GravBrandMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F8A085700195064961A25A /* GravBrandMark.swift */; };
 		735491AB9A43E5AC54BB29DC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E6357267E8D76DE704A2A302 /* Assets.xcassets */; };
+		73DAA053421AD224E49CCF44 /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8212969EB91066FDF724464 /* JSONValue.swift */; };
+		A8348B77222EB7F1CC64241C /* TelemetryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40E846C8A8D0F975578DC4A3 /* TelemetryModels.swift */; };
+		C890187EDA513327457EFE31 /* PreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6C215E35EBA9F7D3735BF6 /* PreferencesStore.swift */; };
+		D5BC543BAE973137B730FC0A /* GravTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED4B2A0D94552FAB23AB341 /* GravTokens.swift */; };
 		EA2B3A3250ED1702F87B8ED5 /* GravTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37DA580982DE272E3EAD3937 /* GravTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -26,9 +33,16 @@
 /* Begin PBXFileReference section */
 		33E3A022801BA5E9D7B462BA /* GravTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GravTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		37DA580982DE272E3EAD3937 /* GravTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravTests.swift; sourceTree = "<group>"; };
+		40E846C8A8D0F975578DC4A3 /* TelemetryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryModels.swift; sourceTree = "<group>"; };
 		5E5F5B9A0520058DBE81E4F2 /* GravApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravApp.swift; sourceTree = "<group>"; };
 		618357C061B15C3E8E80913D /* Grav.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Grav.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		76FC3CE779D11F7A2EDBEF03 /* GravPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravPalette.swift; sourceTree = "<group>"; };
+		7ED4B2A0D94552FAB23AB341 /* GravTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravTokens.swift; sourceTree = "<group>"; };
+		8F6C215E35EBA9F7D3735BF6 /* PreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesStore.swift; sourceTree = "<group>"; };
+		B8212969EB91066FDF724464 /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
+		C2E730098AEB351C1ED95E3C /* AntigravityTelemetryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityTelemetryStore.swift; sourceTree = "<group>"; };
 		E6357267E8D76DE704A2A302 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F4F8A085700195064961A25A /* GravBrandMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravBrandMark.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,8 +78,37 @@
 			isa = PBXGroup;
 			children = (
 				5E5F5B9A0520058DBE81E4F2 /* GravApp.swift */,
+				8F6C215E35EBA9F7D3735BF6 /* PreferencesStore.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		76B70FF5B9AAB138621FAD32 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				F4F8A085700195064961A25A /* GravBrandMark.swift */,
+				76FC3CE779D11F7A2EDBEF03 /* GravPalette.swift */,
+				7ED4B2A0D94552FAB23AB341 /* GravTokens.swift */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		89E4170BDEABDBDEF7979B9B /* Telemetry */ = {
+			isa = PBXGroup;
+			children = (
+				C2E730098AEB351C1ED95E3C /* AntigravityTelemetryStore.swift */,
+				B8212969EB91066FDF724464 /* JSONValue.swift */,
+				40E846C8A8D0F975578DC4A3 /* TelemetryModels.swift */,
+			);
+			path = Telemetry;
+			sourceTree = "<group>";
+		};
+		999432103FBB72F90DF5A1A1 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				89E4170BDEABDBDEF7979B9B /* Telemetry */,
+			);
+			path = Core;
 			sourceTree = "<group>";
 		};
 		ABF3C73822A61CEDBAB11739 /* GravTests */ = {
@@ -80,6 +123,8 @@
 			isa = PBXGroup;
 			children = (
 				69E51BFF9D37DD69D65DFE23 /* App */,
+				999432103FBB72F90DF5A1A1 /* Core */,
+				76B70FF5B9AAB138621FAD32 /* DesignSystem */,
 				07FF02856C7DA43AAF06DA42 /* Resources */,
 			);
 			path = Grav;
@@ -201,7 +246,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				02FE7E1616846E92273B0631 /* AntigravityTelemetryStore.swift in Sources */,
 				0BE5AA7A5521E678F4B05B0D /* GravApp.swift in Sources */,
+				2D31239101E9F9DC9B4BD2F7 /* GravBrandMark.swift in Sources */,
+				0116BB96D5F38F2C48262403 /* GravPalette.swift in Sources */,
+				D5BC543BAE973137B730FC0A /* GravTokens.swift in Sources */,
+				73DAA053421AD224E49CCF44 /* JSONValue.swift in Sources */,
+				C890187EDA513327457EFE31 /* PreferencesStore.swift in Sources */,
+				A8348B77222EB7F1CC64241C /* TelemetryModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
