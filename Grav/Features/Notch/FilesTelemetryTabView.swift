@@ -27,16 +27,36 @@ public struct FilesTelemetryTabView: View {
                 emptyState
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(spacing: 4) {
+                    LazyVStack(spacing: 3.5) {
                         ForEach(store.fileChanges) { event in
                             fileRowCard(for: event)
+                                .transition(
+                                    reduceMotion
+                                        ? .opacity
+                                        : .asymmetric(
+                                            insertion: .opacity.combined(with: .move(edge: .top)),
+                                            removal: .opacity
+                                        )
+                                )
                         }
                     }
                     .padding(.vertical, 2)
                 }
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0.0),
+                            .init(color: .black, location: 0.93),
+                            .init(color: .clear, location: 1.0),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: store.fileChanges.first?.id)
         .onDisappear {
             copyFeedbackTask?.cancel()
         }
@@ -47,68 +67,81 @@ public struct FilesTelemetryTabView: View {
     private func fileRowCard(for event: FileChangeEvent) -> some View {
         let isExpanded = selectedFileID == event.id
         let isHovered = hoveredFileID == event.id
+        let tint = NotchTelemetryHelpers.color(for: event.kind)
 
         return VStack(alignment: .leading, spacing: 0) {
             Button {
                 toggleSelection(for: event)
             } label: {
                 HStack(spacing: 8) {
-                    NotchSemanticDot(
-                        color: NotchTelemetryHelpers.color(for: event.kind),
-                        size: 6,
-                        isPulsing: false
-                    )
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(tint.opacity(0.14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .strokeBorder(tint.opacity(0.28), lineWidth: 0.5)
+                            )
+
+                        Image(systemName: kindSymbol(for: event.kind))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(tint)
+                    }
+                    .frame(width: 19, height: 19)
 
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 5) {
                             Text(event.basename)
-                                .font(GravTypography.monoTitle)
-                                .foregroundStyle(GravPalette.inkPrimary)
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .tracking(-0.1)
+                                .foregroundStyle(Color.white.opacity(0.95))
                                 .lineLimit(1)
                                 .truncationMode(.middle)
 
-                            Text(kindCode(for: event.kind))
-                                .font(GravTypography.monoMicro)
-                                .foregroundStyle(NotchTelemetryHelpers.color(for: event.kind).opacity(0.82))
+                            Text(kindLabel(for: event.kind))
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(tint.opacity(0.92))
+                                .padding(.horizontal, 4.5)
+                                .padding(.vertical, 0.5)
+                                .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
                         }
 
                         Text(NotchTelemetryHelpers.compactParentPath(for: event.path))
-                            .font(GravTypography.monoMicro)
-                            .foregroundStyle(GravPalette.inkQuaternary)
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.38))
                             .lineLimit(1)
                             .truncationMode(.head)
                     }
 
-                    Spacer(minLength: GravSpacing.xs)
+                    Spacer(minLength: 6)
 
                     NotchProportionalDiffMicroBar(
                         added: event.addedLines,
                         removed: event.removedLines,
                         isDeleted: event.kind == .delete,
                         showBar: true,
-                        barWidth: 34,
+                        barWidth: 32,
                         barHeight: 3
                     )
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 8.5, weight: .semibold))
-                        .foregroundStyle(GravPalette.inkQuaternary)
+                        .foregroundStyle(Color.white.opacity(0.38))
                         .frame(width: 12)
                 }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 8.5)
+                .padding(.vertical, 5)
                 .background {
                     if isHovered && !isExpanded {
-                        RoundedRectangle.grav(GravRadius.controlS)
-                            .fill(GravPalette.cardFillBase)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.065))
                             .overlay(
-                                RoundedRectangle.grav(GravRadius.controlS)
-                                    .strokeBorder(GravPalette.specularStroke, lineWidth: 0.5)
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
                             )
                             .matchedGeometryEffect(id: "files-row-hover-pill", in: fileHoverNamespace)
                     }
                 }
-                .contentShape(RoundedRectangle.grav(GravRadius.controlS))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
             .onHover { hovering in
@@ -132,11 +165,11 @@ public struct FilesTelemetryTabView: View {
         }
         .background {
             if isExpanded {
-                RoundedRectangle.grav(GravRadius.controlM)
-                    .fill(GravPalette.cardFillSubtle)
+                RoundedRectangle(cornerRadius: 9.5, style: .continuous)
+                    .fill(Color.white.opacity(0.045))
                     .overlay(
-                        RoundedRectangle.grav(GravRadius.controlM)
-                            .strokeBorder(GravPalette.specularStroke, lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 9.5, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
                     )
             }
         }
@@ -149,9 +182,9 @@ public struct FilesTelemetryTabView: View {
         let displayedLines = Array(allLines.prefix(Self.maxRenderedDiffLines))
         let hiddenLineCount = max(0, allLines.count - displayedLines.count)
 
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 5) {
             Rectangle()
-                .fill(GravPalette.hairlineMid.opacity(0.6))
+                .fill(Color.white.opacity(0.07))
                 .frame(height: 0.5)
                 .padding(.horizontal, 9)
 
@@ -161,8 +194,8 @@ public struct FilesTelemetryTabView: View {
                         ? "File removed from workspace."
                         : "No inline diff hunks captured for \(event.toolName)."
                 )
-                .font(GravTypography.monoMicro)
-                .foregroundStyle(GravPalette.inkTertiary)
+                .font(.system(size: 10.5, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.48))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
             } else {
@@ -173,21 +206,21 @@ public struct FilesTelemetryTabView: View {
                         }
                         if hiddenLineCount > 0 {
                             Text("+\(hiddenLineCount) more lines — use Copy Diff for full patch")
-                                .font(GravTypography.monoMicro)
-                                .foregroundStyle(GravPalette.inkQuaternary)
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundStyle(Color.white.opacity(0.38))
                                 .padding(.horizontal, 6)
                                 .padding(.top, 3)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 108)
+                .frame(maxHeight: 112)
                 .padding(.horizontal, 6)
             }
 
             diffActionBar(for: event)
         }
-        .padding(.bottom, 7)
+        .padding(.bottom, 6)
     }
 
     private func diffLineRow(_ line: FileDiffLine) -> some View {
@@ -220,13 +253,13 @@ public struct FilesTelemetryTabView: View {
                     Image(systemName: "folder")
                         .font(.system(size: 9.5, weight: .medium))
                     Text("Reveal in Finder")
-                        .font(GravTypography.micro)
+                        .font(.system(size: 10, weight: .medium))
                 }
-                .foregroundStyle(GravPalette.inkSecondary)
-                .padding(.horizontal, 7)
+                .foregroundStyle(Color.white.opacity(0.78))
+                .padding(.horizontal, 7.5)
                 .padding(.vertical, 3.5)
             }
-            .buttonStyle(NotchChromeButtonStyle(cornerRadius: GravRadius.controlXS))
+            .buttonStyle(NotchChromeButtonStyle(cornerRadius: 6))
 
             Button {
                 store.openInAntigravity(path: event.path)
@@ -235,13 +268,13 @@ public struct FilesTelemetryTabView: View {
                     Image(systemName: "arrow.up.forward.app")
                         .font(.system(size: 9.5, weight: .medium))
                     Text("Open in Antigravity")
-                        .font(GravTypography.micro)
+                        .font(.system(size: 10, weight: .medium))
                 }
-                .foregroundStyle(GravPalette.inkSecondary)
-                .padding(.horizontal, 7)
+                .foregroundStyle(Color.white.opacity(0.78))
+                .padding(.horizontal, 7.5)
                 .padding(.vertical, 3.5)
             }
-            .buttonStyle(NotchChromeButtonStyle(cornerRadius: GravRadius.controlXS))
+            .buttonStyle(NotchChromeButtonStyle(cornerRadius: 6))
 
             Spacer(minLength: 4)
 
@@ -252,13 +285,13 @@ public struct FilesTelemetryTabView: View {
                     Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
                         .font(.system(size: 9.5, weight: .medium))
                     Text(isCopied ? "Copied" : "Copy Diff")
-                        .font(GravTypography.micro)
+                        .font(.system(size: 10, weight: .medium))
                 }
-                .foregroundStyle(isCopied ? GravPalette.emerald : GravPalette.inkSecondary)
-                .padding(.horizontal, 7)
+                .foregroundStyle(isCopied ? GravPalette.emerald : Color.white.opacity(0.78))
+                .padding(.horizontal, 7.5)
                 .padding(.vertical, 3.5)
             }
-            .buttonStyle(NotchChromeButtonStyle(isActive: isCopied, cornerRadius: GravRadius.controlXS))
+            .buttonStyle(NotchChromeButtonStyle(isActive: isCopied, cornerRadius: 6))
         }
         .padding(.horizontal, 9)
     }
@@ -290,12 +323,21 @@ public struct FilesTelemetryTabView: View {
         }
     }
 
-    private func kindCode(for kind: FileChangeKind) -> String {
+    private func kindSymbol(for kind: FileChangeKind) -> String {
         switch kind {
-        case .create: return "NEW"
-        case .edit: return "MOD"
-        case .overwrite: return "WRT"
-        case .delete: return "DEL"
+        case .create: return "plus"
+        case .edit: return "pencil.line"
+        case .overwrite: return "doc.badge.gearshape"
+        case .delete: return "trash.fill"
+        }
+    }
+
+    private func kindLabel(for kind: FileChangeKind) -> String {
+        switch kind {
+        case .create: return "New"
+        case .edit: return "Edit"
+        case .overwrite: return "Write"
+        case .delete: return "Del"
         }
     }
 
@@ -332,18 +374,19 @@ public struct FilesTelemetryTabView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 7) {
             Image(systemName: "doc.text")
-                .font(.system(size: 16, weight: .regular))
-                .foregroundStyle(GravPalette.inkQuaternary)
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.32))
 
-            Text("NO FILE MUTATIONS")
-                .font(GravTypography.monoMicro)
-                .foregroundStyle(GravPalette.inkTertiary)
+            Text("No File Mutations")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(-0.15)
+                .foregroundStyle(Color.white.opacity(0.76))
 
             Text("Edited, created, and deleted files will appear here with inline diffs.")
-                .font(GravTypography.caption)
-                .foregroundStyle(GravPalette.inkQuaternary)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.42))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 300)
         }

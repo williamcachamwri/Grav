@@ -40,9 +40,9 @@ public struct TerminalTelemetryTabView: View {
             if store.commands.isEmpty {
                 emptyState
             } else {
-                HStack(spacing: GravSpacing.sm) {
+                HStack(spacing: 7) {
                     commandListRail
-                        .frame(width: 192)
+                        .frame(width: 176)
 
                     if let command = resolvedSelectedCommand {
                         logInspectorDrawer(for: command)
@@ -52,6 +52,7 @@ public struct TerminalTelemetryTabView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: store.commands.first?.id)
         .onAppear {
             if selectedCommandID == nil, let initial = store.activeCommand ?? store.commands.first {
                 selectedCommandID = initial.id
@@ -88,6 +89,7 @@ public struct TerminalTelemetryTabView: View {
     private func commandRow(for command: CommandExecutionEvent) -> some View {
         let isSelected = resolvedSelectedCommand?.id == command.id
         let isHovered = hoveredCommandID == command.id
+        let statusTint = NotchTelemetryHelpers.color(for: command.status)
 
         return Button {
             selectCommand(command)
@@ -95,31 +97,32 @@ public struct TerminalTelemetryTabView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     NotchSemanticDot(
-                        color: NotchTelemetryHelpers.color(for: command.status),
-                        size: 6,
+                        color: statusTint,
+                        size: 5.5,
                         isPulsing: command.status == .running && !store.isPaused
                     )
 
                     Text(command.displayTitle)
-                        .font(GravTypography.monoCaption)
-                        .foregroundStyle(isSelected ? GravPalette.inkPrimary : GravPalette.inkSecondary)
+                        .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                        .tracking(-0.1)
+                        .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.80))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
 
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     if command.status == .running {
-                        Text("RUNNING")
-                            .font(GravTypography.monoMicro)
-                            .foregroundStyle(GravPalette.inkTertiary)
+                        Text("Running")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(GravPalette.glacialCyan)
                     } else if let exitCode = command.exitCode {
-                        Text("exit \(exitCode)")
-                            .font(GravTypography.monoMicro)
+                        Text("Exit \(exitCode)")
+                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
                             .monospacedDigit()
                             .foregroundStyle(exitCode == 0 ? GravPalette.emerald : GravPalette.coral)
                     } else {
-                        Text(command.status == .succeeded ? "exit 0" : "failed")
-                            .font(GravTypography.monoMicro)
+                        Text(command.status == .succeeded ? "Exit 0" : "Failed")
+                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
                             .foregroundStyle(
                                 command.status == .succeeded ? GravPalette.emerald : GravPalette.coral
                             )
@@ -131,35 +134,35 @@ public struct TerminalTelemetryTabView: View {
                         startDate: command.startedAt,
                         endDate: command.completedAt,
                         isActive: command.status == .running && !store.isPaused,
-                        font: GravTypography.monoMicro,
-                        color: GravPalette.inkQuaternary
+                        font: .system(size: 9.5, weight: .medium, design: .monospaced),
+                        color: Color.white.opacity(0.42)
                     )
                 }
-                .padding(.leading, 16)
+                .padding(.leading, 15)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 7.5)
+            .padding(.vertical, 5.5)
             .background {
                 ZStack {
                     if isSelected {
-                        RoundedRectangle.grav(GravRadius.controlS)
-                            .fill(GravPalette.cardFillElevated)
+                        RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                            .fill(Color.white.opacity(0.095))
                             .overlay(
-                                RoundedRectangle.grav(GravRadius.controlS)
-                                    .strokeBorder(GravPalette.specularStroke, lineWidth: 0.5)
+                                RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
                             )
                     } else if isHovered {
-                        RoundedRectangle.grav(GravRadius.controlS)
-                            .fill(GravPalette.cardFillBase)
+                        RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                            .fill(Color.white.opacity(0.055))
                             .overlay(
-                                RoundedRectangle.grav(GravRadius.controlS)
-                                    .strokeBorder(GravPalette.specularStroke, lineWidth: 0.5)
+                                RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
                             )
                             .matchedGeometryEffect(id: "terminal-row-hover-pill", in: commandHoverNamespace)
                     }
                 }
             }
-            .contentShape(RoundedRectangle.grav(GravRadius.controlS))
+            .contentShape(RoundedRectangle(cornerRadius: 7.5, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -177,7 +180,7 @@ public struct TerminalTelemetryTabView: View {
         }
     }
 
-    // MARK: - Live Log Inspector Drawer
+    // MARK: - Live Log Inspector Drawer (Single-Line Unified Header + Maximum Viewport)
 
     private static let maxRenderedLogLines = 400
 
@@ -190,33 +193,67 @@ public struct TerminalTelemetryTabView: View {
         let isCopied = copiedCommandID == command.id
 
         return VStack(alignment: .leading, spacing: 0) {
-            // Drawer Header: Command line + Controls
+            // Unified Header: $ Command + Compact Search Capsule + Auto-Scroll + Copy Log
             HStack(spacing: 5) {
                 Text("$ \(command.commandLine)")
-                    .font(GravTypography.monoMicro)
-                    .foregroundStyle(GravPalette.inkSecondary)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.76))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(command.commandLine)
 
                 Spacer(minLength: 4)
 
+                // Compact inline filter pill
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 8.5, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.38))
+
+                    TextField("Filter…", text: $logFilter)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 9.5, weight: .regular, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .focused($filterFocus)
+                        .frame(width: 68)
+
+                    if !logFilter.isEmpty {
+                        Button {
+                            logFilter = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 8.5))
+                                .foregroundStyle(Color.white.opacity(0.42))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear log filter")
+                    }
+                }
+                .padding(.horizontal, 6)
+                .frame(height: 19)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.black.opacity(0.45))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(
+                                    filterFocus ? GravPalette.glacialCyan.opacity(0.55) : Color.white.opacity(0.10),
+                                    lineWidth: 0.5
+                                )
+                        )
+                )
+
                 Button {
                     isAutoScrollEnabled.toggle()
                 } label: {
                     Image(systemName: "arrow.down.to.line")
-                        .font(.system(size: 9.5, weight: .medium))
+                        .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(
-                            isAutoScrollEnabled ? GravPalette.glacialTeal : GravPalette.inkQuaternary
+                            isAutoScrollEnabled ? GravPalette.glacialCyan : Color.white.opacity(0.40)
                         )
-                        .frame(width: 20, height: 20)
+                        .frame(width: 19, height: 19)
                 }
-                .buttonStyle(
-                    NotchChromeButtonStyle(
-                        isActive: isAutoScrollEnabled,
-                        cornerRadius: GravRadius.controlXS
-                    )
-                )
+                .buttonStyle(NotchChromeButtonStyle(isActive: isAutoScrollEnabled, cornerRadius: 5.5))
                 .help(isAutoScrollEnabled ? "Auto-scroll enabled" : "Auto-scroll paused")
                 .accessibilityLabel(isAutoScrollEnabled ? "Disable log auto-scroll" : "Enable log auto-scroll")
 
@@ -225,71 +262,25 @@ public struct TerminalTelemetryTabView: View {
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.system(size: 9, weight: .semibold))
                         if isCopied {
                             Text("Copied")
-                                .font(GravTypography.monoMicro)
+                                .font(.system(size: 9, weight: .semibold))
                         }
                     }
-                    .foregroundStyle(isCopied ? GravPalette.emerald : GravPalette.inkSecondary)
-                    .padding(.horizontal, isCopied ? 6 : 0)
-                    .frame(minWidth: 20, minHeight: 20)
+                    .foregroundStyle(isCopied ? GravPalette.emerald : Color.white.opacity(0.68))
+                    .padding(.horizontal, isCopied ? 5.5 : 0)
+                    .frame(minWidth: 19, minHeight: 19)
                 }
-                .buttonStyle(
-                    NotchChromeButtonStyle(
-                        isActive: isCopied,
-                        cornerRadius: GravRadius.controlXS
-                    )
-                )
+                .buttonStyle(NotchChromeButtonStyle(isActive: isCopied, cornerRadius: 5.5))
                 .help("Copy command output (⌘C)")
                 .accessibilityLabel("Copy Log")
             }
             .padding(.horizontal, 8)
-            .padding(.top, 6)
-            .padding(.bottom, 5)
-
-            // Search Filter Strip
-            HStack(spacing: 5) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(GravPalette.inkQuaternary)
-
-                TextField("Filter logs…", text: $logFilter)
-                    .textFieldStyle(.plain)
-                    .font(GravTypography.monoMicro)
-                    .foregroundStyle(GravPalette.inkPrimary)
-                    .focused($filterFocus)
-
-                if !logFilter.isEmpty {
-                    Button {
-                        logFilter = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 9.5))
-                            .foregroundStyle(GravPalette.inkQuaternary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear log filter")
-                }
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3.5)
-            .background(
-                RoundedRectangle.grav(GravRadius.controlXS)
-                    .fill(GravPalette.obsidianVoid.opacity(0.65))
-            )
-            .overlay(
-                RoundedRectangle.grav(GravRadius.controlXS)
-                    .strokeBorder(
-                        filterFocus ? GravPalette.glacialTeal.opacity(0.55) : GravPalette.hairlineMid.opacity(0.55),
-                        lineWidth: 0.5
-                    )
-            )
-            .padding(.horizontal, 8)
-            .padding(.bottom, 5)
+            .padding(.vertical, 5)
 
             Rectangle()
-                .fill(GravPalette.hairlineMid.opacity(0.5))
+                .fill(Color.white.opacity(0.07))
                 .frame(height: 0.5)
 
             // Streaming Log Viewport
@@ -299,22 +290,22 @@ public struct TerminalTelemetryTabView: View {
                         if command.logOutput.isEmpty {
                             Text(
                                 command.status == .running
-                                    ? "Waiting for stdout / stderr…"
+                                    ? "Streaming stdout / stderr…"
                                     : "No output captured."
                             )
                             .font(GravTypography.monoMicro)
-                            .foregroundStyle(GravPalette.inkQuaternary)
+                            .foregroundStyle(Color.white.opacity(0.36))
                             .padding(.top, 6)
                         } else if allFilteredLines.isEmpty {
                             Text("No log lines match \"\(logFilter)\".")
                                 .font(GravTypography.monoMicro)
-                                .foregroundStyle(GravPalette.inkQuaternary)
+                                .foregroundStyle(Color.white.opacity(0.36))
                                 .padding(.top, 6)
                         } else {
                             if omittedLineCount > 0 {
-                                Text("— showing latest \(Self.maxRenderedLogLines) of \(allFilteredLines.count) lines (Copy Log for full output) —")
+                                Text("— latest \(Self.maxRenderedLogLines) of \(allFilteredLines.count) lines (Copy Log for full output) —")
                                     .font(GravTypography.monoMicro)
-                                    .foregroundStyle(GravPalette.inkQuaternary)
+                                    .foregroundStyle(Color.white.opacity(0.35))
                                     .padding(.bottom, 3)
                             }
                             ForEach(Array(renderedLines.enumerated()), id: \.offset) { _, line in
@@ -329,7 +320,7 @@ public struct TerminalTelemetryTabView: View {
                         if command.isTruncated {
                             Text("— log output truncated —")
                                 .font(GravTypography.monoMicro)
-                                .foregroundStyle(GravPalette.inkQuaternary)
+                                .foregroundStyle(Color.white.opacity(0.35))
                                 .padding(.top, 4)
                         }
 
@@ -351,7 +342,14 @@ public struct TerminalTelemetryTabView: View {
                 }
             }
         }
-        .notchGlassSurface(.subtle, cornerRadius: GravRadius.controlM)
+        .background(
+            RoundedRectangle(cornerRadius: 9.5, style: .continuous)
+                .fill(Color.white.opacity(0.038))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9.5, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
+                )
+        )
     }
 
     // MARK: - Helpers
@@ -387,7 +385,7 @@ public struct TerminalTelemetryTabView: View {
         if lower.contains("warning:") {
             return GravPalette.fileEdit.opacity(0.90)
         }
-        return GravPalette.inkSecondary
+        return Color.white.opacity(0.80)
     }
 
     private func copyLog(for command: CommandExecutionEvent, filteredLines: [String]) {
@@ -410,20 +408,21 @@ public struct TerminalTelemetryTabView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 7) {
             Image(systemName: "terminal")
-                .font(.system(size: 16, weight: .regular))
-                .foregroundStyle(GravPalette.inkQuaternary)
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.32))
 
-            Text("NO COMMAND EXECUTIONS")
-                .font(GravTypography.monoMicro)
-                .foregroundStyle(GravPalette.inkTertiary)
+            Text("No Command Executions")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(-0.15)
+                .foregroundStyle(Color.white.opacity(0.76))
 
             Text("Active and recent Antigravity terminal commands will stream live output here.")
-                .font(GravTypography.caption)
-                .foregroundStyle(GravPalette.inkQuaternary)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.42))
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
+                .frame(maxWidth: 310)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

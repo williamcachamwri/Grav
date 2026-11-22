@@ -31,7 +31,7 @@ public struct ExpandedNotchView: View {
     }
 
     public var body: some View {
-        VStack(spacing: GravSpacing.sm) {
+        VStack(spacing: 7) {
             ExpandedNotchHeaderView(
                 store: store,
                 preferences: preferences,
@@ -124,33 +124,41 @@ public struct ExpandedNotchView: View {
         )
     }
 
-    // MARK: - Monochrome Footer Strip
+    // MARK: - Whisper-Quiet Compact Footer Strip
 
     private var footerShortcutStrip: some View {
-        HStack(spacing: GravSpacing.md) {
+        HStack(spacing: 10) {
             if let message = statusBannerMessage {
                 HStack(spacing: 5) {
                     Circle()
                         .fill(GravPalette.emerald)
-                        .frame(width: 5, height: 5)
+                        .frame(width: 4.5, height: 4.5)
                     Text(message)
-                        .font(GravTypography.monoMicro)
-                        .foregroundStyle(GravPalette.inkSecondary)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.84))
                 }
                 .transition(.opacity)
             } else {
                 HStack(spacing: 4) {
-                    NotchKeycap(label: "1–3")
-                    Text("Switch Tab")
-                        .font(GravTypography.monoMicro)
-                        .foregroundStyle(GravPalette.inkQuaternary)
+                    Text("1–3")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.46))
+                    Text("Tab")
+                        .font(.system(size: 9.5, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.30))
                 }
 
+                Text("·")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.18))
+
                 HStack(spacing: 4) {
-                    NotchKeycap(label: "⌘C")
+                    Text("⌘C")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.46))
                     Text(copyHintLabel)
-                        .font(GravTypography.monoMicro)
-                        .foregroundStyle(GravPalette.inkQuaternary)
+                        .font(.system(size: 9.5, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.30))
                 }
             }
 
@@ -160,16 +168,19 @@ public struct ExpandedNotchView: View {
                 onCollapse()
             } label: {
                 HStack(spacing: 4) {
-                    NotchKeycap(label: "ESC")
+                    Text("esc")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.46))
                     Text("Close")
-                        .font(GravTypography.monoMicro)
-                        .foregroundStyle(GravPalette.inkQuaternary)
+                        .font(.system(size: 9.5, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.30))
                 }
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Collapse Notch HUD")
         }
-        .frame(height: 16)
+        .padding(.horizontal, 2)
+        .frame(height: 12)
         .animation(reduceMotion ? nil : GravMotion.subtleFade, value: statusBannerMessage)
     }
 
