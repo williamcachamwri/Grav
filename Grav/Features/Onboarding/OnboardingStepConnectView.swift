@@ -418,7 +418,7 @@ private struct ConnectActionButton: View {
             .overlay(
                 RoundedRectangle.grav(GravRadius.controlS)
                     .strokeBorder(
-                        prominent ? Color.white.opacity(0.35) : GravPalette.specularStroke,
+                        prominent ? AnyShapeStyle(Color.white.opacity(0.35)) : AnyShapeStyle(GravPalette.specularStroke),
                         lineWidth: 0.5
                     )
             )

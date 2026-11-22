@@ -621,7 +621,7 @@ private struct NotchModeSelectorRow: View {
                             .overlay(
                                 RoundedRectangle.grav(GravRadius.controlS)
                                     .strokeBorder(
-                                        isSelected ? mode.accentColor.opacity(0.45) : GravPalette.specularStroke,
+                                        isSelected ? AnyShapeStyle(mode.accentColor.opacity(0.45)) : AnyShapeStyle(GravPalette.specularStroke),
                                         lineWidth: 0.5
                                     )
                             )

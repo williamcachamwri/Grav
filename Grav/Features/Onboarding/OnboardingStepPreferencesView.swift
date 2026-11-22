@@ -235,7 +235,7 @@ private struct PreferenceToggleCard: View {
                             .overlay(
                                 RoundedRectangle.grav(GravRadius.controlS)
                                     .strokeBorder(
-                                        isOn ? GravPalette.glacialTeal.opacity(0.42) : GravPalette.specularStroke,
+                                        isOn ? AnyShapeStyle(GravPalette.glacialTeal.opacity(0.42)) : AnyShapeStyle(GravPalette.specularStroke),
                                         lineWidth: 0.5
                                     )
                             )
@@ -305,7 +305,7 @@ private struct InteractionModePill: View {
             .overlay(
                 RoundedRectangle.grav(GravRadius.controlS)
                     .strokeBorder(
-                        isSelected ? Color.white.opacity(0.35) : GravPalette.specularStroke,
+                        isSelected ? AnyShapeStyle(Color.white.opacity(0.35)) : AnyShapeStyle(GravPalette.specularStroke),
                         lineWidth: 0.5
                     )
             )
