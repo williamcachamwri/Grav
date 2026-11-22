@@ -1,8 +1,8 @@
 import AppKit
 
 /// Programmatic monochrome template icon renderer for Grav's macOS menu bar `NSStatusItem`.
-/// Mirrors `GravOrbitalMark`'s industrial geometric silhouette using `isTemplate = true`
-/// so macOS renders crisp vibrancy across Light Mode, Dark Mode, and desktop wallpapers.
+/// Mirrors `GravOrbitalMark`'s Apple-style interlocking 3-beam Delta-Arc silhouette using
+/// `isTemplate = true` so macOS renders crisp vibrancy across Light and Dark menu bars.
 public enum MenuBarIconRenderer {
     public enum VisualState: Sendable, Equatable {
         case idle
@@ -23,72 +23,53 @@ public enum MenuBarIconRenderer {
             context.saveGState()
             defer { context.restoreGState() }
 
-            let center = CGPoint(x: rect.midX, y: rect.midY)
+            let cx = rect.midX
+            let cy = rect.midY
             let unit = min(rect.width, rect.height)
             let alphaScale: CGFloat = state == .paused ? 0.48 : 1.0
-            let strokeWidth = max(1.25, unit * 0.082)
+            let beamWidth = max(1.4, unit * 0.13)
 
             let primaryInk = NSColor.black.withAlphaComponent(alphaScale).cgColor
-            let secondaryInk = NSColor.black.withAlphaComponent(0.80 * alphaScale).cgColor
+            let secondaryInk = NSColor.black.withAlphaComponent(0.76 * alphaScale).cgColor
 
-            // Outer 270-degree precision telemetry arc (matching GravOrbitalMark)
-            context.setStrokeColor(primaryInk)
-            context.setLineWidth(strokeWidth)
             context.setLineCap(.round)
+            context.setLineJoin(.round)
 
-            let outerRadius = unit * 0.40
-            // Non-flipped Core Graphics coordinates (positive angles counter-clockwise)
+            // 1. Horizontal crossbar beam
+            context.setStrokeColor(secondaryInk)
+            context.setLineWidth(beamWidth * 0.92)
             context.beginPath()
-            context.addArc(
-                center: center,
-                radius: outerRadius,
-                startAngle: -.pi * 0.92,
-                endAngle: .pi * 0.75,
-                clockwise: false
-            )
+            context.move(to: CGPoint(x: cx - unit * 0.30, y: cy - unit * 0.12))
+            context.addLine(to: CGPoint(x: cx + unit * 0.30, y: cy - unit * 0.12))
             context.strokePath()
 
-            // Inner tilted orbital ellipse
-            context.saveGState()
-            context.translateBy(x: center.x, y: center.y)
-            context.rotate(by: .pi / 5.5)
-            context.setStrokeColor(secondaryInk)
-            context.setLineWidth(strokeWidth * 0.82)
+            // 2. Left ascending Delta beam
+            context.setStrokeColor(primaryInk)
+            context.setLineWidth(beamWidth)
+            context.beginPath()
+            context.move(to: CGPoint(x: cx - unit * 0.24, y: cy - unit * 0.30))
+            context.addLine(to: CGPoint(x: cx + unit * 0.05, y: cy + unit * 0.32))
+            context.strokePath()
 
-            let ellipseRect = CGRect(
-                x: -unit * 0.27,
-                y: -unit * 0.135,
-                width: unit * 0.54,
-                height: unit * 0.27
-            )
-            context.strokeEllipse(in: ellipseRect)
-            context.restoreGState()
+            // 3. Right ascending Delta beam
+            context.beginPath()
+            context.move(to: CGPoint(x: cx - unit * 0.05, y: cy + unit * 0.32))
+            context.addLine(to: CGPoint(x: cx + unit * 0.24, y: cy - unit * 0.30))
+            context.strokePath()
 
-            // Core gravity singularity dot
-            context.setFillColor(primaryInk)
-            let coreRadius = unit * (state == .active ? 0.125 : 0.105)
-            let coreRect = CGRect(
-                x: center.x - coreRadius,
-                y: center.y - coreRadius,
-                width: coreRadius * 2,
-                height: coreRadius * 2
-            )
-            context.fillEllipse(in: coreRect)
-
-            // Orbital telemetry satellite node at arc terminus
-            let satAngle: CGFloat = .pi * 0.75
-            let satCenter = CGPoint(
-                x: center.x + cos(satAngle) * outerRadius,
-                y: center.y + sin(satAngle) * outerRadius
-            )
-            let satRadius = max(1.25, unit * (state == .active ? 0.085 : 0.068))
-            let satRect = CGRect(
-                x: satCenter.x - satRadius,
-                y: satCenter.y - satRadius,
-                width: satRadius * 2,
-                height: satRadius * 2
-            )
-            context.fillEllipse(in: satRect)
+            // 4. Active telemetry beacon dot at top-right when streaming
+            if state == .active {
+                let dotR = max(1.5, unit * 0.11)
+                context.setFillColor(primaryInk)
+                context.fillEllipse(
+                    in: CGRect(
+                        x: cx + unit * 0.24,
+                        y: cy + unit * 0.22,
+                        width: dotR * 2,
+                        height: dotR * 2
+                    )
+                )
+            }
 
             return true
         }
