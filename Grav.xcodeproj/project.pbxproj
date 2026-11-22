@@ -20,6 +20,7 @@
 		13FEA7C991458936EE6E346A /* GravMockDesktopCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F7C8358277B92CA02CE052 /* GravMockDesktopCanvas.swift */; };
 		15A515F19FE62EC328A910A5 /* AntigravityAppDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7374544BF8CD44B6A91F576D /* AntigravityAppDetector.swift */; };
 		17D285D9AD739CE7637C0C32 /* SettingsSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01EAA770A714E8C5A40AB4A2 /* SettingsSidebarView.swift */; };
+		1940B0E8A7F2C61E35B37300 /* GravOnboardingWelcomeAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AF84ABC6939425A99D95535 /* GravOnboardingWelcomeAudio.swift */; };
 		1F673C8D3324B4B762E3A517 /* GravKeycapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F03068745124FF09F8AAFC /* GravKeycapView.swift */; };
 		220A388048F22F57D801797A /* GravUnevenRoundedRectangle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D9D0878C3CE388D1D66853 /* GravUnevenRoundedRectangle.swift */; };
 		2296303BDAE924F5CE36F00D /* DiffComputer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EAA8B09A6284B1B6BE9DC71 /* DiffComputer.swift */; };
@@ -144,6 +145,7 @@
 		7584C05AC97E1BBBDA47D994 /* LiquidGlassTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassTokens.swift; sourceTree = "<group>"; };
 		76FC3CE779D11F7A2EDBEF03 /* GravPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravPalette.swift; sourceTree = "<group>"; };
 		78D5F95F5AD7C5A27385D1BF /* LiquidGlassWindowBackdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassWindowBackdrop.swift; sourceTree = "<group>"; };
+		7AF84ABC6939425A99D95535 /* GravOnboardingWelcomeAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingWelcomeAudio.swift; sourceTree = "<group>"; };
 		7ED4B2A0D94552FAB23AB341 /* GravTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravTokens.swift; sourceTree = "<group>"; };
 		7F1A494C81801D1F154CC3A9 /* RadiusTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadiusTokens.swift; sourceTree = "<group>"; };
 		7F8016017308216597D832BE /* NotchHUDCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchHUDCoordinator.swift; sourceTree = "<group>"; };
@@ -396,6 +398,7 @@
 				9C6E389E281027F8D41C3CEE /* GravOnboardingStepRail.swift */,
 				EC62112143918642E0CC7FA9 /* GravOnboardingView.swift */,
 				F80A76ADD6985FC5058D991B /* GravOnboardingWelcome.swift */,
+				7AF84ABC6939425A99D95535 /* GravOnboardingWelcomeAudio.swift */,
 				8A98C6410980250835F954E2 /* OnboardingWindowController.swift */,
 			);
 			path = Onboarding;
@@ -548,6 +551,7 @@
 				4F58DD65B1AA05667BA4155A /* GravOnboardingStepRail.swift in Sources */,
 				403191022730D7B6062544D1 /* GravOnboardingView.swift in Sources */,
 				BB14A74A8328E1D5636BD5B4 /* GravOnboardingWelcome.swift in Sources */,
+				1940B0E8A7F2C61E35B37300 /* GravOnboardingWelcomeAudio.swift in Sources */,
 				0116BB96D5F38F2C48262403 /* GravPalette.swift in Sources */,
 				D5BC543BAE973137B730FC0A /* GravTokens.swift in Sources */,
 				220A388048F22F57D801797A /* GravUnevenRoundedRectangle.swift in Sources */,

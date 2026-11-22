@@ -52,6 +52,14 @@ struct GeneralSettingsPane: View {
                     Toggle("", isOn: $preferences.useLiquidGlass)
                         .labelsHidden()
                 }
+
+                SettingRow(
+                    title: "Sound Effects",
+                    description: "Play ambient soundscape and subtle tactile glass cues during the welcome experience."
+                ) {
+                    Toggle("", isOn: $preferences.playSounds)
+                        .labelsHidden()
+                }
             }
 
             Section("Help") {

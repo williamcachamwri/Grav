@@ -123,6 +123,7 @@ struct GravOnboardingCompletionCard: View {
     private func triggerLaunch() {
         guard !isLaunching else { return }
         isLaunching = true
+        GravOnboardingWelcomeAudio.shared.playCompletionChime()
         onBeginLaunch()
 
         if reduceMotion {

@@ -36,34 +36,34 @@ private struct WelcomeRGB: Sendable {
 
 private enum GravWelcomePalette {
     /// Luminous silk-white cloud peak (clean, never muddy gray).
-    static let pureLight = WelcomeRGB(r: 0.980, g: 0.996, b: 0.998)
-    /// Glacial ice-white pocket — bright and airy, cooled to Grav cyan.
-    static let icePocket = WelcomeRGB(r: 0.855, g: 0.968, b: 0.975)
-    /// Crystalline mist cyan bridging white clouds into aerospace cyan without desaturation.
-    static let mistCyan = WelcomeRGB(r: 0.640, g: 0.910, b: 0.935)
-    /// Airy luminous sky-cyan mid-tone.
-    static let skyCyan = WelcomeRGB(r: 0.320, g: 0.805, b: 0.910)
-    /// Lively radiant aerospace teal surrounding the core.
-    static let radiantTeal = WelcomeRGB(r: 0.145, g: 0.725, b: 0.800)
-    /// Luminous Grav brand cyan.
-    static let brandCyan = WelcomeRGB(r: 0.095, g: 0.680, b: 0.720)
-    /// Radiant Glacial Aerospace Teal — vibrant without heavy dark swamp troughs.
-    static let brandTeal = WelcomeRGB(r: 0.065, g: 0.565, b: 0.610)
+    static let pureLight = WelcomeRGB(r: 0.980, g: 0.994, b: 1.000)
+    /// Crystalline ice-sky pocket sampled from the logo's inner bar (`#A8E4F5` lifted to airy ice).
+    static let icePocket = WelcomeRGB(r: 0.845, g: 0.945, b: 0.995)
+    /// Luminous mist sky bridging white clouds into Electric Azure without desaturation.
+    static let mistCyan = WelcomeRGB(r: 0.620, g: 0.865, b: 0.990)
+    /// Vibrant Sky Azure mid-tone (`#34A8FB` lifted).
+    static let skyCyan = WelcomeRGB(r: 0.275, g: 0.720, b: 0.992)
+    /// Radiant Azure surrounding the plasma core (`#3296FB`).
+    static let radiantTeal = WelcomeRGB(r: 0.165, g: 0.590, b: 0.985)
+    /// Signature Grav Logo Electric Azure (`#1A8EFD`).
+    static let brandCyan = WelcomeRGB(r: 0.102, g: 0.557, b: 0.992)
+    /// Deep Cobalt Horizon anchoring the aurora without dark muddiness.
+    static let brandTeal = WelcomeRGB(r: 0.068, g: 0.425, b: 0.910)
 
-    /// Midnight-teal void for the opening bloom.
-    static let voidDark = Color(red: 0.012, green: 0.042, blue: 0.058)
+    /// Deep obsidian night-sky void matching the logo's `#16161A` substrate for the opening bloom.
+    static let voidDark = Color(red: 0.025, green: 0.032, blue: 0.055)
 
-    /// Atmospheric teal shadow tint (keeps white text luminous instead of muddy black).
-    static let tealShadow = Color(red: 0.025, green: 0.220, blue: 0.285)
+    /// Atmospheric cobalt shadow tint (keeps white text luminous instead of muddy black).
+    static let tealShadow = Color(red: 0.032, green: 0.155, blue: 0.365)
 
-    /// Crisp hover & press aerospace-teal fills for the arrow button (flat, editorial, zero gloss).
-    static let buttonHoverFill = Color(red: 0.055, green: 0.465, blue: 0.515)
-    static let buttonPressFill = Color(red: 0.040, green: 0.380, blue: 0.425)
+    /// Crisp hover & press Electric Azure fills for the arrow button (flat, editorial, zero gloss).
+    static let buttonHoverFill = Color(red: 0.085, green: 0.460, blue: 0.910)
+    static let buttonPressFill = Color(red: 0.062, green: 0.375, blue: 0.790)
 
-    /// Secondary iridescent accents for the 4×4 swirling plasma core & ambient corona.
-    static let electricAqua = Color(red: 0.360, green: 0.885, blue: 0.955)
-    static let vibrantAqua = Color(red: 0.080, green: 0.640, blue: 0.740)
-    static let causticCyan = Color(red: 0.450, green: 0.920, blue: 0.960)
+    /// Secondary iridescent sky-azure accents for the 4×4 swirling plasma core & ambient corona.
+    static let electricAqua = Color(red: 0.420, green: 0.835, blue: 1.000)
+    static let vibrantAqua = Color(red: 0.102, green: 0.557, blue: 0.992)
+    static let causticCyan = Color(red: 0.659, green: 0.894, blue: 0.985)
 }
 
 // MARK: - Main Welcome View
@@ -189,6 +189,9 @@ struct GravOnboardingWelcome: View {
         .allowsHitTesting(!isExiting)
         .task {
             await playTimeline()
+        }
+        .onDisappear {
+            GravOnboardingWelcomeAudio.shared.stopAmbient(fadeDuration: 1.25)
         }
         .onChange(of: externalStartTrigger) { _, _ in
             triggerStart(allowEarly: true)
@@ -337,6 +340,8 @@ struct GravOnboardingWelcome: View {
         guard !hasStarted else { return }
         hasStarted = true
 
+        GravOnboardingWelcomeAudio.shared.playWelcomeScore(reducedMotion: reduceMotion)
+
         let tokenCount = headlineTokens.words.count
 
         if reduceMotion {
@@ -417,6 +422,7 @@ struct GravOnboardingWelcome: View {
     private func triggerStart(allowEarly: Bool = false) {
         guard (ctaIn || allowEarly), !isExiting else { return }
         isExiting = true
+        GravOnboardingWelcomeAudio.shared.playConfirmChime()
         // Ensure opening portal & hero mark are ready if triggered early via Return/Esc
         portalProgress = 1.0
         isFlooded = true
@@ -524,8 +530,8 @@ private struct WelcomeHeroMarkFlightModifier: ViewModifier, Animatable {
         let currentIconRadius = Radius.card + (Radius.controlS - Radius.card) * d
         let iconShape = RoundedRectangle(cornerRadius: currentIconRadius, style: .continuous)
 
-        // White GravOrbitalMark shrinks gracefully inside the crystallizing squircle (~56% of icon box)
-        let insideIconMarkSize = currentIconSize * 0.56
+        // White GravOrbitalMark shrinks gracefully inside the crystallizing squircle (~74% of icon box, matching the real logo glyph proportion)
+        let insideIconMarkSize = currentIconSize * 0.74
         let settleBlend = Self.smoothstep(0.0, 0.30, d)
         let currentMarkSize = perchSize + (insideIconMarkSize - perchSize) * settleBlend
 
@@ -1472,6 +1478,9 @@ private struct GravWelcomeArrowPillSurface: View {
             value: isPressed
         )
         .onHover { hovering in
+            if hovering && !isHovered {
+                GravOnboardingWelcomeAudio.shared.playHoverTick()
+            }
             if hovering && !didPushCursor {
                 NSCursor.pointingHand.push()
                 didPushCursor = true

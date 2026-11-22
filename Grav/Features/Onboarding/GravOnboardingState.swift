@@ -229,11 +229,15 @@ final class GravOnboardingState: ObservableObject {
     }
 
     func completeChallenge(_ challenge: GravOnboardingChallenge) {
+        let wasCompleted = completedChallenges.contains(challenge)
         withAnimation(GravMotionPreferences.shared.spec(.settle).animation) {
             completedChallenges.insert(challenge)
             if isCurrentStepComplete {
                 completedSteps.insert(currentStep)
             }
+        }
+        if !wasCompleted {
+            GravOnboardingWelcomeAudio.shared.playChallengeComplete()
         }
     }
 
@@ -268,6 +272,12 @@ final class GravOnboardingState: ObservableObject {
         guard step != currentStep else { return }
         navigationDirection = step.stepNumber < currentStep.stepNumber ? .backward : .forward
         navigationDistance = abs(step.stepNumber - currentStep.stepNumber)
+
+        if navigationDirection == .forward {
+            GravOnboardingWelcomeAudio.shared.playStepForward()
+        } else {
+            GravOnboardingWelcomeAudio.shared.playStepBackward()
+        }
 
         var resetTx = Transaction()
         resetTx.disablesAnimations = true

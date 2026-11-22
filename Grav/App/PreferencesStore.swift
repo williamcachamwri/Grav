@@ -42,6 +42,7 @@ public enum GravPreferenceKeys {
     public static let useLiquidGlass = "grav.useLiquidGlass"
     public static let appearanceMode = "grav.appearanceMode"
     public static let showMenuBarIcon = "grav.showMenuBarIcon"
+    public static let playSounds = "grav.playSounds"
 }
 
 /// User-configurable preferences for Grav's Notch HUD, Liquid Glass, Appearance, and macOS integration.
@@ -82,6 +83,10 @@ public final class PreferencesStore {
         didSet { defaults.set(showMenuBarIcon, forKey: GravPreferenceKeys.showMenuBarIcon) }
     }
 
+    public var playSounds: Bool {
+        didSet { defaults.set(playSounds, forKey: GravPreferenceKeys.playSounds) }
+    }
+
     public var launchAtLogin: Bool {
         didSet {
             defaults.set(launchAtLogin, forKey: GravPreferenceKeys.launchAtLogin)
@@ -100,6 +105,7 @@ public final class PreferencesStore {
         self.isTelemetryPaused = defaults.bool(forKey: GravPreferenceKeys.isTelemetryPaused)
         self.useLiquidGlass = defaults.object(forKey: GravPreferenceKeys.useLiquidGlass) as? Bool ?? true
         self.showMenuBarIcon = defaults.object(forKey: GravPreferenceKeys.showMenuBarIcon) as? Bool ?? true
+        self.playSounds = defaults.object(forKey: GravPreferenceKeys.playSounds) as? Bool ?? true
 
         if let rawAppearance = defaults.string(forKey: GravPreferenceKeys.appearanceMode),
            let parsed = GravAppearanceMode(rawValue: rawAppearance)

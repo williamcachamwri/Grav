@@ -100,6 +100,7 @@ struct GravOnboardingView: View {
         .environment(\.colorScheme, .dark)
         .background(keyboardShortcuts)
         .onAppear {
+            GravOnboardingWelcomeAudio.shared.prewarmInteractionEffects()
             store.refreshConnectionStatus()
             state.syncConnectionStatus(store.connectionStatus)
         }
@@ -345,6 +346,7 @@ struct GravOnboardingView: View {
             return
         }
         guard state.canGoForward else {
+            GravOnboardingWelcomeAudio.shared.playStepComplete()
             withAnimation(GravMotionPreferences.shared.spec(.settle).animation) {
                 isShowingCompletion = true
             }
@@ -356,6 +358,7 @@ struct GravOnboardingView: View {
 
     private func skip() {
         guard state.canGoForward else {
+            GravOnboardingWelcomeAudio.shared.playStepComplete()
             withAnimation(GravMotionPreferences.shared.spec(.settle).animation) {
                 isShowingCompletion = true
             }
@@ -371,12 +374,14 @@ struct GravOnboardingView: View {
         }
         if isShowingCompletion {
             guard !isLaunchingFinale else { return }
+            GravOnboardingWelcomeAudio.shared.playStepBackward()
             withAnimation(GravMotionPreferences.shared.spec(.settle).animation) {
                 isShowingCompletion = false
             }
         } else if state.canGoBack {
             state.previousStep()
         } else {
+            GravOnboardingWelcomeAudio.shared.playButtonTap()
             finish(launchIconWindowFrame: nil)
         }
     }
