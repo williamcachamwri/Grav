@@ -1,15 +1,23 @@
 {
   "images": [
     {
-      "filename": "lang_jupyter.svg",
-      "idiom": "universal"
+      "filename": "lang_jupyter@1x.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "lang_jupyter@2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "lang_jupyter@3x.png",
+      "idiom": "universal",
+      "scale": "3x"
     }
   ],
   "info": {
     "author": "xcode",
     "version": 1
-  },
-  "properties": {
-    "preserves-vector-representation": true
   }
 }

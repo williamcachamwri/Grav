@@ -1,15 +1,23 @@
 {
   "images": [
     {
-      "filename": "lang_nodejs.svg",
-      "idiom": "universal"
+      "filename": "lang_nodejs@1x.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "lang_nodejs@2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "lang_nodejs@3x.png",
+      "idiom": "universal",
+      "scale": "3x"
     }
   ],
   "info": {
     "author": "xcode",
     "version": 1
-  },
-  "properties": {
-    "preserves-vector-representation": true
   }
 }
