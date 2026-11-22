@@ -193,12 +193,12 @@ public struct ExpandedNotchView: View {
             }
             .keyboardShortcut(.escape, modifiers: [])
 
-            Button("") {
-                copyActiveContext()
-            }
-            .keyboardShortcut("c", modifiers: [.command])
-
             if !isTerminalSearchFocused {
+                Button("") {
+                    copyActiveContext()
+                }
+                .keyboardShortcut("c", modifiers: [.command])
+
                 ForEach(NotchTab.allCases) { tab in
                     Button("") {
                         switchTab(to: tab)

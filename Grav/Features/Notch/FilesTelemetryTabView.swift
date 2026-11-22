@@ -142,14 +142,20 @@ public struct FilesTelemetryTabView: View {
         }
     }
 
+    private static let maxRenderedDiffLines = 120
+
     private func inlineDiffDrawer(for event: FileChangeEvent) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let allLines = event.diffHunks.flatMap(\.lines)
+        let displayedLines = Array(allLines.prefix(Self.maxRenderedDiffLines))
+        let hiddenLineCount = max(0, allLines.count - displayedLines.count)
+
+        return VStack(alignment: .leading, spacing: 6) {
             Rectangle()
                 .fill(GravPalette.hairlineMid.opacity(0.6))
                 .frame(height: 0.5)
                 .padding(.horizontal, 9)
 
-            if event.diffHunks.isEmpty {
+            if allLines.isEmpty {
                 Text(
                     event.kind == .delete
                         ? "File removed from workspace."
@@ -162,10 +168,15 @@ public struct FilesTelemetryTabView: View {
             } else {
                 ScrollView([.vertical, .horizontal], showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 1) {
-                        ForEach(event.diffHunks) { hunk in
-                            ForEach(hunk.lines) { line in
-                                diffLineRow(line)
-                            }
+                        ForEach(Array(displayedLines.enumerated()), id: \.offset) { _, line in
+                            diffLineRow(line)
+                        }
+                        if hiddenLineCount > 0 {
+                            Text("+\(hiddenLineCount) more lines — use Copy Diff for full patch")
+                                .font(GravTypography.monoMicro)
+                                .foregroundStyle(GravPalette.inkQuaternary)
+                                .padding(.horizontal, 6)
+                                .padding(.top, 3)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

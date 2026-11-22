@@ -179,8 +179,14 @@ public struct TerminalTelemetryTabView: View {
 
     // MARK: - Live Log Inspector Drawer
 
+    private static let maxRenderedLogLines = 400
+
     private func logInspectorDrawer(for command: CommandExecutionEvent) -> some View {
-        let filteredLines = filteredLogLines(from: command.logOutput)
+        let allFilteredLines = filteredLogLines(from: command.logOutput)
+        let omittedLineCount = max(0, allFilteredLines.count - Self.maxRenderedLogLines)
+        let renderedLines: [String] = omittedLineCount > 0
+            ? Array(allFilteredLines.suffix(Self.maxRenderedLogLines))
+            : allFilteredLines
         let isCopied = copiedCommandID == command.id
 
         return VStack(alignment: .leading, spacing: 0) {
@@ -215,7 +221,7 @@ public struct TerminalTelemetryTabView: View {
                 .accessibilityLabel(isAutoScrollEnabled ? "Disable log auto-scroll" : "Enable log auto-scroll")
 
                 Button {
-                    copyLog(for: command, filteredLines: filteredLines)
+                    copyLog(for: command, filteredLines: allFilteredLines)
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
@@ -299,13 +305,19 @@ public struct TerminalTelemetryTabView: View {
                             .font(GravTypography.monoMicro)
                             .foregroundStyle(GravPalette.inkQuaternary)
                             .padding(.top, 6)
-                        } else if filteredLines.isEmpty {
+                        } else if allFilteredLines.isEmpty {
                             Text("No log lines match \"\(logFilter)\".")
                                 .font(GravTypography.monoMicro)
                                 .foregroundStyle(GravPalette.inkQuaternary)
                                 .padding(.top, 6)
                         } else {
-                            ForEach(Array(filteredLines.enumerated()), id: \.offset) { _, line in
+                            if omittedLineCount > 0 {
+                                Text("— showing latest \(Self.maxRenderedLogLines) of \(allFilteredLines.count) lines (Copy Log for full output) —")
+                                    .font(GravTypography.monoMicro)
+                                    .foregroundStyle(GravPalette.inkQuaternary)
+                                    .padding(.bottom, 3)
+                            }
+                            ForEach(Array(renderedLines.enumerated()), id: \.offset) { _, line in
                                 Text(line.isEmpty ? " " : line)
                                     .font(GravTypography.monoMicro)
                                     .foregroundStyle(logLineColor(line))
