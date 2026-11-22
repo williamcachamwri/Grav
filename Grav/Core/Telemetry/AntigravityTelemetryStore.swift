@@ -202,6 +202,43 @@ public final class AntigravityTelemetryStore {
         appDetector.openInAntigravity(path: path)
     }
 
+    /// Reveals the active session's `transcript.jsonl` file in Finder.
+    public func revealActiveTranscriptInFinder() {
+        guard let url = activeSession?.transcriptURL else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    /// Opens macOS Terminal with the selected shell command copied to pasteboard for quick inspection.
+    public func openCommandInTerminal(_ commandLine: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(commandLine, forType: .string)
+        if let terminalURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") {
+            let config = NSWorkspace.OpenConfiguration()
+            NSWorkspace.shared.openApplication(at: terminalURL, configuration: config)
+        }
+    }
+
+    /// Explicitly settles any lingering active thinking/running state to `.idle`.
+    public func forceSettleIdle() {
+        cancelIdleDecayTimer()
+        let settledCommands = classifier.forceIdle()
+        for cmd in settledCommands {
+            upsertCommand(cmd)
+            stopLiveTaskLogTailing(commandID: cmd.id)
+            hydrateCompletedCommandLogIfNeeded(cmd)
+        }
+        state = .idle
+        if var thinking = currentThinking, thinking.isActive {
+            thinking.isActive = false
+            thinking.completedAt = thinking.completedAt ?? Date()
+            currentThinking = thinking
+            if let idx = thinkingHistory.firstIndex(where: { $0.stepIndex == thinking.stepIndex }) {
+                thinkingHistory[idx] = thinking
+                upsertActivity(.thinking(thinking))
+            }
+        }
+    }
+
     /// Convenience accessor for the most recent running command, if any.
     public var activeCommand: CommandExecutionEvent? {
         commands.first(where: { $0.status == .running })
@@ -239,9 +276,12 @@ public final class AntigravityTelemetryStore {
 
         if isInitialHydration {
             // If the latest historical step is older than the idle window, settle calmly to `.idle`
+            // (and settle stale running commands whose task log has not been written recently).
             if let lastStepDate, Date().timeIntervalSince(lastStepDate) > idleDecaySeconds {
-                if activeCommand == nil {
-                    settleToIdle()
+                if let running = activeCommand, isTaskLogRecentlyModified(running.taskLogURL, within: 20) {
+                    scheduleIdleDecayIfNeeded()
+                } else {
+                    forceSettleIdle()
                 }
             } else {
                 scheduleIdleDecayIfNeeded()
@@ -471,11 +511,7 @@ public final class AntigravityTelemetryStore {
                 }
             } else {
                 stopLiveTaskLogTailing(commandID: updated.id)
-                if let stepOutputURL = updated.stepOutputURL,
-                   (updated.isTruncated || updated.logOutput.isEmpty)
-                {
-                    loadCompletedStepOutput(commandID: updated.id, outputURL: stepOutputURL)
-                }
+                hydrateCompletedCommandLogIfNeeded(updated)
             }
         }
 
@@ -554,6 +590,20 @@ public final class AntigravityTelemetryStore {
 
         if case let .runningCommand(active) = state, active.id == commandID {
             state = .runningCommand(updated)
+            // Reset command liveness timer whenever fresh stdout/stderr arrives
+            scheduleIdleDecayIfNeeded()
+        }
+    }
+
+    private func hydrateCompletedCommandLogIfNeeded(_ command: CommandExecutionEvent) {
+        guard command.logOutput.isEmpty || command.isTruncated || command.exitCode == nil else {
+            return
+        }
+        let fm = FileManager.default
+        if let stepOutputURL = command.stepOutputURL, fm.fileExists(atPath: stepOutputURL.path) {
+            loadCompletedStepOutput(commandID: command.id, outputURL: stepOutputURL)
+        } else if let taskLogURL = command.taskLogURL, fm.fileExists(atPath: taskLogURL.path) {
+            loadCompletedStepOutput(commandID: command.id, outputURL: taskLogURL)
         }
     }
 
@@ -563,16 +613,34 @@ public final class AntigravityTelemetryStore {
 
         Task { [weak self] in
             guard let loaded = await logTailer.readStepOutput(at: outputURL) else { return }
+            let parsedExitCode = EventClassifier.extractExitCode(from: loaded.text)
+            let cleanedText = EventClassifier.extractCleanCommandOutput(from: loaded.text)
+            let finalText = cleanedText.isEmpty ? loaded.text : cleanedText
+
             await MainActor.run { [weak self] in
                 guard let self, self.sessionGeneration == generation else { return }
                 guard let idx = self.commands.firstIndex(where: { $0.id == commandID }) else { return }
-                if !loaded.text.isEmpty {
-                    self.commands[idx].logOutput = loaded.text
+                if !finalText.isEmpty {
+                    self.commands[idx].logOutput = finalText
                     self.commands[idx].isTruncated = loaded.isTruncated
-                    self.upsertActivity(.command(self.commands[idx]))
                 }
+                if let parsedExitCode, self.commands[idx].exitCode == nil {
+                    self.commands[idx].exitCode = parsedExitCode
+                    self.commands[idx].status = parsedExitCode == 0 ? .succeeded : .failed
+                }
+                self.upsertActivity(.command(self.commands[idx]))
             }
         }
+    }
+
+    private func isTaskLogRecentlyModified(_ url: URL?, within seconds: TimeInterval) -> Bool {
+        guard let url,
+              let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let modified = attrs[.modificationDate] as? Date
+        else {
+            return false
+        }
+        return Date().timeIntervalSince(modified) <= seconds
     }
 
     // MARK: - Active-Only Idle Decay (Zero Idle CPU)
@@ -580,21 +648,36 @@ public final class AntigravityTelemetryStore {
     private func scheduleIdleDecayIfNeeded() {
         cancelIdleDecayTimer()
 
-        // Never run a background timer when already idle or while a command is actively executing
         guard state.isActive, !isPaused else { return }
-        if case .runningCommand = state {
-            return
-        }
 
-        let delayNanoseconds = UInt64(idleDecaySeconds * 1_000_000_000)
+        // While a shell command is running, give it a generous quiet-liveness window (45s);
+        // if no transcript step or task log byte arrives in 45s (e.g., user clicked Stop),
+        // re-check log mtime and settle gracefully to `.idle`.
+        let isRunningCommand: Bool
+        if case .runningCommand = state {
+            isRunningCommand = true
+        } else {
+            isRunningCommand = false
+        }
+        let timeout = isRunningCommand ? max(45.0, idleDecaySeconds * 3.5) : idleDecaySeconds
+        let delayNanoseconds = UInt64(timeout * 1_000_000_000)
+
         idleDecayTask = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: delayNanoseconds)
             } catch {
                 return
             }
-            guard !Task.isCancelled else { return }
-            self?.settleToIdle()
+            guard !Task.isCancelled, let self else { return }
+            if isRunningCommand {
+                if let running = self.activeCommand, self.isTaskLogRecentlyModified(running.taskLogURL, within: 30) {
+                    self.scheduleIdleDecayIfNeeded()
+                } else {
+                    self.forceSettleIdle()
+                }
+            } else {
+                self.settleToIdle()
+            }
         }
     }
 
@@ -649,6 +732,7 @@ public final class AntigravityTelemetryStore {
             guard bundleID == targetBundleID else { return }
             Task { @MainActor [weak self] in
                 self?.refreshConnectionStatus()
+                self?.forceSettleIdle()
             }
         }
 

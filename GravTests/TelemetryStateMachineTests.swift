@@ -120,7 +120,7 @@ final class TelemetryStateMachineTests: XCTestCase {
 
         store.selectSession(discovered[0])
         let steps = await TranscriptTailer(transcriptURL: transcriptURL).readNewSteps()
-        store.ingestSteps(steps, isInitialHydration: true)
+        store.ingestSteps(steps, isInitialHydration: false)
 
         XCTAssertEqual(store.activeModel, "gemini-4-neon-high")
         XCTAssertEqual(store.tokenMetrics.inputTokens, 500)
@@ -145,5 +145,103 @@ final class TelemetryStateMachineTests: XCTestCase {
         store.setPaused(false)
         XCTAssertFalse(store.isPaused)
         store.stop()
+    }
+
+    func testTruncatedStepOutputAndBackgroundTaskIdCorrelation() throws {
+        let rootDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("grav-trunc-\(UUID().uuidString)", isDirectory: true)
+        let convDir = rootDir.appendingPathComponent("conv-1", isDirectory: true)
+        let stepDir = convDir.appendingPathComponent(".system_generated/steps/11", isDirectory: true)
+        try FileManager.default.createDirectory(at: stepDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootDir) }
+
+        let outputFile = stepDir.appendingPathComponent("output.txt")
+        try "Command exited with code 0.\n\nCommand output:\nAll 42 checks passed\n".write(
+            to: outputFile,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let session = ConversationSession(
+            id: "conv-1",
+            directoryURL: convDir,
+            title: "Truncated Log Test",
+            lastModified: Date()
+        )
+
+        var classifier = EventClassifier()
+        let callStep = TranscriptStep(
+            stepIndex: 10,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-22T18:00:00Z",
+            toolCalls: [
+                ToolCall(
+                    name: "run_command",
+                    args: [
+                        "CommandLine": .string("git push origin main"),
+                        "toolSummary": .string("Push commits"),
+                    ]
+                ),
+            ]
+        )
+        let startOut = classifier.process(step: callStep, session: session)
+        XCTAssertEqual(startOut.startedCommands.first?.taskLogURL?.lastPathComponent, "task-11.log")
+
+        // Truncated GENERIC tool response where inline exit code was omitted and redirected to output.txt
+        let truncatedResult = TranscriptStep(
+            stepIndex: 11,
+            source: "MODEL",
+            type: "GENERIC",
+            status: "DONE",
+            createdAt: "2026-11-22T18:00:05Z",
+            content: "Created At: 2026-11-22T18:00:00Z\nCompleted At: 2026-11-22T18:00:05Z\nThe tool's output was truncated due to being too long. You can find the full output in a file at file://\(outputFile.path)",
+            truncatedFields: ["content"]
+        )
+        let resultOut = classifier.process(step: truncatedResult, session: session)
+        XCTAssertEqual(resultOut.updatedCommands.first?.status, .succeeded)
+        XCTAssertEqual(resultOut.updatedCommands.first?.stepOutputURL, outputFile)
+        XCTAssertEqual(resultOut.state, .idle)
+
+        // Verify background task ID without `.log` suffix resolves to `tasks/task-561.log`
+        let parsedTaskURL = EventClassifier.extractTaskLogURL(
+            from: #"[Message] sender=conv-1/task-561 content=Task id "conv-1/task-561" finished"#,
+            session: session
+        )
+        XCTAssertEqual(parsedTaskURL?.lastPathComponent, "task-561.log")
+    }
+
+    func testFinalPlannerResponseSettlesStalePendingCommandToIdle() {
+        var classifier = EventClassifier()
+        let cmdStart = TranscriptStep(
+            stepIndex: 20,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-22T18:10:00Z",
+            toolCalls: [
+                ToolCall(name: "run_command", args: ["CommandLine": .string("swift build"), "toolSummary": .string("Build")]),
+            ]
+        )
+        _ = classifier.process(step: cmdStart)
+        if case .runningCommand = classifier.state {
+            // expected
+        } else {
+            XCTFail("Expected .runningCommand after run_command")
+        }
+
+        // Antigravity finishes its final answer to the user (no tool calls, not an immediate background wait ack)
+        let finalReply = TranscriptStep(
+            stepIndex: 22,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-22T18:10:12Z",
+            content: "All done!"
+        )
+        let finalOut = classifier.process(step: finalReply)
+        XCTAssertEqual(finalOut.state, .idle)
+        XCTAssertTrue(classifier.pendingCommands.isEmpty)
     }
 }

@@ -48,6 +48,7 @@ public struct EventClassifier: Sendable {
     internal var processedTokenStepIndices: Set<Int> = []
     internal var burstEditedPaths: Set<String> = []
     internal var hasPeekedMultiFileBurst: Bool = false
+    internal var lastBackgroundNoticeStepIndex: Int?
 
     public init() {}
 
@@ -61,6 +62,7 @@ public struct EventClassifier: Sendable {
         processedTokenStepIndices.removeAll()
         burstEditedPaths.removeAll()
         hasPeekedMultiFileBurst = false
+        lastBackgroundNoticeStepIndex = nil
     }
 
     /// Marks the telemetry state as `.idle` (for example after an idle decay timeout) and clears
@@ -72,6 +74,39 @@ public struct EventClassifier: Sendable {
             burstEditedPaths.removeAll()
             hasPeekedMultiFileBurst = false
         }
+    }
+
+    /// Settles all lingering pending commands and forces the classifier into `.idle`
+    /// (used when Antigravity quits, a turn finishes, or a command stalls/cancels).
+    public mutating func forceIdle(at date: Date = Date()) -> [CommandExecutionEvent] {
+        var settled: [CommandExecutionEvent] = []
+        if !pendingCommands.isEmpty {
+            for existing in pendingCommands {
+                let done = CommandExecutionEvent(
+                    id: existing.id,
+                    stepIndex: existing.stepIndex,
+                    resultStepIndex: existing.resultStepIndex,
+                    commandLine: existing.commandLine,
+                    summary: existing.summary,
+                    status: .succeeded,
+                    exitCode: existing.exitCode ?? 0,
+                    startedAt: existing.startedAt,
+                    completedAt: existing.completedAt ?? date,
+                    logOutput: existing.logOutput,
+                    isTruncated: existing.isTruncated,
+                    taskLogURL: existing.taskLogURL,
+                    stepOutputURL: existing.stepOutputURL
+                )
+                settled.append(done)
+            }
+            pendingCommands.removeAll()
+        }
+        state = .idle
+        activeThinkingStepIndex = nil
+        burstEditedPaths.removeAll()
+        hasPeekedMultiFileBurst = false
+        lastBackgroundNoticeStepIndex = nil
+        return settled
     }
 
     /// Processes a single `TranscriptStep` from a conversation session and returns all classified
@@ -136,12 +171,16 @@ public struct EventClassifier: Sendable {
                 output.peekEvents.append(.thinkingStarted)
             }
         } else if step.type == "USER_INPUT" {
-            // A fresh user prompt resets multi-file burst tracking and wakes from idle
+            // A fresh user prompt resets multi-file burst tracking and clears any orphaned commands from prior turns
             burstEditedPaths.removeAll()
             hasPeekedMultiFileBurst = false
             if let prevActive = activeThinkingStepIndex {
                 output.completedThinkingStepIndex = prevActive
                 activeThinkingStepIndex = nil
+            }
+            if !pendingCommands.isEmpty {
+                let orphaned = forceIdle(at: stepDate)
+                output.updatedCommands.append(contentsOf: orphaned)
             }
         }
 
@@ -156,7 +195,7 @@ public struct EventClassifier: Sendable {
             )
         }
 
-        // 4. Correlate subsequent tool-result steps (`GENERIC` / background notifications) with pending commands
+        // 4. Correlate subsequent tool-result steps (`GENERIC` / `SYSTEM_MESSAGE`) with pending commands
         var commandJustFinished = false
         if !pendingCommands.isEmpty, toolCalls.isEmpty, step.type != "USER_INPUT" {
             commandJustFinished = correlateCommandResult(
@@ -167,16 +206,20 @@ public struct EventClassifier: Sendable {
             )
         }
 
+        // 4b. If Antigravity delivered a final response (`PLANNER_RESPONSE`, no tool calls, `DONE`)
+        // and it is NOT the immediate "waiting for background task..." ack right after a RUNNING notice,
+        // settle any stale pending commands so the Notch immediately drops to `.idle`.
+        let isWaitingForFreshBackgroundTask = isFinalPlannerResponse
+            && !pendingCommands.isEmpty
+            && lastBackgroundNoticeStepIndex == step.stepIndex - 1
+
+        if isFinalPlannerResponse && !isWaitingForFreshBackgroundTask && !pendingCommands.isEmpty {
+            let settled = forceIdle(at: stepDate)
+            output.updatedCommands.append(contentsOf: settled)
+        }
+
         // 5. Transition high-level state
-        if let activeCmd = pendingCommands.last {
-            state = .runningCommand(activeCmd)
-        } else if let latestFile = output.fileChanges.last {
-            state = .editing(latestFile)
-        } else if !trimmedThinking.isEmpty && !isFinalPlannerResponse {
-            state = .thinking
-        } else if !toolCalls.isEmpty {
-            state = .thinking
-        } else if isFinalPlannerResponse {
+        if isFinalPlannerResponse && !isWaitingForFreshBackgroundTask {
             if let prevActive = activeThinkingStepIndex {
                 output.completedThinkingStepIndex = prevActive
                 activeThinkingStepIndex = nil
@@ -184,6 +227,14 @@ public struct EventClassifier: Sendable {
             state = .idle
             burstEditedPaths.removeAll()
             hasPeekedMultiFileBurst = false
+        } else if let activeCmd = pendingCommands.last {
+            state = .runningCommand(activeCmd)
+        } else if let latestFile = output.fileChanges.last {
+            state = .editing(latestFile)
+        } else if !trimmedThinking.isEmpty && !isFinalPlannerResponse {
+            state = .thinking
+        } else if !toolCalls.isEmpty {
+            state = .thinking
         } else if commandJustFinished {
             // Command completed; return to `.thinking` if thinking is still active, otherwise `.idle`
             state = activeThinkingStepIndex != nil ? .thinking : .idle
@@ -395,8 +446,10 @@ public struct EventClassifier: Sendable {
         into output: inout EventClassificationOutput
     ) {
         let summary = call.stringArg("toolSummary") ?? ""
+        // Antigravity names live task logs after the immediately following GENERIC tool-result step
+        // (`task-<plannerStepIndex + 1 + callIndex>.log`), with fallback updated on correlation.
         let candidateTaskLogURL = session?.tasksDirectoryURL
-            .appendingPathComponent("task-\(stepIndex).log")
+            .appendingPathComponent("task-\(stepIndex + 1 + callIndex).log")
 
         let event = CommandExecutionEvent(
             id: "\(stepIndex)-\(callIndex)",
@@ -432,12 +485,20 @@ public struct EventClassifier: Sendable {
         let exitCode = Self.extractExitCode(from: content)
         let extractedTaskLogURL = Self.extractTaskLogURL(from: content, session: session)
         let extractedStepOutputURL = Self.extractStepOutputURL(from: content, stepIndex: step.stepIndex, session: session)
-        let isRunningNotice = Self.looksLikeRunningCommandNotice(content)
-        let hasCommandOutputHeader = content.contains("Command output:")
+        let isRunningNotice = Self.looksLikeRunningCommandNotice(content) || step.status == "RUNNING"
+        let hasCommandOutputHeader = content.contains("Command output:") || content.contains("No output from command")
+        let isTruncatedToolOutput = content.localizedCaseInsensitiveContains("output was truncated")
+            && extractedStepOutputURL != nil
+        let isAbortedOrError = step.status == "ERROR" || step.status == "CANCELLED" || step.status == "ABORTED"
 
-        // Only match steps that actually represent command output / exit / task status
-        // (avoids consuming `read_file` or `write_file` GENERIC responses)
-        guard exitCode != nil || extractedTaskLogURL != nil || isRunningNotice || hasCommandOutputHeader else {
+        // Only match steps that actually represent command output / exit / task status / truncated command output
+        guard exitCode != nil
+            || extractedTaskLogURL != nil
+            || isRunningNotice
+            || hasCommandOutputHeader
+            || isTruncatedToolOutput
+            || (isAbortedOrError && step.type == "GENERIC")
+        else {
             return false
         }
 
@@ -463,6 +524,12 @@ public struct EventClassifier: Sendable {
             || content.localizedCaseInsensitiveContains("output was truncated")
         let resolvedTaskLogURL = extractedTaskLogURL ?? existing.taskLogURL
         let resolvedStepOutputURL = extractedStepOutputURL ?? existing.stepOutputURL
+
+        let isCompletedWithoutInlineExitCode = !isRunningNotice
+            && step.status != "RUNNING"
+            && (isTruncatedToolOutput
+                || isAbortedOrError
+                || (step.status == "DONE" && hasCommandOutputHeader))
 
         if let code = exitCode {
             let status: CommandStatus = (code == 0) ? .succeeded : .failed
@@ -494,7 +561,37 @@ public struct EventClassifier: Sendable {
             return true
         }
 
+        if isCompletedWithoutInlineExitCode {
+            let status: CommandStatus = isAbortedOrError ? .failed : .succeeded
+            let completedAt = Self.extractCompletedDate(from: content) ?? stepDate
+            let completedEvent = CommandExecutionEvent(
+                id: existing.id,
+                stepIndex: existing.stepIndex,
+                resultStepIndex: step.stepIndex,
+                commandLine: existing.commandLine,
+                summary: existing.summary,
+                status: status,
+                exitCode: isAbortedOrError ? 1 : nil,
+                startedAt: existing.startedAt,
+                completedAt: completedAt,
+                logOutput: isTruncatedToolOutput ? existing.logOutput : mergedLog,
+                isTruncated: isTruncated,
+                taskLogURL: resolvedTaskLogURL,
+                stepOutputURL: resolvedStepOutputURL
+            )
+
+            pendingCommands.remove(at: idx)
+            output.updatedCommands.append(completedEvent)
+            if status == .failed {
+                output.peekEvents.append(.commandFailed(completedEvent.displayTitle, 1))
+            }
+            return true
+        }
+
         // Still running (e.g., backgrounded with a `task-<id>.log` reference)
+        if isRunningNotice {
+            lastBackgroundNoticeStepIndex = step.stepIndex
+        }
         let runningEvent = CommandExecutionEvent(
             id: existing.id,
             stepIndex: existing.stepIndex,
@@ -568,6 +665,22 @@ public struct EventClassifier: Sendable {
            match.numberOfRanges >= 2
         {
             let filename = nsContent.substring(with: match.range(at: 1))
+            if let session {
+                return session.tasksDirectoryURL.appendingPathComponent(filename)
+            }
+            return URL(fileURLWithPath: filename)
+        }
+
+        // Check for Antigravity task identifier without `.log` suffix (e.g. `sender=<uuid>/task-561` or `task id: <uuid>/task-561`)
+        if let idRegex = try? NSRegularExpression(
+            pattern: #"/(task-[A-Za-z0-9._-]+)(?=["'\s,.;:)]|$)"#,
+            options: []
+        ),
+           let match = idRegex.firstMatch(in: content, options: [], range: fullRange),
+           match.numberOfRanges >= 2
+        {
+            let taskName = nsContent.substring(with: match.range(at: 1))
+            let filename = taskName.hasSuffix(".log") ? taskName : "\(taskName).log"
             if let session {
                 return session.tasksDirectoryURL.appendingPathComponent(filename)
             }
