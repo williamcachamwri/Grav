@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Precision 3-tab segmented rail (`Live | Files | Terminal`) with a spring-gliding
-/// Dark Liquid Glass selection pill (`matchedGeometryEffect`, `GravMotion.railSpring`).
+/// Dark Liquid Glass selection capsule (`matchedGeometryEffect`, `GravMotionSpec.settle.animation`).
 public struct SegmentedModeRail: View {
     @Binding public var selection: NotchTab
     public var liveCount: Int
@@ -33,8 +33,15 @@ public struct SegmentedModeRail: View {
                 tabButton(for: tab)
             }
         }
-        .padding(3)
-        .notchGlassSurface(.subtle, cornerRadius: GravRadius.controlM)
+        .padding(2.5)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color.white.opacity(0.038))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                )
+        )
     }
 
     private func tabButton(for tab: NotchTab) -> some View {
@@ -45,46 +52,73 @@ public struct SegmentedModeRail: View {
         return Button {
             select(tab)
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 5.5) {
                 Image(systemName: tab.symbolName)
                     .font(.system(size: 10.5, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? GravPalette.inkPrimary : GravPalette.inkTertiary)
+                    .foregroundStyle(isSelected ? Color.white : Color.white.opacity(isHovered ? 0.78 : 0.52))
 
                 Text(tab.title)
-                    .font(GravTypography.caption)
-                    .foregroundStyle(isSelected ? GravPalette.inkPrimary : GravPalette.inkSecondary.opacity(isHovered ? 0.92 : 0.72))
+                    .font(.system(size: 11.5, weight: isSelected ? .semibold : .medium))
+                    .tracking(-0.15)
+                    .foregroundStyle(isSelected ? Color.white : Color.white.opacity(isHovered ? 0.85 : 0.62))
 
                 if tab == .terminal && hasRunningCommand {
-                    NotchSemanticDot(color: GravPalette.commandRunning, size: 5, isPulsing: true)
+                    NotchSemanticDot(color: GravPalette.glacialCyan, size: 5, isPulsing: true)
                 } else if count > 0 {
-                    Text("\(count)")
-                        .font(GravTypography.monoMicro)
+                    Text(formatBadgeCount(count))
+                        .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
                         .monospacedDigit()
-                        .foregroundStyle(isSelected ? GravPalette.inkSecondary : GravPalette.inkQuaternary)
+                        .foregroundStyle(isSelected ? Color.white.opacity(0.84) : Color.white.opacity(0.38))
+                        .padding(.horizontal, 4.5)
+                        .padding(.vertical, 1)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(isSelected ? 0.12 : 0.05))
+                        )
                         .contentTransition(reduceMotion ? .identity : .numericText())
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 24)
+            .frame(height: 22)
             .background {
                 ZStack {
                     if isHovered && !isSelected {
-                        RoundedRectangle.grav(GravRadius.controlS)
-                            .fill(GravPalette.cardFillSubtle)
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.white.opacity(0.035))
                     }
 
                     if isSelected {
-                        RoundedRectangle.grav(GravRadius.controlS)
-                            .fill(GravPalette.cardFillElevated)
-                            .overlay(
-                                RoundedRectangle.grav(GravRadius.controlS)
-                                    .strokeBorder(GravPalette.specularStroke, lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.13),
+                                        Color.white.opacity(0.08),
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
                             )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.white.opacity(0.24),
+                                                Color.white.opacity(0.07),
+                                            ],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        ),
+                                        lineWidth: 0.5
+                                    )
+                            )
+                            .shadow(color: Color.black.opacity(0.22), radius: 4, y: 1)
                             .matchedGeometryEffect(id: "grav-notch-mode-rail-pill", in: railNamespace)
                     }
                 }
             }
-            .contentShape(RoundedRectangle.grav(GravRadius.controlS))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -97,6 +131,10 @@ public struct SegmentedModeRail: View {
         .help("\(tab.title) (Press \(tab.shortcutLabel))")
         .accessibilityLabel("\(tab.title), \(count) items")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func formatBadgeCount(_ count: Int) -> String {
+        count >= 99 ? "99+" : "\(count)"
     }
 
     private func select(_ tab: NotchTab) {
