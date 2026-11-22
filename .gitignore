@@ -1,0 +1,18 @@
+# Xcode & SwiftPM
+.DS_Store
+*.xcuserdatad
+*.xcscmblueprint
+*.xccheckout
+DerivedData/
+.build/
+.swiftpm/
+.xcode-packages/
+build/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Local caches
+.cache/
+*.log
