@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Expanded 120Hz interactive Notch HUD combining header telemetry, segmented mode rail,
-/// directional slide tab transitions, and full keyboard shortcut navigation.
+/// Expanded 120Hz interactive Notch HUD combining clean header telemetry, segmented mode rail,
+/// directional slide tab transitions, ephemeral copy confirmation toast, and full keyboard navigation
+/// (`1`–`3`, `⌘C`, `ESC`) with zero permanent footer clutter.
 public struct ExpandedNotchView: View {
     public var store: AntigravityTelemetryStore
     public var preferences: PreferencesStore
@@ -31,28 +32,58 @@ public struct ExpandedNotchView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 7) {
-            ExpandedNotchHeaderView(
-                store: store,
-                preferences: preferences,
-                onOpenSettings: onOpenSettings
-            )
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 8) {
+                ExpandedNotchHeaderView(
+                    store: store,
+                    preferences: preferences,
+                    onOpenSettings: onOpenSettings
+                )
 
-            SegmentedModeRail(
-                selection: tabBinding,
-                liveCount: store.recentActivity.count,
-                filesCount: store.fileChanges.count,
-                terminalCount: store.commands.count,
-                hasRunningCommand: store.activeCommand != nil && !store.isPaused
-            )
+                SegmentedModeRail(
+                    selection: tabBinding,
+                    liveCount: store.recentActivity.count,
+                    filesCount: store.fileChanges.count,
+                    terminalCount: store.commands.count,
+                    hasRunningCommand: store.activeCommand != nil && !store.isPaused
+                )
 
-            tabViewport
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
+                tabViewport
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-            footerShortcutStrip
+            if let message = statusBannerMessage {
+                HStack(spacing: 5) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(GravPalette.emerald)
+                    Text(message)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color(red: 0.10, green: 0.11, blue: 0.14).opacity(0.96))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.45), radius: 10, y: 4)
+                .padding(.bottom, 4)
+                .transition(
+                    reduceMotion
+                        ? .opacity
+                        : .opacity.combined(with: .offset(y: 6)).combined(with: .scale(scale: 0.96))
+                )
+                .allowsHitTesting(false)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: statusBannerMessage)
         .background {
             hiddenShortcutControls
         }
@@ -122,77 +153,6 @@ public struct ExpandedNotchView: View {
             insertion: .move(edge: insertionEdge).combined(with: .opacity),
             removal: .move(edge: removalEdge).combined(with: .opacity)
         )
-    }
-
-    // MARK: - Whisper-Quiet Compact Footer Strip
-
-    private var footerShortcutStrip: some View {
-        HStack(spacing: 10) {
-            if let message = statusBannerMessage {
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(GravPalette.emerald)
-                        .frame(width: 4.5, height: 4.5)
-                    Text(message)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.84))
-                }
-                .transition(.opacity)
-            } else {
-                HStack(spacing: 4) {
-                    Text("1–3")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.46))
-                    Text("Tab")
-                        .font(.system(size: 9.5, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.30))
-                }
-
-                Text("·")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.18))
-
-                HStack(spacing: 4) {
-                    Text("⌘C")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.46))
-                    Text(copyHintLabel)
-                        .font(.system(size: 9.5, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.30))
-                }
-            }
-
-            Spacer(minLength: 4)
-
-            Button {
-                onCollapse()
-            } label: {
-                HStack(spacing: 4) {
-                    Text("esc")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.46))
-                    Text("Close")
-                        .font(.system(size: 9.5, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.30))
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Collapse Notch HUD")
-        }
-        .padding(.horizontal, 2)
-        .frame(height: 12)
-        .animation(reduceMotion ? nil : GravMotion.subtleFade, value: statusBannerMessage)
-    }
-
-    private var copyHintLabel: String {
-        switch selectedTab {
-        case .live:
-            return "Copy Thought"
-        case .files:
-            return "Copy Diff"
-        case .terminal:
-            return "Copy Log"
-        }
     }
 
     // MARK: - Keyboard Navigation & Clipboard
@@ -282,7 +242,7 @@ public struct ExpandedNotchView: View {
                 return
             }
             NotchTelemetryHelpers.copyToPasteboard(thought.text)
-            showBanner("Copied reasoning snapshot")
+            showBanner("Copied reasoning")
         }
     }
 
@@ -290,7 +250,7 @@ public struct ExpandedNotchView: View {
         statusBannerMessage = message
         statusBannerTask?.cancel()
         statusBannerTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.5))
+            try? await Task.sleep(for: .seconds(1.35))
             guard !Task.isCancelled else { return }
             statusBannerMessage = nil
         }

@@ -19,7 +19,7 @@ enum NotchSurfaceElevation {
     }
 }
 
-/// Applies a calm dark Liquid Glass surface with continuous corner geometry and a 0.5pt top-lit specular rim.
+/// Applies a calm dark surface with continuous corner geometry and a whisper-quiet 0.5pt hairline.
 struct NotchGlassSurfaceModifier: ViewModifier {
     var elevation: NotchSurfaceElevation
     var cornerRadius: CGFloat
@@ -56,10 +56,10 @@ extension View {
     }
 }
 
-/// Crisp 6pt semantic telemetry dot with optional quiet breathing halo strictly while active.
+/// Crisp 5.5pt semantic telemetry dot with optional quiet optical pulse strictly while active.
 struct NotchSemanticDot: View {
     var color: Color
-    var size: CGFloat = 6
+    var size: CGFloat = 5.5
     var isPulsing: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -69,9 +69,9 @@ struct NotchSemanticDot: View {
         ZStack {
             if isPulsing && !reduceMotion {
                 Circle()
-                    .strokeBorder(color.opacity(pulseExpanded ? 0.0 : 0.45), lineWidth: 1.0)
-                    .frame(width: size * 2.1, height: size * 2.1)
-                    .scaleEffect(pulseExpanded ? 1.25 : 0.65)
+                    .strokeBorder(color.opacity(pulseExpanded ? 0.0 : 0.42), lineWidth: 0.9)
+                    .frame(width: size * 2.0, height: size * 2.0)
+                    .scaleEffect(pulseExpanded ? 1.25 : 0.70)
                     .onAppear { startPulse() }
                     .onDisappear { stopPulse() }
             }
@@ -100,7 +100,7 @@ struct NotchSemanticDot: View {
 
     private func startPulse() {
         pulseExpanded = false
-        withAnimation(.easeOut(duration: 1.45).repeatForever(autoreverses: false)) {
+        withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
             pulseExpanded = true
         }
     }
@@ -114,31 +114,11 @@ struct NotchSemanticDot: View {
     }
 }
 
-/// Minimal monochrome keyboard shortcut cap (`ESC`, `1`, `2`, `3`, `⌘C`).
-struct NotchKeycap: View {
-    var label: String
-
-    var body: some View {
-        Text(label)
-            .font(GravTypography.monoMicro)
-            .foregroundStyle(GravPalette.inkTertiary)
-            .padding(.horizontal, 4.5)
-            .padding(.vertical, 1.5)
-            .background(
-                RoundedRectangle.grav(4)
-                    .fill(GravPalette.cardFillSubtle)
-            )
-            .overlay(
-                RoundedRectangle.grav(4)
-                    .strokeBorder(GravPalette.specularStroke, lineWidth: 0.5)
-            )
-    }
-}
-
-/// Precision monochrome glass button style for compact notch chrome actions.
+/// Borderless ghost chrome button for compact Notch HUD controls:
+/// completely invisible at rest, illuminating smoothly with a calm frosted pill on hover or active state.
 struct NotchChromeButtonStyle: ButtonStyle {
     var isActive: Bool = false
-    var cornerRadius: CGFloat = GravRadius.controlS
+    var cornerRadius: CGFloat = 6.5
 
     @State private var isHovered: Bool = false
 
@@ -148,14 +128,7 @@ struct NotchChromeButtonStyle: ButtonStyle {
                 RoundedRectangle.grav(cornerRadius)
                     .fill(backgroundFill(isPressed: configuration.isPressed))
             )
-            .overlay(
-                RoundedRectangle.grav(cornerRadius)
-                    .strokeBorder(
-                        isHovered || isActive ? GravPalette.hairlineTop : GravPalette.hairlineMid.opacity(0.65),
-                        lineWidth: 0.5
-                    )
-            )
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
             .animation(GravMotion.subtleFade, value: isHovered)
             .animation(GravMotion.subtleFade, value: configuration.isPressed)
             .onHover { hovering in
@@ -165,15 +138,15 @@ struct NotchChromeButtonStyle: ButtonStyle {
 
     private func backgroundFill(isPressed: Bool) -> Color {
         if isPressed {
-            return GravPalette.cardFillElevated
+            return Color.white.opacity(0.13)
         }
         if isActive {
-            return GravPalette.cardFillElevated
+            return Color.white.opacity(0.10)
         }
         if isHovered {
-            return GravPalette.cardFillBase
+            return Color.white.opacity(0.075)
         }
-        return GravPalette.cardFillSubtle
+        return Color.clear
     }
 }
 
@@ -242,7 +215,7 @@ enum NotchTelemetryHelpers {
     static func color(for status: CommandStatus) -> Color {
         switch status {
         case .running:
-            return GravPalette.commandRunning
+            return GravPalette.glacialCyan
         case .succeeded:
             return GravPalette.emerald
         case .failed:
@@ -263,7 +236,7 @@ enum NotchTelemetryHelpers {
         case let .editing(event):
             return event.kind == .delete ? GravPalette.coral : GravPalette.fileEdit
         case .runningCommand:
-            return GravPalette.commandRunning
+            return GravPalette.glacialCyan
         }
     }
 }

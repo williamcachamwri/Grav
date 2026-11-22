@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Live telemetry overview combining the collapsible Thinking Glass Card
-/// with a magnetic-hover, real-time animated unified activity stream.
+/// Live telemetry overview pairing a serene editorial Thinking sheet with a clean,
+/// zero-badge-clutter chronological activity stream.
 public struct LiveTelemetryTabView: View {
     public var store: AntigravityTelemetryStore
     public var onInspectFile: (FileChangeEvent) -> Void
@@ -12,6 +12,7 @@ public struct LiveTelemetryTabView: View {
 
     @State private var isThinkingExpanded: Bool = true
     @State private var hoveredActivityID: String?
+    @State private var isHoveringThinkingHeader: Bool = false
     @State private var loadingStepIndex: Int?
     @State private var loadedFullThoughts: [Int: String] = [:]
     @State private var didCopyThought: Bool = false
@@ -39,9 +40,9 @@ public struct LiveTelemetryTabView: View {
             if !hasAnyTelemetry {
                 quietEmptyState
             } else {
-                VStack(spacing: 7) {
+                VStack(spacing: 8) {
                     if let snapshot = displayedThinking {
-                        thinkingGlassCard(for: snapshot)
+                        thinkingEditorialSheet(for: snapshot)
                     }
 
                     activityFeedSection
@@ -52,9 +53,9 @@ public struct LiveTelemetryTabView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    // MARK: - Thinking Glass Card
+    // MARK: - Editorial Thinking Sheet
 
-    private func thinkingGlassCard(for snapshot: ThinkingSnapshot) -> some View {
+    private func thinkingEditorialSheet(for snapshot: ThinkingSnapshot) -> some View {
         let resolvedText = (loadedFullThoughts[snapshot.stepIndex] ?? snapshot.text)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let needsFullLoad = snapshot.isTruncated
@@ -66,47 +67,36 @@ public struct LiveTelemetryTabView: View {
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 Button {
-                    if reduceMotion {
-                        isThinkingExpanded.toggle()
-                    } else {
-                        withAnimation(GravMotion.contentSlide) {
-                            isThinkingExpanded.toggle()
-                        }
-                    }
+                    toggleThinking()
                 } label: {
                     HStack(spacing: 6) {
                         NotchSemanticDot(
-                            color: snapshot.isActive ? GravPalette.thinking : GravPalette.thinking.opacity(0.55),
-                            size: 5.5,
+                            color: snapshot.isActive ? GravPalette.thinking : Color.white.opacity(0.32),
+                            size: 5,
                             isPulsing: snapshot.isActive && !store.isPaused
                         )
 
-                        Text(snapshot.isActive ? "Thinking" : "Latest Thought")
-                            .font(.system(size: 11, weight: .semibold))
-                            .tracking(-0.1)
-                            .foregroundStyle(snapshot.isActive ? GravPalette.thinking : Color.white.opacity(0.76))
+                        Text(snapshot.isActive ? "Thinking" : "Thought")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .tracking(-0.15)
+                            .foregroundStyle(snapshot.isActive ? Color.white.opacity(0.94) : Color.white.opacity(0.70))
 
                         if let modelLabel, !modelLabel.isEmpty {
                             Text(modelLabel)
-                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                                .foregroundStyle(Color.white.opacity(0.46))
-                                .padding(.horizontal, 5.5)
-                                .padding(.vertical, 1.5)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(Color.white.opacity(0.05))
-                                )
+                                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                                .foregroundStyle(Color.white.opacity(0.36))
                                 .lineLimit(1)
+                                .truncationMode(.tail)
                         }
 
-                        Spacer(minLength: 4)
+                        Spacer(minLength: 6)
 
                         ActiveElapsedTimerText(
                             startDate: snapshot.startedAt,
                             endDate: snapshot.completedAt,
                             isActive: snapshot.isActive && !store.isPaused,
-                            font: .system(size: 10, weight: .medium, design: .monospaced),
-                            color: Color.white.opacity(0.54)
+                            font: .system(size: 10.5, weight: .medium, design: .monospaced),
+                            color: snapshot.isActive ? GravPalette.thinking.opacity(0.92) : Color.white.opacity(0.42)
                         )
                     }
                     .contentShape(Rectangle())
@@ -123,36 +113,31 @@ public struct LiveTelemetryTabView: View {
                         }
                     } label: {
                         Image(systemName: didCopyThought ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(didCopyThought ? GravPalette.emerald : Color.white.opacity(0.45))
-                            .frame(width: 18, height: 18)
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(didCopyThought ? GravPalette.emerald : Color.white.opacity(isHoveringThinkingHeader ? 0.62 : 0.34))
+                            .frame(width: 20, height: 18)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(NotchChromeButtonStyle(cornerRadius: 5))
                     .help("Copy Thought (⌘C)")
                 }
 
                 Button {
-                    if reduceMotion {
-                        isThinkingExpanded.toggle()
-                    } else {
-                        withAnimation(GravMotion.contentSlide) {
-                            isThinkingExpanded.toggle()
-                        }
-                    }
+                    toggleThinking()
                 } label: {
                     Image(systemName: isThinkingExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 8.5, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.42))
-                        .frame(width: 16, height: 18)
+                        .foregroundStyle(Color.white.opacity(0.38))
+                        .frame(width: 18, height: 18)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(NotchChromeButtonStyle(cornerRadius: 5))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
+            .onHover { isHoveringThinkingHeader = $0 }
 
             if isThinkingExpanded {
                 Rectangle()
-                    .fill(Color.white.opacity(0.07))
+                    .fill(Color.white.opacity(0.06))
                     .frame(height: 0.5)
                     .padding(.horizontal, 10)
 
@@ -162,19 +147,19 @@ public struct LiveTelemetryTabView: View {
                             VStack(alignment: .leading, spacing: 0) {
                                 Text(resolvedText.isEmpty ? "Streaming reasoning tokens…" : resolvedText)
                                     .font(.system(size: 11.5, weight: .regular))
-                                    .lineSpacing(3)
-                                    .foregroundStyle(Color.white.opacity(0.84))
+                                    .lineSpacing(3.2)
+                                    .foregroundStyle(Color.white.opacity(0.82))
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.top, 5)
-                                    .padding(.bottom, 4)
+                                    .padding(.top, 6)
+                                    .padding(.bottom, 5)
 
                                 Color.clear
                                     .frame(height: 1)
                                     .id("thinking-stream-tail")
                             }
                         }
-                        .frame(maxHeight: store.recentActivity.isEmpty ? 154 : 68)
+                        .frame(maxHeight: store.recentActivity.isEmpty ? 164 : 74)
                         .mask(thinkingScrollMask)
                         .onChange(of: resolvedText) { _, _ in
                             guard snapshot.isActive else { return }
@@ -202,46 +187,34 @@ public struct LiveTelemetryTabView: View {
                                 HStack(spacing: 4) {
                                     if isLoadingFull {
                                         OpticalCommandSpinner(isActive: true, size: 8, tint: GravPalette.glacialCyan)
-                                    } else {
-                                        Image(systemName: "arrow.down.doc")
-                                            .font(.system(size: 9, weight: .medium))
                                     }
                                     Text(isLoadingFull ? "Loading…" : "Load full thought")
-                                        .font(.system(size: 10, weight: .medium))
+                                        .font(.system(size: 10.5, weight: .medium))
                                 }
                                 .foregroundStyle(GravPalette.glacialCyan)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2.5)
                             }
-                            .buttonStyle(NotchChromeButtonStyle(cornerRadius: 6))
+                            .buttonStyle(NotchChromeButtonStyle(cornerRadius: 5))
                             .disabled(isLoadingFull)
                         }
                     }
                 }
                 .padding(.horizontal, 10)
-                .padding(.bottom, 6)
+                .padding(.bottom, 7)
                 .transition(.opacity)
             }
         }
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.06),
-                            Color.white.opacity(0.035),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+                .fill(Color.white.opacity(0.042))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .strokeBorder(
                             LinearGradient(
                                 colors: [
-                                    snapshot.isActive ? GravPalette.thinking.opacity(0.30) : Color.white.opacity(0.14),
-                                    Color.white.opacity(0.04),
+                                    Color.white.opacity(0.11),
+                                    Color.white.opacity(0.03),
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -252,12 +225,22 @@ public struct LiveTelemetryTabView: View {
         )
     }
 
+    private func toggleThinking() {
+        if reduceMotion {
+            isThinkingExpanded.toggle()
+        } else {
+            withAnimation(GravMotion.contentSlide) {
+                isThinkingExpanded.toggle()
+            }
+        }
+    }
+
     private var thinkingScrollMask: some View {
         LinearGradient(
             stops: [
                 .init(color: .clear, location: 0.0),
-                .init(color: .black, location: 0.03),
-                .init(color: .black, location: 0.91),
+                .init(color: .black, location: 0.04),
+                .init(color: .black, location: 0.90),
                 .init(color: .clear, location: 1.0),
             ],
             startPoint: .top,
@@ -279,24 +262,24 @@ public struct LiveTelemetryTabView: View {
         }
     }
 
-    // MARK: - Unified Recent Activity Feed
+    // MARK: - Clean Activity Feed (Zero Icon Boxes, Pure Typography & Alignment)
 
     private var activityFeedSection: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: 3) {
+            LazyVStack(spacing: 1.5) {
                 ForEach(store.recentActivity) { item in
                     activityRow(for: item)
                         .transition(
                             reduceMotion
                                 ? .opacity
                                 : .asymmetric(
-                                    insertion: .opacity.combined(with: .move(edge: .top)).combined(with: .scale(scale: 0.98)),
+                                    insertion: .opacity.combined(with: .move(edge: .top)),
                                     removal: .opacity
                                 )
                         )
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 1)
         }
         .mask(
             LinearGradient(
@@ -319,28 +302,24 @@ public struct LiveTelemetryTabView: View {
             handleActivityTap(item)
         } label: {
             HStack(spacing: 8) {
-                activityIconBadge(for: item)
+                activityLeadingGlyph(for: item)
 
                 activityLabel(for: item)
 
-                Spacer(minLength: 6)
+                Spacer(minLength: 8)
 
                 activityTrailingMetric(for: item)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 4.5)
+            .padding(.vertical, 5.5)
             .background {
                 if isHovered {
-                    RoundedRectangle(cornerRadius: 7.5, style: .continuous)
-                        .fill(Color.white.opacity(0.065))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 7.5, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
-                        )
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
                         .matchedGeometryEffect(id: "live-activity-hover-pill", in: activityHoverNamespace)
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 7.5, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -358,38 +337,29 @@ public struct LiveTelemetryTabView: View {
         }
     }
 
-    private func activityIconBadge(for item: TelemetryActivityItem) -> some View {
-        let info = activityBadgeSpec(for: item)
-        return ZStack {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(info.color.opacity(0.14))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .strokeBorder(info.color.opacity(0.28), lineWidth: 0.5)
-                )
-
-            Image(systemName: info.symbol)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(info.color)
-        }
-        .frame(width: 18, height: 18)
+    private func activityLeadingGlyph(for item: TelemetryActivityItem) -> some View {
+        let spec = activityGlyphSpec(for: item)
+        return Image(systemName: spec.symbol)
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundStyle(spec.color)
+            .frame(width: 14, alignment: .center)
     }
 
-    private func activityBadgeSpec(for item: TelemetryActivityItem) -> (symbol: String, color: Color) {
+    private func activityGlyphSpec(for item: TelemetryActivityItem) -> (symbol: String, color: Color) {
         switch item {
         case .thinking:
             return ("waveform.path.ecg", GravPalette.thinking)
         case let .fileChange(event):
             switch event.kind {
             case .create: return ("plus", GravPalette.emerald)
-            case .edit, .overwrite: return ("pencil.line", GravPalette.fileEdit)
-            case .delete: return ("trash.fill", GravPalette.coral)
+            case .edit, .overwrite: return ("pencil", GravPalette.fileEdit)
+            case .delete: return ("trash", GravPalette.coral)
             }
         case let .command(command):
             switch command.status {
-            case .running: return ("terminal.fill", GravPalette.glacialCyan)
-            case .succeeded: return ("terminal.fill", GravPalette.emerald)
-            case .failed: return ("exclamationmark.triangle.fill", GravPalette.coral)
+            case .running: return ("terminal", GravPalette.glacialCyan)
+            case .succeeded: return ("terminal", Color.white.opacity(0.54))
+            case .failed: return ("exclamationmark.triangle", GravPalette.coral)
             }
         }
     }
@@ -403,7 +373,7 @@ public struct LiveTelemetryTabView: View {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             Text(singleLine.isEmpty ? "Reasoning step #\(snapshot.stepIndex)" : singleLine)
                 .font(.system(size: 11.5, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.78))
+                .foregroundStyle(Color.white.opacity(0.76))
                 .lineLimit(1)
                 .truncationMode(.tail)
 
@@ -411,14 +381,14 @@ public struct LiveTelemetryTabView: View {
             HStack(spacing: 6) {
                 Text(event.basename)
                     .font(.system(size: 11.5, weight: .medium))
-                    .tracking(-0.1)
-                    .foregroundStyle(Color.white.opacity(0.94))
+                    .tracking(-0.15)
+                    .foregroundStyle(Color.white.opacity(0.92))
                     .lineLimit(1)
                     .truncationMode(.middle)
 
                 Text(NotchTelemetryHelpers.compactParentPath(for: event.path))
                     .font(.system(size: 10.5, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.36))
+                    .foregroundStyle(Color.white.opacity(0.34))
                     .lineLimit(1)
                     .truncationMode(.head)
             }
@@ -426,8 +396,8 @@ public struct LiveTelemetryTabView: View {
         case let .command(command):
             Text(command.displayTitle)
                 .font(.system(size: 11.5, weight: .medium))
-                .tracking(-0.1)
-                .foregroundStyle(Color.white.opacity(0.92))
+                .tracking(-0.15)
+                .foregroundStyle(Color.white.opacity(0.90))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
@@ -441,8 +411,8 @@ public struct LiveTelemetryTabView: View {
                 startDate: snapshot.startedAt,
                 endDate: snapshot.completedAt,
                 isActive: snapshot.isActive && !store.isPaused,
-                font: .system(size: 10, weight: .medium, design: .monospaced),
-                color: Color.white.opacity(0.46)
+                font: .system(size: 10.5, weight: .medium, design: .monospaced),
+                color: Color.white.opacity(0.40)
             )
 
         case let .fileChange(event):
@@ -454,22 +424,19 @@ public struct LiveTelemetryTabView: View {
             )
 
         case let .command(command):
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 if let code = command.exitCode, command.status != .running, code != 0 {
                     Text("exit \(code)")
-                        .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .monospacedDigit()
                         .foregroundStyle(GravPalette.coral)
-                        .padding(.horizontal, 4.5)
-                        .padding(.vertical, 1)
-                        .background(Capsule(style: .continuous).fill(GravPalette.coral.opacity(0.14)))
                 }
                 ActiveElapsedTimerText(
                     startDate: command.startedAt,
                     endDate: command.completedAt,
                     isActive: command.status == .running && !store.isPaused,
-                    font: .system(size: 10, weight: .medium, design: .monospaced),
-                    color: Color.white.opacity(0.46)
+                    font: .system(size: 10.5, weight: .medium, design: .monospaced),
+                    color: command.status == .running ? GravPalette.glacialCyan : Color.white.opacity(0.40)
                 )
             }
         }
@@ -479,13 +446,7 @@ public struct LiveTelemetryTabView: View {
         switch item {
         case .thinking:
             if !isThinkingExpanded {
-                if reduceMotion {
-                    isThinkingExpanded = true
-                } else {
-                    withAnimation(GravMotion.contentSlide) {
-                        isThinkingExpanded = true
-                    }
-                }
+                toggleThinking()
             }
         case let .fileChange(event):
             onInspectFile(event)
@@ -498,23 +459,23 @@ public struct LiveTelemetryTabView: View {
 
     private var quietEmptyState: some View {
         VStack(spacing: 8) {
-            GravAppIconTile(size: 26)
-                .opacity(0.85)
+            GravAppIconTile(size: 28)
+                .opacity(0.88)
 
             Text("Telemetry Standby")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12, weight: .medium))
                 .tracking(-0.15)
                 .foregroundStyle(Color.white.opacity(0.76))
 
             Text(
                 store.isPaused
                     ? "Monitoring is paused. Resume from the menu bar to stream live activity."
-                    : "Waiting for Antigravity reasoning, file mutations, or terminal output."
+                    : "Waiting for Antigravity reasoning, file changes, or shell output."
             )
             .font(.system(size: 11, weight: .regular))
-            .foregroundStyle(Color.white.opacity(0.42))
+            .foregroundStyle(Color.white.opacity(0.38))
             .multilineTextAlignment(.center)
-            .frame(maxWidth: 310)
+            .frame(maxWidth: 300)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

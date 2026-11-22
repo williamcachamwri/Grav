@@ -11,9 +11,9 @@ import SwiftUI
 public final class NotchHUDCoordinator {
     // MARK: - Constants
 
-    public static let expandedPanelSize = CGSize(width: 568, height: 336)
-    public static let notchedCollapsedReserve: CGFloat = 116
-    public static let standaloneCollapsedWidth: CGFloat = 292
+    public static let expandedPanelSize = CGSize(width: 564, height: 324)
+    public static let notchedCollapsedReserve: CGFloat = 112
+    public static let standaloneCollapsedWidth: CGFloat = 280
 
     // MARK: - Dependencies & State
 

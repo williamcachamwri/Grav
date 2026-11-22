@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Split command execution monitor and live-streaming monospaced Log Inspector Drawer.
+/// Split command execution monitor and live-streaming monospaced Log Inspector
+/// with Ghostty-inspired visual restraint and crisp borderless controls.
 public struct TerminalTelemetryTabView: View {
     public var store: AntigravityTelemetryStore
     @Binding public var selectedCommandID: String?
@@ -40,9 +41,9 @@ public struct TerminalTelemetryTabView: View {
             if store.commands.isEmpty {
                 emptyState
             } else {
-                HStack(spacing: 7) {
+                HStack(spacing: 8) {
                     commandListRail
-                        .frame(width: 176)
+                        .frame(width: 170)
 
                     if let command = resolvedSelectedCommand {
                         logInspectorDrawer(for: command)
@@ -76,12 +77,12 @@ public struct TerminalTelemetryTabView: View {
 
     private var commandListRail: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: 3) {
+            LazyVStack(spacing: 2) {
                 ForEach(store.commands) { command in
                     commandRow(for: command)
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 1)
         }
         .frame(maxHeight: .infinity)
     }
@@ -94,18 +95,18 @@ public struct TerminalTelemetryTabView: View {
         return Button {
             selectCommand(command)
         } label: {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2.5) {
                 HStack(spacing: 6) {
                     NotchSemanticDot(
                         color: statusTint,
-                        size: 5.5,
+                        size: 5,
                         isPulsing: command.status == .running && !store.isPaused
                     )
 
                     Text(command.displayTitle)
                         .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
-                        .tracking(-0.1)
-                        .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.80))
+                        .tracking(-0.15)
+                        .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.78))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -117,14 +118,14 @@ public struct TerminalTelemetryTabView: View {
                             .foregroundStyle(GravPalette.glacialCyan)
                     } else if let exitCode = command.exitCode {
                         Text("Exit \(exitCode)")
-                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
                             .monospacedDigit()
-                            .foregroundStyle(exitCode == 0 ? GravPalette.emerald : GravPalette.coral)
+                            .foregroundStyle(exitCode == 0 ? Color.white.opacity(0.38) : GravPalette.coral)
                     } else {
                         Text(command.status == .succeeded ? "Exit 0" : "Failed")
-                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
                             .foregroundStyle(
-                                command.status == .succeeded ? GravPalette.emerald : GravPalette.coral
+                                command.status == .succeeded ? Color.white.opacity(0.38) : GravPalette.coral
                             )
                     }
 
@@ -135,7 +136,7 @@ public struct TerminalTelemetryTabView: View {
                         endDate: command.completedAt,
                         isActive: command.status == .running && !store.isPaused,
                         font: .system(size: 9.5, weight: .medium, design: .monospaced),
-                        color: Color.white.opacity(0.42)
+                        color: Color.white.opacity(0.36)
                     )
                 }
                 .padding(.leading, 15)
@@ -145,24 +146,16 @@ public struct TerminalTelemetryTabView: View {
             .background {
                 ZStack {
                     if isSelected {
-                        RoundedRectangle(cornerRadius: 7.5, style: .continuous)
-                            .fill(Color.white.opacity(0.095))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 7.5, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
-                            )
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.white.opacity(0.085))
                     } else if isHovered {
-                        RoundedRectangle(cornerRadius: 7.5, style: .continuous)
-                            .fill(Color.white.opacity(0.055))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 7.5, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
-                            )
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
                             .matchedGeometryEffect(id: "terminal-row-hover-pill", in: commandHoverNamespace)
                     }
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 7.5, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -180,7 +173,7 @@ public struct TerminalTelemetryTabView: View {
         }
     }
 
-    // MARK: - Live Log Inspector Drawer (Single-Line Unified Header + Maximum Viewport)
+    // MARK: - Live Log Inspector Drawer
 
     private static let maxRenderedLogLines = 400
 
@@ -193,29 +186,27 @@ public struct TerminalTelemetryTabView: View {
         let isCopied = copiedCommandID == command.id
 
         return VStack(alignment: .leading, spacing: 0) {
-            // Unified Header: $ Command + Compact Search Capsule + Auto-Scroll + Copy Log
             HStack(spacing: 5) {
                 Text("$ \(command.commandLine)")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.76))
+                    .foregroundStyle(Color.white.opacity(0.72))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(command.commandLine)
 
                 Spacer(minLength: 4)
 
-                // Compact inline filter pill
                 HStack(spacing: 4) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 8.5, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.38))
+                        .foregroundStyle(Color.white.opacity(0.36))
 
-                    TextField("Filter…", text: $logFilter)
+                    TextField("Filter", text: $logFilter)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 9.5, weight: .regular, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.92))
+                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.90))
                         .focused($filterFocus)
-                        .frame(width: 68)
+                        .frame(width: 64)
 
                     if !logFilter.isEmpty {
                         Button {
@@ -223,7 +214,7 @@ public struct TerminalTelemetryTabView: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 8.5))
-                                .foregroundStyle(Color.white.opacity(0.42))
+                                .foregroundStyle(Color.white.opacity(0.40))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Clear log filter")
@@ -232,47 +223,33 @@ public struct TerminalTelemetryTabView: View {
                 .padding(.horizontal, 6)
                 .frame(height: 19)
                 .background(
-                    Capsule(style: .continuous)
-                        .fill(Color.black.opacity(0.45))
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .strokeBorder(
-                                    filterFocus ? GravPalette.glacialCyan.opacity(0.55) : Color.white.opacity(0.10),
-                                    lineWidth: 0.5
-                                )
-                        )
+                    RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                        .fill(Color.white.opacity(filterFocus ? 0.08 : 0.04))
                 )
 
                 Button {
                     isAutoScrollEnabled.toggle()
                 } label: {
                     Image(systemName: "arrow.down.to.line")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(
-                            isAutoScrollEnabled ? GravPalette.glacialCyan : Color.white.opacity(0.40)
+                            isAutoScrollEnabled ? GravPalette.glacialCyan : Color.white.opacity(0.38)
                         )
-                        .frame(width: 19, height: 19)
+                        .frame(width: 20, height: 19)
                 }
-                .buttonStyle(NotchChromeButtonStyle(isActive: isAutoScrollEnabled, cornerRadius: 5.5))
+                .buttonStyle(NotchChromeButtonStyle(isActive: isAutoScrollEnabled, cornerRadius: 5))
                 .help(isAutoScrollEnabled ? "Auto-scroll enabled" : "Auto-scroll paused")
                 .accessibilityLabel(isAutoScrollEnabled ? "Disable log auto-scroll" : "Enable log auto-scroll")
 
                 Button {
                     copyLog(for: command, filteredLines: allFilteredLines)
                 } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 9, weight: .semibold))
-                        if isCopied {
-                            Text("Copied")
-                                .font(.system(size: 9, weight: .semibold))
-                        }
-                    }
-                    .foregroundStyle(isCopied ? GravPalette.emerald : Color.white.opacity(0.68))
-                    .padding(.horizontal, isCopied ? 5.5 : 0)
-                    .frame(minWidth: 19, minHeight: 19)
+                    Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(isCopied ? GravPalette.emerald : Color.white.opacity(0.62))
+                        .frame(width: 20, height: 19)
                 }
-                .buttonStyle(NotchChromeButtonStyle(isActive: isCopied, cornerRadius: 5.5))
+                .buttonStyle(NotchChromeButtonStyle(isActive: isCopied, cornerRadius: 5))
                 .help("Copy command output (⌘C)")
                 .accessibilityLabel("Copy Log")
             }
@@ -280,10 +257,9 @@ public struct TerminalTelemetryTabView: View {
             .padding(.vertical, 5)
 
             Rectangle()
-                .fill(Color.white.opacity(0.07))
+                .fill(Color.white.opacity(0.06))
                 .frame(height: 0.5)
 
-            // Streaming Log Viewport
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: true) {
                     VStack(alignment: .leading, spacing: 1.5) {
@@ -294,18 +270,18 @@ public struct TerminalTelemetryTabView: View {
                                     : "No output captured."
                             )
                             .font(GravTypography.monoMicro)
-                            .foregroundStyle(Color.white.opacity(0.36))
+                            .foregroundStyle(Color.white.opacity(0.34))
                             .padding(.top, 6)
                         } else if allFilteredLines.isEmpty {
                             Text("No log lines match \"\(logFilter)\".")
                                 .font(GravTypography.monoMicro)
-                                .foregroundStyle(Color.white.opacity(0.36))
+                                .foregroundStyle(Color.white.opacity(0.34))
                                 .padding(.top, 6)
                         } else {
                             if omittedLineCount > 0 {
-                                Text("— latest \(Self.maxRenderedLogLines) of \(allFilteredLines.count) lines (Copy Log for full output) —")
+                                Text("— latest \(Self.maxRenderedLogLines) of \(allFilteredLines.count) lines —")
                                     .font(GravTypography.monoMicro)
-                                    .foregroundStyle(Color.white.opacity(0.35))
+                                    .foregroundStyle(Color.white.opacity(0.34))
                                     .padding(.bottom, 3)
                             }
                             ForEach(Array(renderedLines.enumerated()), id: \.offset) { _, line in
@@ -320,7 +296,7 @@ public struct TerminalTelemetryTabView: View {
                         if command.isTruncated {
                             Text("— log output truncated —")
                                 .font(GravTypography.monoMicro)
-                                .foregroundStyle(Color.white.opacity(0.35))
+                                .foregroundStyle(Color.white.opacity(0.34))
                                 .padding(.top, 4)
                         }
 
@@ -343,11 +319,11 @@ public struct TerminalTelemetryTabView: View {
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: 9.5, style: .continuous)
-                .fill(Color.white.opacity(0.038))
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color.white.opacity(0.035))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 9.5, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.075), lineWidth: 0.5)
                 )
         )
     }
@@ -385,7 +361,7 @@ public struct TerminalTelemetryTabView: View {
         if lower.contains("warning:") {
             return GravPalette.fileEdit.opacity(0.90)
         }
-        return Color.white.opacity(0.80)
+        return Color.white.opacity(0.78)
     }
 
     private func copyLog(for command: CommandExecutionEvent, filteredLines: [String]) {
@@ -411,18 +387,18 @@ public struct TerminalTelemetryTabView: View {
         VStack(spacing: 7) {
             Image(systemName: "terminal")
                 .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.32))
+                .foregroundStyle(Color.white.opacity(0.30))
 
             Text("No Command Executions")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12, weight: .medium))
                 .tracking(-0.15)
                 .foregroundStyle(Color.white.opacity(0.76))
 
-            Text("Active and recent Antigravity terminal commands will stream live output here.")
+            Text("Active and recent Antigravity shell commands stream live output here.")
                 .font(.system(size: 11, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.42))
+                .foregroundStyle(Color.white.opacity(0.38))
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 310)
+                .frame(maxWidth: 300)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

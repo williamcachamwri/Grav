@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Precision 3-tab segmented rail (`Live | Files | Terminal`) with a spring-gliding
-/// Dark Liquid Glass selection capsule (`matchedGeometryEffect`, `GravMotionSpec.settle.animation`).
+/// Minimal monochrome segmented control (`Live | Files | Terminal`) with a spring-gliding
+/// frosted selection thumb (`matchedGeometryEffect`, `GravMotion.railSpring`) and bare tabular counts.
 public struct SegmentedModeRail: View {
     @Binding public var selection: NotchTab
     public var liveCount: Int
@@ -28,19 +28,15 @@ public struct SegmentedModeRail: View {
     }
 
     public var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 2) {
             ForEach(NotchTab.allCases) { tab in
                 tabButton(for: tab)
             }
         }
         .padding(2.5)
         .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Color.white.opacity(0.038))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
-                )
+            RoundedRectangle(cornerRadius: 8.5, style: .continuous)
+                .fill(Color.white.opacity(0.042))
         )
     }
 
@@ -52,60 +48,45 @@ public struct SegmentedModeRail: View {
         return Button {
             select(tab)
         } label: {
-            HStack(spacing: 5.5) {
+            HStack(spacing: 5) {
                 Image(systemName: tab.symbolName)
-                    .font(.system(size: 10.5, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? Color.white : Color.white.opacity(isHovered ? 0.78 : 0.52))
+                    .font(.system(size: 10.5, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(isSelected ? Color.white : Color.white.opacity(isHovered ? 0.76 : 0.46))
 
                 Text(tab.title)
-                    .font(.system(size: 11.5, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 11.5, weight: isSelected ? .medium : .regular))
                     .tracking(-0.15)
-                    .foregroundStyle(isSelected ? Color.white : Color.white.opacity(isHovered ? 0.85 : 0.62))
+                    .foregroundStyle(isSelected ? Color.white : Color.white.opacity(isHovered ? 0.82 : 0.56))
 
                 if tab == .terminal && hasRunningCommand {
-                    NotchSemanticDot(color: GravPalette.glacialCyan, size: 5, isPulsing: true)
+                    NotchSemanticDot(color: GravPalette.glacialCyan, size: 4.5, isPulsing: true)
                 } else if count > 0 {
                     Text(formatBadgeCount(count))
-                        .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .monospacedDigit()
-                        .foregroundStyle(isSelected ? Color.white.opacity(0.84) : Color.white.opacity(0.38))
-                        .padding(.horizontal, 4.5)
-                        .padding(.vertical, 1)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.white.opacity(isSelected ? 0.12 : 0.05))
-                        )
+                        .foregroundStyle(isSelected ? Color.white.opacity(0.56) : Color.white.opacity(0.30))
                         .contentTransition(reduceMotion ? .identity : .numericText())
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 22)
+            .frame(height: 23)
             .background {
                 ZStack {
                     if isHovered && !isSelected {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        RoundedRectangle(cornerRadius: 6.5, style: .continuous)
                             .fill(Color.white.opacity(0.035))
                     }
 
                     if isSelected {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.13),
-                                        Color.white.opacity(0.08),
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
+                        RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                            .fill(Color.white.opacity(0.105))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                RoundedRectangle(cornerRadius: 6.5, style: .continuous)
                                     .strokeBorder(
                                         LinearGradient(
                                             colors: [
-                                                Color.white.opacity(0.24),
-                                                Color.white.opacity(0.07),
+                                                Color.white.opacity(0.18),
+                                                Color.white.opacity(0.03),
                                             ],
                                             startPoint: .top,
                                             endPoint: .bottom
@@ -113,12 +94,11 @@ public struct SegmentedModeRail: View {
                                         lineWidth: 0.5
                                     )
                             )
-                            .shadow(color: Color.black.opacity(0.22), radius: 4, y: 1)
                             .matchedGeometryEffect(id: "grav-notch-mode-rail-pill", in: railNamespace)
                     }
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 6.5, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in

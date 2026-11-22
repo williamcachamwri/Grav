@@ -1,14 +1,16 @@
 import SwiftUI
 
-/// Top telemetry header bar inside Grav's expanded Notch HUD.
-/// Designed with strict layout priority so the conversation selector never crushes the
-/// right-hand token telemetry pill or action controls.
+/// Clean, chrome-minimal header bar for Grav's expanded Notch HUD.
+/// Zero nested capsules, zero emojis, zero logo halo clutter — pure Apple × Raycast hierarchy
+/// with strict layout priority so long conversation titles never crowd token counters or controls.
 public struct ExpandedNotchHeaderView: View {
     public var store: AntigravityTelemetryStore
     public var preferences: PreferencesStore
     public var onOpenSettings: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHoveringLogo = false
+    @State private var isHoveringSession = false
 
     public init(
         store: AntigravityTelemetryStore,
@@ -21,10 +23,7 @@ public struct ExpandedNotchHeaderView: View {
     }
 
     private var stateLabel: String {
-        if store.isPaused {
-            return "Paused"
-        }
-        return store.state.label
+        store.isPaused ? "Paused" : store.state.label
     }
 
     private var stateDotColor: Color {
@@ -38,37 +37,32 @@ public struct ExpandedNotchHeaderView: View {
     public var body: some View {
         HStack(spacing: 8) {
             leftCluster
-            Spacer(minLength: 8)
+            Spacer(minLength: 10)
             rightCluster
                 .layoutPriority(1)
         }
         .frame(height: 26)
     }
 
-    // MARK: - Left Cluster
+    // MARK: - Left Cluster (Pure Grav Logo · Borderless Session Picker · Quiet Status)
 
     private var leftCluster: some View {
         HStack(spacing: 7) {
             Button {
                 store.activateAntigravityApp()
             } label: {
-                ZStack {
-                    if isActivelyStreaming && !reduceMotion {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(stateDotColor.opacity(0.55), lineWidth: 0.8)
-                            .frame(width: 23, height: 23)
-                    }
-                    GravAppIconTile(size: 19)
-                }
-                .frame(width: 23, height: 23)
+                GravAppIconTile(size: 20)
+                    .scaleEffect(!reduceMotion && isHoveringLogo ? 1.06 : 1.0)
+                    .animation(reduceMotion ? nil : GravMotion.subtleFade, value: isHoveringLogo)
             }
             .buttonStyle(.plain)
+            .onHover { isHoveringLogo = $0 }
             .help("Focus Antigravity")
             .accessibilityLabel("Open Antigravity")
 
             sessionSwitcherMenu
 
-            liveStatusCapsule
+            inlineStatusReadout
         }
     }
 
@@ -101,79 +95,69 @@ public struct ExpandedNotchHeaderView: View {
                 }
             }
         } label: {
-            HStack(spacing: 4.5) {
+            HStack(spacing: 4) {
                 Text(cleanActiveSessionTitle)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .tracking(-0.15)
+                    .font(.system(size: 12, weight: .medium))
+                    .tracking(-0.18)
                     .foregroundStyle(
                         store.activeSession != nil ? Color.white.opacity(0.92) : GravPalette.inkTertiary
                     )
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .frame(maxWidth: 164, alignment: .leading)
+                    .frame(maxWidth: 176, alignment: .leading)
 
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(GravPalette.inkTertiary)
+                    .foregroundStyle(Color.white.opacity(isHoveringSession ? 0.68 : 0.36))
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 6)
             .frame(height: 22)
             .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.055))
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.11), lineWidth: 0.5)
-                    )
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHoveringSession ? Color.white.opacity(0.07) : Color.clear)
             )
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .help("Switch Antigravity conversation session")
+        .onHover { isHoveringSession = $0 }
+        .animation(reduceMotion ? nil : GravMotion.subtleFade, value: isHoveringSession)
+        .help("Switch Antigravity session")
         .accessibilityLabel("Active session: \(cleanActiveSessionTitle)")
     }
 
-    private var liveStatusCapsule: some View {
+    private var inlineStatusReadout: some View {
         HStack(spacing: 4.5) {
             NotchSemanticDot(
                 color: stateDotColor,
-                size: 5.5,
+                size: 5,
                 isPulsing: isActivelyStreaming
             )
             Text(stateLabel)
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(.system(size: 11, weight: .medium))
                 .tracking(-0.1)
-                .foregroundStyle(isActivelyStreaming ? Color.white.opacity(0.95) : GravPalette.inkTertiary)
+                .foregroundStyle(isActivelyStreaming ? Color.white.opacity(0.76) : Color.white.opacity(0.40))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.horizontal, 7)
-        .frame(height: 20)
-        .background(
-            Capsule(style: .continuous)
-                .fill(isActivelyStreaming ? stateDotColor.opacity(0.12) : Color.white.opacity(0.04))
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(
-                            isActivelyStreaming ? stateDotColor.opacity(0.25) : Color.white.opacity(0.08),
-                            lineWidth: 0.5
-                        )
-                )
-        )
+        .padding(.leading, 2)
         .fixedSize(horizontal: true, vertical: false)
         .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: stateLabel)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Telemetry state: \(stateLabel)")
     }
 
-    // MARK: - Right Cluster
+    // MARK: - Right Cluster (Bare Tabular Tokens · Ghost Controls)
 
     private var rightCluster: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             tokenMetricsReadout
 
-            pinNotchButton
+            Rectangle()
+                .fill(Color.white.opacity(0.10))
+                .frame(width: 0.5, height: 11)
+                .padding(.horizontal, 3)
 
+            pinNotchButton
             settingsButton
         }
         .fixedSize(horizontal: true, vertical: false)
@@ -185,30 +169,14 @@ public struct ExpandedNotchHeaderView: View {
         let cacheText = TokenMetrics.formatCompact(metrics.cacheReadTokens)
         let outputText = TokenMetrics.formatCompact(metrics.outputTokens)
 
-        return HStack(spacing: 4) {
-            tokenSegment(prefix: "↓", value: inputText, color: Color.white.opacity(0.78))
-            Text("·")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(Color.white.opacity(0.24))
-            tokenSegment(prefix: "⚡", value: cacheText, color: Color.white.opacity(0.54))
-            Text("·")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(Color.white.opacity(0.24))
-            tokenSegment(prefix: "↑", value: outputText, color: GravPalette.glacialCyan)
+        return HStack(spacing: 7) {
+            tokenPair(prefix: "↓", value: inputText, color: Color.white.opacity(0.54))
+            tokenPair(prefix: "↑", value: outputText, color: GravPalette.glacialCyan.opacity(0.92))
         }
-        .padding(.horizontal, 8)
-        .frame(height: 22)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.045))
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
-                )
-        )
+        .padding(.horizontal, 4)
         .fixedSize(horizontal: true, vertical: false)
         .help(
-            "Tokens (in / cache / out): \(metrics.inputTokens.formatted()) / \(metrics.cacheReadTokens.formatted()) / \(metrics.outputTokens.formatted())"
+            "Tokens — In: \(metrics.inputTokens.formatted()) · Cache: \(metrics.cacheReadTokens.formatted()) · Out: \(metrics.outputTokens.formatted())"
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
@@ -216,13 +184,13 @@ public struct ExpandedNotchHeaderView: View {
         )
     }
 
-    private func tokenSegment(prefix: String, value: String, color: Color) -> some View {
-        HStack(spacing: 1.5) {
+    private func tokenPair(prefix: String, value: String, color: Color) -> some View {
+        HStack(spacing: 2) {
             Text(prefix)
-                .font(.system(size: 8.5, weight: .semibold))
-                .foregroundStyle(color.opacity(0.65))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(color.opacity(0.62))
             Text(value)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                 .monospacedDigit()
                 .foregroundStyle(color)
                 .contentTransition(reduceMotion ? .identity : .numericText())
@@ -235,14 +203,14 @@ public struct ExpandedNotchHeaderView: View {
             preferences.isNotchPinned.toggle()
         } label: {
             Image(systemName: preferences.isNotchPinned ? "pin.fill" : "pin")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(
-                    preferences.isNotchPinned ? GravPalette.glacialCyan : Color.white.opacity(0.62)
+                    preferences.isNotchPinned ? GravPalette.glacialCyan : Color.white.opacity(0.52)
                 )
                 .frame(width: 22, height: 22)
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
         }
-        .buttonStyle(NotchChromeButtonStyle(isActive: preferences.isNotchPinned, cornerRadius: 6.5))
+        .buttonStyle(NotchChromeButtonStyle(isActive: preferences.isNotchPinned, cornerRadius: 6))
         .help(preferences.isNotchPinned ? "Unpin Notch HUD" : "Pin Notch HUD Open")
         .accessibilityLabel(preferences.isNotchPinned ? "Unpin Notch" : "Pin Notch Open")
     }
@@ -252,11 +220,11 @@ public struct ExpandedNotchHeaderView: View {
             onOpenSettings()
         } label: {
             Image(systemName: "gearshape")
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.62))
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.52))
                 .frame(width: 22, height: 22)
         }
-        .buttonStyle(NotchChromeButtonStyle(cornerRadius: 6.5))
+        .buttonStyle(NotchChromeButtonStyle(cornerRadius: 6))
         .help("Grav Settings")
         .accessibilityLabel("Open Grav Settings")
     }
