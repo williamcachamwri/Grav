@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import SwiftUI
 
 /// Central `@MainActor` telemetry store exposing real-time local Antigravity runtime state
 /// to the Notch HUD, Onboarding live connection check, and Menu Bar.
@@ -220,10 +221,20 @@ public final class AntigravityTelemetryStore {
         guard !steps.isEmpty else { return }
 
         var lastStepDate: Date?
-        for step in steps {
-            lastStepDate = step.parsedDate
-            let classified = classifier.process(step: step, session: activeSession)
-            applyClassification(classified, suppressPeeks: isInitialHydration || isPaused)
+        let applyBlock = {
+            for step in steps {
+                lastStepDate = step.parsedDate
+                let classified = self.classifier.process(step: step, session: self.activeSession)
+                self.applyClassification(classified, suppressPeeks: isInitialHydration || self.isPaused)
+            }
+        }
+
+        if !isInitialHydration && !GravMotionPreferences.shared.reduceMotion {
+            withAnimation(GravMotionSpec.settle.animation) {
+                applyBlock()
+            }
+        } else {
+            applyBlock()
         }
 
         if isInitialHydration {
@@ -433,7 +444,11 @@ public final class AntigravityTelemetryStore {
 
         if !output.fileChanges.isEmpty {
             for change in output.fileChanges {
-                fileChanges.insert(change, at: 0)
+                if let existingIdx = fileChanges.firstIndex(where: { $0.id == change.id }) {
+                    fileChanges[existingIdx] = change
+                } else {
+                    fileChanges.insert(change, at: 0)
+                }
                 upsertActivity(.fileChange(change))
             }
             if fileChanges.count > maxRetainedEvents {

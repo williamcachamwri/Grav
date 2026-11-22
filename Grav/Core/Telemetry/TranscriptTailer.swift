@@ -12,6 +12,7 @@ public actor TranscriptTailer {
     private let decoder: JSONDecoder
 
     private var source: DispatchSourceFileSystemObject?
+    private var directorySource: DispatchSourceFileSystemObject?
     private var watchedInode: UInt64?
     private var onStepsHandler: (@Sendable ([TranscriptStep]) -> Void)?
     private var isWatching: Bool = false
@@ -52,8 +53,9 @@ public actor TranscriptTailer {
         let fileSize = fileSizeNumber.uint64Value
         let currentInode = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
 
-        // Detect truncation or file rotation (inode swap)
-        if fileSize < byteOffset || (watchedInode != nil && currentInode != nil && currentInode != watchedInode) {
+        // Reset byteOffset to 0 only when the file shrinks (true truncation or rotation to a new shorter transcript).
+        // Atomic rename-writes that extend the transcript preserve the prefix bytes and only append at the tail.
+        if fileSize < byteOffset {
             byteOffset = 0
             persistOffset()
         }
@@ -94,6 +96,7 @@ public actor TranscriptTailer {
         }
 
         attachFileSystemSource()
+        attachParentDirectorySource()
     }
 
     /// Stops watching and releases the underlying file descriptor and `DispatchSource`.
@@ -101,6 +104,7 @@ public actor TranscriptTailer {
         isWatching = false
         onStepsHandler = nil
         cancelSource()
+        cancelDirectorySource()
     }
 
     /// Resets the tailer offset back to the beginning of the file.
@@ -286,15 +290,67 @@ public actor TranscriptTailer {
         }
     }
 
+    private func attachParentDirectorySource() {
+        cancelDirectorySource()
+        guard isWatching else { return }
+
+        let parentPath = transcriptURL.deletingLastPathComponent().path
+        let dirFD = open(parentPath, O_EVTONLY)
+        guard dirFD >= 0 else { return }
+
+        let dirSource = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: dirFD,
+            eventMask: [.write, .extend, .rename],
+            queue: watcherQueue
+        )
+
+        dirSource.setEventHandler { [weak self] in
+            Task { [weak self] in
+                await self?.handleParentDirectoryEvent()
+            }
+        }
+
+        dirSource.setCancelHandler {
+            close(dirFD)
+        }
+
+        self.directorySource = dirSource
+        dirSource.resume()
+    }
+
+    private func cancelDirectorySource() {
+        if let existing = directorySource {
+            directorySource = nil
+            existing.cancel()
+        }
+    }
+
+    private func handleParentDirectoryEvent() {
+        guard isWatching else { return }
+
+        // If the file was atomically replaced (new inode) or newly created, re-bind the file watcher
+        if let attributes = try? FileManager.default.attributesOfItem(atPath: transcriptURL.path),
+           let currentInode = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
+        {
+            if source == nil || (watchedInode != nil && watchedInode != currentInode) {
+                attachFileSystemSource()
+            }
+        }
+
+        let steps = readNewSteps()
+        if !steps.isEmpty, let handler = onStepsHandler {
+            handler(steps)
+        }
+    }
+
     private func handleFileSystemEvent(rawFlags: UInt) {
         guard isWatching else { return }
         let flags = DispatchSource.FileSystemEvent(rawValue: rawFlags)
 
         if flags.contains(.delete) || flags.contains(.rename) || flags.contains(.revoke) {
-            // File was rotated or atomically replaced; reset offset and re-attach to the path
-            byteOffset = 0
+            // File was atomically replaced; re-attach to the new vnode while keeping byteOffset
+            // (readNewSteps() automatically resets byteOffset to 0 if the replacement file is smaller).
             watchedInode = nil
-            persistOffset()
             attachFileSystemSource()
         }
 
