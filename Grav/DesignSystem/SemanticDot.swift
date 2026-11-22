@@ -14,7 +14,11 @@ public enum SemanticDotTone: Sendable, Equatable {
         switch telemetryState {
         case .idle:
             self = .idle
-        case .thinking:
+        case .working:
+            self = .custom(Color.white.opacity(0.84))
+        case .compacting:
+            self = .custom(GravPalette.prismViolet)
+        case .thinking, .inspecting:
             self = .thinking
         case let .editing(event):
             self = event.kind == .delete ? .error : .fileEdit

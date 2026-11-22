@@ -103,6 +103,19 @@ public struct ToolCall: Sendable, Equatable, Codable {
         }
         return nil
     }
+
+    public func intArg(_ keys: String...) -> Int? {
+        guard let args else { return nil }
+        for key in keys {
+            if let value = args[key]?.unwrappedInt {
+                return value
+            }
+            if let rawStr = args[key]?.unwrappedString, let parsed = Int(rawStr) {
+                return parsed
+            }
+        }
+        return nil
+    }
 }
 
 /// Thread-safe ISO 8601 parser supporting fractional and whole seconds.
@@ -397,16 +410,92 @@ public struct CommandExecutionEvent: Sendable, Equatable, Identifiable {
     }
 }
 
+// MARK: - File Analysis / Inspection Events (`read_file`, `view_file`, etc.)
+
+public struct FileInspectionEvent: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let stepIndex: Int
+    public let path: String
+    public let startLine: Int?
+    public let endLine: Int?
+    public let timestamp: Date
+    public let toolName: String
+
+    public init(
+        id: String,
+        stepIndex: Int,
+        path: String,
+        startLine: Int? = nil,
+        endLine: Int? = nil,
+        timestamp: Date = Date(),
+        toolName: String = "read_file"
+    ) {
+        self.id = id
+        self.stepIndex = stepIndex
+        self.path = path
+        self.startLine = startLine
+        self.endLine = endLine
+        self.timestamp = timestamp
+        self.toolName = toolName
+    }
+
+    public var basename: String {
+        URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    /// Formats line range matching Antigravity's exact `#L480-810` convention.
+    public var lineRangeLabel: String? {
+        switch (startLine, endLine) {
+        case let (s?, e?) where s > 0 && e >= s:
+            return s == e ? "#L\(s)" : "#L\(s)-\(e)"
+        case let (s?, nil) where s > 0:
+            return "#L\(s)"
+        case let (nil, e?) where e > 0:
+            return "#L1-\(e)"
+        default:
+            return nil
+        }
+    }
+}
+
+// MARK: - Context Compaction Events (`CHECKPOINT`)
+
+public struct CompactionEvent: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let stepIndex: Int
+    public let startedAt: Date
+    public var completedAt: Date?
+    public var isActive: Bool
+
+    public init(
+        id: String? = nil,
+        stepIndex: Int,
+        startedAt: Date = Date(),
+        completedAt: Date? = nil,
+        isActive: Bool = true
+    ) {
+        self.id = id ?? "compact-\(stepIndex)"
+        self.stepIndex = stepIndex
+        self.startedAt = startedAt
+        self.completedAt = completedAt
+        self.isActive = isActive
+    }
+}
+
 // MARK: - Unified Activity Feed & High-Level Telemetry State
 
 public enum TelemetryActivityItem: Sendable, Equatable, Identifiable {
     case thinking(ThinkingSnapshot)
+    case compaction(CompactionEvent)
+    case fileInspection(FileInspectionEvent)
     case fileChange(FileChangeEvent)
     case command(CommandExecutionEvent)
 
     public var id: String {
         switch self {
         case let .thinking(snapshot): return "thinking-\(snapshot.stepIndex)"
+        case let .compaction(event): return event.id
+        case let .fileInspection(event): return "inspect-\(event.id)"
         case let .fileChange(event): return "file-\(event.id)"
         case let .command(event): return "cmd-\(event.id)"
         }
@@ -415,6 +504,8 @@ public enum TelemetryActivityItem: Sendable, Equatable, Identifiable {
     public var timestamp: Date {
         switch self {
         case let .thinking(snapshot): return snapshot.startedAt
+        case let .compaction(event): return event.startedAt
+        case let .fileInspection(event): return event.timestamp
         case let .fileChange(event): return event.timestamp
         case let .command(event): return event.startedAt
         }
@@ -423,7 +514,10 @@ public enum TelemetryActivityItem: Sendable, Equatable, Identifiable {
 
 public enum TelemetryState: Sendable, Equatable {
     case idle
+    case working(startedAt: Date)
+    case compacting(CompactionEvent)
     case thinking
+    case inspecting(FileInspectionEvent)
     case editing(FileChangeEvent)
     case runningCommand(CommandExecutionEvent)
 
@@ -435,7 +529,10 @@ public enum TelemetryState: Sendable, Equatable {
     public var label: String {
         switch self {
         case .idle: return "Idle"
+        case .working: return "Working"
+        case .compacting: return "Compacting"
         case .thinking: return "Thinking"
+        case .inspecting: return "Analyzing"
         case let .editing(event):
             return event.kind == .delete ? "Deleting" : "Editing"
         case .runningCommand: return "Running"

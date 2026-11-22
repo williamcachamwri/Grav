@@ -151,12 +151,43 @@ public struct ExpandedNotchHeaderView: View {
                 size: 5,
                 isPulsing: isActivelyStreaming
             )
-            Text(stateLabel)
-                .font(.system(size: 11, weight: .medium))
-                .tracking(-0.1)
-                .foregroundStyle(isActivelyStreaming ? Color.white.opacity(0.76) : Color.white.opacity(0.40))
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+            if !store.isPaused {
+                switch store.state {
+                case .thinking:
+                    NotchThinkingShimmerLabel(
+                        startDate: store.currentThinking?.startedAt ?? Date(),
+                        compact: true,
+                        font: .system(size: 11, weight: .medium),
+                        reduceMotion: reduceMotion
+                    )
+                    .fixedSize(horizontal: true, vertical: false)
+                case .working, .compacting:
+                    NotchShimmerText(
+                        text: stateLabel,
+                        font: .system(size: 11, weight: .medium),
+                        tracking: -0.1,
+                        baseOpacity: 0.46,
+                        peakOpacity: 0.94,
+                        period: 1.8,
+                        reduceMotion: reduceMotion
+                    )
+                    .fixedSize(horizontal: true, vertical: false)
+                default:
+                    Text(stateLabel)
+                        .font(.system(size: 11, weight: .medium))
+                        .tracking(-0.1)
+                        .foregroundStyle(isActivelyStreaming ? Color.white.opacity(0.76) : Color.white.opacity(0.40))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            } else {
+                Text(stateLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .tracking(-0.1)
+                    .foregroundStyle(Color.white.opacity(0.40))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
         .padding(.leading, 2)
         .fixedSize(horizontal: true, vertical: false)

@@ -152,22 +152,16 @@ struct NotchChromeButtonStyle: ButtonStyle {
 
 /// Formatting and clipboard utilities shared across Notch HUD views.
 enum NotchTelemetryHelpers {
-    /// Returns a compact parent path relative to home (`~/...`) suitable for narrow telemetry rows.
+    /// Returns the full home-relative parent directory path (`~/Grav/Grav/Core/Telemetry`)
+    /// so users see the complete path without artificial mid-path truncation.
     static func compactParentPath(for fullPath: String) -> String {
         let url = URL(fileURLWithPath: fullPath)
         let parent = url.deletingLastPathComponent().path
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let normalized: String
         if parent.hasPrefix(home) {
-            normalized = "~" + parent.dropFirst(home.count)
-        } else {
-            normalized = parent
+            return "~" + parent.dropFirst(home.count)
         }
-        let components = normalized.split(separator: "/").map(String.init)
-        if components.count <= 3 {
-            return normalized
-        }
-        return "…/" + components.suffix(2).joined(separator: "/")
+        return parent
     }
 
     /// Formats a `FileChangeEvent` into a clean unified-style diff string for clipboard export.
@@ -231,12 +225,104 @@ enum NotchTelemetryHelpers {
         switch state {
         case .idle:
             return GravPalette.idleDot
-        case .thinking:
+        case .working:
+            return Color.white.opacity(0.84)
+        case .compacting:
+            return GravPalette.prismViolet
+        case .thinking, .inspecting:
             return GravPalette.thinking
         case let .editing(event):
             return event.kind == .delete ? GravPalette.coral : GravPalette.fileEdit
         case .runningCommand:
             return GravPalette.glacialCyan
+        }
+    }
+}
+
+/// Optical specular shimmer text matching Antigravity's exact `Working`, `Compacting`,
+/// and `Thinking for Ns` status sweep — pure luminance wave across crisp SF Pro glyphs,
+/// zero neon glow or AI-slop haze.
+struct NotchShimmerText: View {
+    var text: String
+    var font: Font = .system(size: 11.5, weight: .medium)
+    var tracking: CGFloat = -0.15
+    var baseOpacity: Double = 0.44
+    var peakOpacity: Double = 0.96
+    var period: Double = 1.75
+    var reduceMotion: Bool = false
+
+    var body: some View {
+        if reduceMotion {
+            Text(text)
+                .font(font)
+                .tracking(tracking)
+                .foregroundStyle(Color.white.opacity(0.78))
+                .lineLimit(1)
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                let rawPhase = (t.truncatingRemainder(dividingBy: period)) / period
+                let phase = rawPhase < 0 ? rawPhase + 1.0 : rawPhase
+                // Sweep highlight smoothly from -0.35 to 1.35 across the glyph width
+                let center = -0.35 + phase * 1.70
+                let bandHalfWidth = 0.24
+
+                Text(text)
+                    .font(font)
+                    .tracking(tracking)
+                    .foregroundStyle(Color.white.opacity(baseOpacity))
+                    .lineLimit(1)
+                    .overlay {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: max(0, min(1, center - bandHalfWidth))),
+                                .init(color: Color.white.opacity(peakOpacity), location: max(0, min(1, center))),
+                                .init(color: .clear, location: max(0, min(1, center + bandHalfWidth))),
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .mask(
+                            Text(text)
+                                .font(font)
+                                .tracking(tracking)
+                                .lineLimit(1)
+                        )
+                    }
+            }
+        }
+    }
+}
+
+/// Live ticking `"Thinking for 3s"` shimmer label matching Antigravity's native thinking indicator.
+struct NotchThinkingShimmerLabel: View {
+    var startDate: Date
+    var compact: Bool = false
+    var font: Font = .system(size: 11.5, weight: .medium)
+    var reduceMotion: Bool = false
+
+    var body: some View {
+        TimelineView(.periodic(from: startDate, by: 1.0)) { context in
+            let elapsed = max(0, Int(context.date.timeIntervalSince(startDate)))
+            let durationString: String = {
+                if elapsed < 60 {
+                    return "\(elapsed)s"
+                }
+                let mins = elapsed / 60
+                let secs = elapsed % 60
+                return secs == 0 ? "\(mins)m" : "\(mins)m \(secs)s"
+            }()
+            let label = compact ? "Thinking \(durationString)" : "Thinking for \(durationString)"
+            NotchShimmerText(
+                text: label,
+                font: font,
+                tracking: -0.15,
+                baseOpacity: 0.46,
+                peakOpacity: 0.96,
+                period: 1.85,
+                reduceMotion: reduceMotion
+            )
+            .monospacedDigit()
         }
     }
 }

@@ -257,6 +257,7 @@ public final class AntigravityTelemetryStore {
                 upsertActivity(.thinking(thinking))
             }
         }
+        finalizeActiveCompactions()
     }
 
     /// Convenience accessor for the most recent running command, if any.
@@ -516,6 +517,16 @@ public final class AntigravityTelemetryStore {
                 if responses.count > maxRetainedEvents {
                     responses.removeLast(responses.count - maxRetainedEvents)
                 }
+            }
+        }
+
+        if let compaction = output.compactionEvent {
+            upsertActivity(.compaction(compaction))
+        }
+
+        if !output.fileInspections.isEmpty {
+            for inspection in output.fileInspections {
+                upsertActivity(.fileInspection(inspection))
             }
         }
 
@@ -790,6 +801,20 @@ public final class AntigravityTelemetryStore {
             if let idx = thinkingHistory.firstIndex(where: { $0.stepIndex == thinking.stepIndex }) {
                 thinkingHistory[idx] = thinking
                 upsertActivity(.thinking(thinking))
+            }
+        }
+        if state == .idle {
+            finalizeActiveCompactions()
+        }
+    }
+
+    private func finalizeActiveCompactions() {
+        let now = Date()
+        for idx in recentActivity.indices {
+            if case var .compaction(event) = recentActivity[idx], event.isActive {
+                event.isActive = false
+                event.completedAt = event.completedAt ?? now
+                recentActivity[idx] = .compaction(event)
             }
         }
     }

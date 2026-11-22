@@ -37,6 +37,9 @@ public enum GravPalette {
     /// Thinking / Active Reasoning — Sky Azure (`#38B6FF`).
     public static let thinking = Color(red: 0x38 / 255.0, green: 0xB6 / 255.0, blue: 0xFF / 255.0)
 
+    /// Context Compaction — Soft Prism Violet (`#C084FC`, harmonized with logo magenta-violet edge).
+    public static let prismViolet = Color(red: 0xC0 / 255.0, green: 0x84 / 255.0, blue: 0xFC / 255.0)
+
     /// File Edit / Create — Warm Solar Amber (`#F59E0B`, harmonized with logo crest).
     public static let fileEdit = Color(red: 0xF5 / 255.0, green: 0x9E / 255.0, blue: 0x0B / 255.0)
 

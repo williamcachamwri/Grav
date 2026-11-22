@@ -301,8 +301,17 @@ private struct MenuBarStatusSnapshot: Sendable {
         switch state {
         case .idle:
             return isAppRunning ? "Antigravity Idle" : "Standby"
+        case .working:
+            return "Working"
+        case .compacting:
+            return "Compacting"
         case .thinking:
             return "Thinking"
+        case let .inspecting(event):
+            if let range = event.lineRangeLabel {
+                return "Analyzed \(event.basename) \(range)"
+            }
+            return "Analyzed \(event.basename)"
         case let .editing(event):
             let verb = event.kind == .delete ? "Deleting" : "Editing"
             return "\(verb) \(event.basename)"

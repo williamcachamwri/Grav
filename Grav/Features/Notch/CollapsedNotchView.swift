@@ -42,13 +42,14 @@ public struct CollapsedNotchView: View {
                     trailingWing(compact: true)
                 }
             } else {
-                HStack(spacing: 10) {
+                HStack(alignment: .center, spacing: 10) {
                     leadingWing(compact: false)
-                    Spacer(minLength: 6)
+                        .fixedSize(horizontal: true, vertical: false)
                     trailingWing(compact: false)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .padding(.horizontal, 12)
-                .frame(width: presenter.collapsedSurfaceWidth, height: pillHeight)
+                .frame(width: presenter.collapsedSurfaceWidth, height: pillHeight, alignment: .center)
             }
         }
         .frame(height: pillHeight)
@@ -88,12 +89,26 @@ public struct CollapsedNotchView: View {
                 .transition(.opacity)
         } else {
             switch effectiveState {
+            case .working:
+                NotchBars(workingWaveStyle)
+                    .transition(signalTransition)
+
+            case .compacting:
+                Image(systemName: "rectangle.compress.vertical")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(GravPalette.prismViolet)
+                    .transition(signalTransition)
+
             case .thinking:
                 NotchBars(thinkingWaveStyle)
                     .transition(signalTransition)
 
+            case let .inspecting(event):
+                LanguageIconView(path: event.path, changeKind: nil, size: 14)
+                    .transition(signalTransition)
+
             case let .editing(event):
-                LanguageIconView(path: event.path, changeKind: event.kind, size: 13.5)
+                LanguageIconView(path: event.path, changeKind: event.kind, size: 14)
                     .transition(signalTransition)
 
             case .runningCommand:
@@ -118,9 +133,24 @@ public struct CollapsedNotchView: View {
     private func trailingWing(compact: Bool) -> some View {
         ZStack(alignment: .trailing) {
             switch effectiveState {
+            case .working:
+                workingTrailingSignal(compact: compact)
+                    .id("collapsed-working")
+                    .transition(signalTransition)
+
+            case .compacting:
+                compactingTrailingSignal(compact: compact)
+                    .id("collapsed-compacting")
+                    .transition(signalTransition)
+
             case .thinking:
                 thinkingTrailingSignal(compact: compact)
                     .id("collapsed-thinking")
+                    .transition(signalTransition)
+
+            case let .inspecting(event):
+                inspectingTrailingSignal(for: event, compact: compact)
+                    .id("collapsed-inspect-\(event.id)")
                     .transition(signalTransition)
 
             case let .editing(event):
@@ -142,42 +172,57 @@ public struct CollapsedNotchView: View {
         .animation(reduceMotion ? nil : islandSpring, value: effectiveState)
     }
 
-    private func thinkingTrailingSignal(compact: Bool) -> some View {
-        HStack(spacing: 6) {
-            if !compact {
-                NotchPingPongMarqueeText(
-                    text: cleanThinkingSnippet,
-                    font: .system(size: 11.5, weight: .medium),
-                    color: Color.white.opacity(0.84),
-                    alignment: .trailing,
-                    reduceMotion: reduceMotion
-                )
-            } else {
-                Text("Thinking")
-                    .font(.system(size: 11, weight: .medium))
-                    .tracking(-0.15)
-                    .foregroundStyle(Color.white.opacity(0.86))
-                    .lineLimit(1)
-            }
-
-            ActiveElapsedTimerText(
-                startDate: store.currentThinking?.startedAt ?? Date(),
-                endDate: nil,
-                isActive: true,
-                font: .system(size: 10.5, weight: .medium, design: .monospaced),
-                color: GravPalette.thinking
-            )
-            .fixedSize(horizontal: true, vertical: false)
-        }
+    private func workingTrailingSignal(compact: Bool) -> some View {
+        NotchShimmerText(
+            text: "Working",
+            font: .system(size: compact ? 11 : 11.5, weight: .medium),
+            tracking: -0.15,
+            baseOpacity: 0.44,
+            peakOpacity: 0.96,
+            period: 1.75,
+            reduceMotion: reduceMotion
+        )
     }
 
-    private var cleanThinkingSnippet: String {
-        guard let raw = store.currentThinking?.text else { return "Thinking" }
-        let single = raw
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "`", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return single.isEmpty ? "Thinking" : single
+    private func compactingTrailingSignal(compact: Bool) -> some View {
+        NotchShimmerText(
+            text: "Compacting",
+            font: .system(size: compact ? 11 : 11.5, weight: .medium),
+            tracking: -0.15,
+            baseOpacity: 0.46,
+            peakOpacity: 0.96,
+            period: 1.85,
+            reduceMotion: reduceMotion
+        )
+    }
+
+    private func thinkingTrailingSignal(compact: Bool) -> some View {
+        NotchThinkingShimmerLabel(
+            startDate: store.currentThinking?.startedAt ?? Date(),
+            compact: compact,
+            font: .system(size: compact ? 11 : 11.5, weight: .medium),
+            reduceMotion: reduceMotion
+        )
+    }
+
+    private func inspectingTrailingSignal(for event: FileInspectionEvent, compact: Bool) -> some View {
+        HStack(alignment: .center, spacing: 6) {
+            NotchPingPongMarqueeText(
+                text: compact ? event.basename : "Analyzed \(event.basename)",
+                font: .system(size: 11.5, weight: .medium),
+                color: Color.white.opacity(0.86),
+                alignment: .trailing,
+                reduceMotion: reduceMotion
+            )
+
+            if let range = event.lineRangeLabel {
+                Text(range)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.46))
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
     }
 
     private func editingTrailingSignal(for event: FileChangeEvent) -> some View {
@@ -269,6 +314,23 @@ public struct CollapsedNotchView: View {
         )
     }
 
+    private var workingWaveStyle: NotchBarsStyle {
+        if reduceMotion {
+            return .steady([0.38, 0.78, 0.50], barWidth: 1.5, spacing: 1.7, height: 9, tint: Color.white.opacity(0.72))
+        }
+        return .wave(
+            count: 3,
+            low: 0.24,
+            high: 0.92,
+            barWidth: 1.5,
+            spacing: 1.7,
+            height: 9,
+            period: 0.86,
+            stagger: 0.14,
+            tint: Color.white.opacity(0.72)
+        )
+    }
+
     private var thinkingWaveStyle: NotchBarsStyle {
         if reduceMotion {
             return .steady([0.38, 0.85, 0.55, 0.92], barWidth: 1.6, spacing: 1.7, height: 10, tint: GravPalette.thinking)
@@ -312,8 +374,14 @@ public struct CollapsedNotchView: View {
         switch effectiveState {
         case .idle:
             return "Grav idle"
+        case .working:
+            return "Antigravity working"
+        case .compacting:
+            return "Antigravity compacting context"
         case .thinking:
             return "Antigravity thinking"
+        case let .inspecting(event):
+            return "Analyzing \(event.basename)"
         case let .editing(event):
             return event.kind == .delete
                 ? "Deleting \(event.basename)"
@@ -350,6 +418,7 @@ struct NotchPingPongMarqueeText: View {
 
     var body: some View {
         GeometryReader { geo in
+            let horizontalInset: CGFloat = shouldScroll ? 4 : 0
             ZStack(alignment: shouldScroll ? .leading : alignment) {
                 Text(text)
                     .font(font)
@@ -364,6 +433,7 @@ struct NotchPingPongMarqueeText: View {
                                 .onChange(of: textGeo.size.width) { _, w in textWidth = w }
                         }
                     )
+                    .padding(.horizontal, horizontalInset)
                     .offset(x: shouldScroll ? offsetX : 0)
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: shouldScroll ? .leading : alignment)
@@ -392,7 +462,7 @@ struct NotchPingPongMarqueeText: View {
                 marqueeTask = nil
             }
         }
-        .frame(height: 16)
+        .frame(maxWidth: .infinity, minHeight: 19, maxHeight: 19, alignment: .center)
     }
 
     @ViewBuilder
@@ -401,8 +471,8 @@ struct NotchPingPongMarqueeText: View {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.0),
-                    .init(color: .black, location: 0.06),
-                    .init(color: .black, location: 0.92),
+                    .init(color: .black, location: 0.05),
+                    .init(color: .black, location: 0.93),
                     .init(color: .clear, location: 1.0),
                 ],
                 startPoint: .leading,
@@ -419,18 +489,19 @@ struct NotchPingPongMarqueeText: View {
         offsetX = 0
 
         guard shouldScroll else { return }
-        let travel = overflow + 6.0
-        let duration = max(1.6, min(6.0, Double(travel) / 34.0))
+        // Calm, legible Dynamic Island reading speed (~18 pt/s) with relaxed dwell pauses at both ends
+        let travel = overflow + 8.0
+        let duration = max(3.2, min(11.0, Double(travel) / 18.0))
 
         marqueeTask = Task { @MainActor in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1.15))
+                try? await Task.sleep(for: .seconds(1.85))
                 guard !Task.isCancelled else { break }
 
                 withAnimation(.easeInOut(duration: duration)) {
                     offsetX = -travel
                 }
-                try? await Task.sleep(for: .seconds(duration + 1.15))
+                try? await Task.sleep(for: .seconds(duration + 1.85))
                 guard !Task.isCancelled else { break }
 
                 withAnimation(.easeInOut(duration: duration)) {

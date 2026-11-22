@@ -6,8 +6,10 @@ public struct EventClassificationOutput: Sendable, Equatable {
     public var activeModel: String?
     public var tokenMetrics: TokenMetrics
     public var thinkingSnapshot: ThinkingSnapshot?
+    public var compactionEvent: CompactionEvent?
     public var responseSnapshot: AssistantResponseSnapshot?
     public var completedThinkingStepIndex: Int?
+    public var fileInspections: [FileInspectionEvent]
     public var fileChanges: [FileChangeEvent]
     public var truncatedFileChangeStepIndices: [Int]
     public var startedCommands: [CommandExecutionEvent]
@@ -19,8 +21,10 @@ public struct EventClassificationOutput: Sendable, Equatable {
         activeModel: String? = nil,
         tokenMetrics: TokenMetrics = TokenMetrics(),
         thinkingSnapshot: ThinkingSnapshot? = nil,
+        compactionEvent: CompactionEvent? = nil,
         responseSnapshot: AssistantResponseSnapshot? = nil,
         completedThinkingStepIndex: Int? = nil,
+        fileInspections: [FileInspectionEvent] = [],
         fileChanges: [FileChangeEvent] = [],
         truncatedFileChangeStepIndices: [Int] = [],
         startedCommands: [CommandExecutionEvent] = [],
@@ -31,8 +35,10 @@ public struct EventClassificationOutput: Sendable, Equatable {
         self.activeModel = activeModel
         self.tokenMetrics = tokenMetrics
         self.thinkingSnapshot = thinkingSnapshot
+        self.compactionEvent = compactionEvent
         self.responseSnapshot = responseSnapshot
         self.completedThinkingStepIndex = completedThinkingStepIndex
+        self.fileInspections = fileInspections
         self.fileChanges = fileChanges
         self.truncatedFileChangeStepIndices = truncatedFileChangeStepIndices
         self.startedCommands = startedCommands
@@ -57,6 +63,7 @@ public struct EventClassifier: Sendable {
     internal var hasPeekedMultiFileBurst: Bool = false
     internal var lastBackgroundNoticeStepIndex: Int?
     internal var lastUserPromptPreview: String?
+    internal var isTurnActive: Bool = false
 
     public init() {}
 
@@ -73,6 +80,7 @@ public struct EventClassifier: Sendable {
         hasPeekedMultiFileBurst = false
         lastBackgroundNoticeStepIndex = nil
         lastUserPromptPreview = nil
+        isTurnActive = false
     }
 
     /// Marks the telemetry state as `.idle` (for example after an idle decay timeout) and clears
@@ -83,6 +91,7 @@ public struct EventClassifier: Sendable {
             activeThinkingStepIndex = nil
             burstEditedPaths.removeAll()
             hasPeekedMultiFileBurst = false
+            isTurnActive = false
         }
     }
 
@@ -116,6 +125,7 @@ public struct EventClassifier: Sendable {
         burstEditedPaths.removeAll()
         hasPeekedMultiFileBurst = false
         lastBackgroundNoticeStepIndex = nil
+        isTurnActive = false
         return settled
     }
 
@@ -150,14 +160,32 @@ public struct EventClassifier: Sendable {
             tokenMetrics: tokenMetrics
         )
 
-        // 2. Classify thinking stream updates
+        // 2. Classify thinking stream, user prompt, and context compaction updates
         let trimmedThinking = step.thinking?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let toolCalls = step.toolCalls ?? []
         let isFinalPlannerResponse = step.type == "PLANNER_RESPONSE"
             && toolCalls.isEmpty
             && step.status == "DONE"
 
+        let upperType = step.type?.uppercased() ?? ""
+        let isCompactionStep = upperType == "CHECKPOINT"
+            || upperType.contains("COMPACT")
+            || (step.source == "SYSTEM" && (step.content?.localizedCaseInsensitiveContains("compaction") == true))
+
+        if isCompactionStep {
+            isTurnActive = true
+            let isDone = step.status == "DONE"
+            let event = CompactionEvent(
+                stepIndex: step.stepIndex,
+                startedAt: stepDate,
+                completedAt: isDone ? stepDate : nil,
+                isActive: !isDone
+            )
+            output.compactionEvent = event
+        }
+
         if !trimmedThinking.isEmpty {
+            isTurnActive = !isFinalPlannerResponse
             let isTruncated = step.isFieldTruncated("thinking")
             let isThinkingStillActive = !isFinalPlannerResponse
             let snapshot = ThinkingSnapshot(
@@ -199,6 +227,7 @@ public struct EventClassifier: Sendable {
                 let orphaned = forceIdle(at: stepDate)
                 output.updatedCommands.append(contentsOf: orphaned)
             }
+            isTurnActive = true
         }
 
         // 2b. Capture real-time AI Assistant responses (`PLANNER_RESPONSE` with visible content)
@@ -271,19 +300,37 @@ public struct EventClassifier: Sendable {
                 activeThinkingStepIndex = nil
             }
             state = .idle
+            isTurnActive = false
             burstEditedPaths.removeAll()
             hasPeekedMultiFileBurst = false
+        } else if let compaction = output.compactionEvent {
+            state = .compacting(compaction)
         } else if let activeCmd = pendingCommands.last {
             state = .runningCommand(activeCmd)
         } else if let latestFile = output.fileChanges.last {
             state = .editing(latestFile)
+        } else if let latestInspection = output.fileInspections.last {
+            state = .inspecting(latestInspection)
         } else if !trimmedThinking.isEmpty && !isFinalPlannerResponse {
             state = .thinking
         } else if !toolCalls.isEmpty {
             state = .thinking
+        } else if step.type == "USER_INPUT" {
+            state = .working(startedAt: stepDate)
         } else if commandJustFinished {
-            // Command completed; return to `.thinking` if thinking is still active, otherwise `.idle`
-            state = activeThinkingStepIndex != nil ? .thinking : .idle
+            // Command completed; return to `.thinking`/`.working` if the turn is still active, otherwise `.idle`
+            if activeThinkingStepIndex != nil {
+                state = .thinking
+            } else if isTurnActive {
+                state = .working(startedAt: stepDate)
+            } else {
+                state = .idle
+            }
+        } else if isTurnActive && step.type == "GENERIC" && step.status != "RUNNING" {
+            // A tool call just returned its result; Antigravity is now Working on the next model turn
+            state = .working(startedAt: stepDate)
+        } else if step.type == "PLANNER_RESPONSE" && step.status == "RUNNING" {
+            state = .working(startedAt: stepDate)
         }
 
         output.state = state
@@ -305,6 +352,20 @@ public struct EventClassifier: Sendable {
 
         for (index, call) in toolCalls.enumerated() {
             switch call.name {
+            case "read_file", "view_file", "view_file_outline", "view_code_item":
+                if let path = call.stringArg("Path", "AbsolutePath", "File", "TargetFile"), !path.isEmpty {
+                    let event = FileInspectionEvent(
+                        id: "\(step.stepIndex)-\(index)-\(path)",
+                        stepIndex: step.stepIndex,
+                        path: path,
+                        startLine: call.intArg("StartLine"),
+                        endLine: call.intArg("EndLine"),
+                        timestamp: stepDate,
+                        toolName: call.name
+                    )
+                    output.fileInspections.append(event)
+                }
+
             case "edit_file", "replace_file_content":
                 if let event = classifySingleEdit(call: call, stepIndex: step.stepIndex, callIndex: index, date: stepDate) {
                     output.fileChanges.append(event)

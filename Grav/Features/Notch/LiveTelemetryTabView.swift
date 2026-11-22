@@ -93,10 +93,19 @@ public struct LiveTelemetryTabView: View {
                             isPulsing: snapshot.isActive && !store.isPaused
                         )
 
-                        Text(snapshot.isActive ? "Thinking" : "Thought")
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .tracking(-0.15)
-                            .foregroundStyle(snapshot.isActive ? Color.white.opacity(0.94) : Color.white.opacity(0.70))
+                        if snapshot.isActive && !store.isPaused {
+                            NotchThinkingShimmerLabel(
+                                startDate: snapshot.startedAt,
+                                compact: false,
+                                font: .system(size: 11.5, weight: .semibold),
+                                reduceMotion: reduceMotion
+                            )
+                        } else {
+                            Text("Thought")
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .tracking(-0.15)
+                                .foregroundStyle(Color.white.opacity(0.70))
+                        }
 
                         if let modelLabel, !modelLabel.isEmpty {
                             Text(modelLabel)
@@ -330,6 +339,27 @@ public struct LiveTelemetryTabView: View {
     private var activityFeedSection: some View {
         ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: 1.5) {
+                if !store.isPaused {
+                    switch store.state {
+                    case let .working(startedAt):
+                        liveInlineStatusRow(
+                            symbol: "ellipsis",
+                            symbolColor: Color.white.opacity(0.56),
+                            label: "Working",
+                            startedAt: startedAt
+                        )
+                    case let .compacting(event) where !store.recentActivity.contains(where: { $0.id == event.id }):
+                        liveInlineStatusRow(
+                            symbol: "rectangle.compress.vertical",
+                            symbolColor: GravPalette.prismViolet,
+                            label: "Compacting",
+                            startedAt: event.startedAt
+                        )
+                    default:
+                        EmptyView()
+                    }
+                }
+
                 ForEach(store.recentActivity) { item in
                     activityRow(for: item)
                         .transition(
@@ -405,6 +435,8 @@ public struct LiveTelemetryTabView: View {
         switch item {
         case let .fileChange(event):
             LanguageIconView(path: event.path, changeKind: event.kind, size: 14.5)
+        case let .fileInspection(event):
+            LanguageIconView(path: event.path, changeKind: nil, size: 14.5)
         default:
             let spec = activityGlyphSpec(for: item)
             Image(systemName: spec.symbol)
@@ -414,10 +446,50 @@ public struct LiveTelemetryTabView: View {
         }
     }
 
+    private func liveInlineStatusRow(
+        symbol: String,
+        symbolColor: Color,
+        label: String,
+        startedAt: Date
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(symbolColor)
+                .frame(width: 14.5, alignment: .center)
+
+            NotchShimmerText(
+                text: label,
+                font: .system(size: 11.5, weight: .medium),
+                tracking: -0.15,
+                baseOpacity: 0.44,
+                peakOpacity: 0.96,
+                period: 1.75,
+                reduceMotion: reduceMotion
+            )
+
+            Spacer(minLength: 8)
+
+            ActiveElapsedTimerText(
+                startDate: startedAt,
+                endDate: nil,
+                isActive: true,
+                font: .system(size: 10.5, weight: .medium, design: .monospaced),
+                color: Color.white.opacity(0.36)
+            )
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5.5)
+    }
+
     private func activityGlyphSpec(for item: TelemetryActivityItem) -> (symbol: String, color: Color) {
         switch item {
         case .thinking:
             return ("waveform.path.ecg", GravPalette.thinking)
+        case .compaction:
+            return ("rectangle.compress.vertical", GravPalette.prismViolet)
+        case .fileInspection:
+            return ("doc.text.magnifyingglass", GravPalette.glacialCyan)
         case let .fileChange(event):
             switch event.kind {
             case .create: return ("plus", GravPalette.emerald)
@@ -446,6 +518,46 @@ public struct LiveTelemetryTabView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
+        case let .compaction(event):
+            if event.isActive && !store.isPaused {
+                NotchShimmerText(
+                    text: "Compacting",
+                    font: .system(size: 11.5, weight: .medium),
+                    tracking: -0.15,
+                    baseOpacity: 0.46,
+                    peakOpacity: 0.96,
+                    period: 1.85,
+                    reduceMotion: reduceMotion
+                )
+            } else {
+                Text("Compacted context")
+                    .font(.system(size: 11.5, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.60))
+                    .lineLimit(1)
+            }
+
+        case let .fileInspection(event):
+            HStack(spacing: 5.5) {
+                Text("Analyzed")
+                    .font(.system(size: 11.5, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.46))
+                    .fixedSize(horizontal: true, vertical: false)
+
+                Text(event.basename)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .tracking(-0.15)
+                    .foregroundStyle(Color.white.opacity(0.88))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .layoutPriority(1)
+
+                Text(NotchTelemetryHelpers.compactParentPath(for: event.path))
+                    .font(.system(size: 10.5, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.32))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
         case let .fileChange(event):
             HStack(spacing: 6) {
                 Text(event.basename)
@@ -454,12 +566,13 @@ public struct LiveTelemetryTabView: View {
                     .foregroundStyle(Color.white.opacity(0.92))
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .layoutPriority(1)
 
                 Text(NotchTelemetryHelpers.compactParentPath(for: event.path))
                     .font(.system(size: 10.5, weight: .regular))
                     .foregroundStyle(Color.white.opacity(0.34))
                     .lineLimit(1)
-                    .truncationMode(.head)
+                    .truncationMode(.middle)
             }
 
         case let .command(command):
@@ -483,6 +596,29 @@ public struct LiveTelemetryTabView: View {
                 font: .system(size: 10.5, weight: .medium, design: .monospaced),
                 color: Color.white.opacity(0.40)
             )
+
+        case let .compaction(event):
+            if event.isActive && !store.isPaused {
+                ActiveElapsedTimerText(
+                    startDate: event.startedAt,
+                    endDate: event.completedAt,
+                    isActive: true,
+                    font: .system(size: 10.5, weight: .medium, design: .monospaced),
+                    color: GravPalette.prismViolet.opacity(0.84)
+                )
+            } else {
+                Text("checkpoint")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.32))
+            }
+
+        case let .fileInspection(event):
+            if let range = event.lineRangeLabel {
+                Text(range)
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.46))
+            }
 
         case let .fileChange(event):
             NotchProportionalDiffMicroBar(
@@ -520,6 +656,10 @@ public struct LiveTelemetryTabView: View {
             if !isThinkingExpanded {
                 toggleThinking()
             }
+        case .compaction:
+            break
+        case let .fileInspection(event):
+            store.openInAntigravity(path: event.path)
         case let .fileChange(event):
             onInspectFile(event)
         case let .command(command):

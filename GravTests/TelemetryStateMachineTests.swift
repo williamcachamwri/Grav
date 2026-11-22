@@ -309,4 +309,98 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(out2.fileChanges.first?.addedLines, 32)
         XCTAssertEqual(out2.fileChanges.first?.removedLines, 32)
     }
+
+    func testFileInspectionCompactionAndWorkingTransitions() {
+        var classifier = EventClassifier()
+
+        // 1. User prompt immediately transitions to .working
+        let userStep = TranscriptStep(
+            stepIndex: 1,
+            source: "USER_EXPLICIT",
+            type: "USER_INPUT",
+            status: "DONE",
+            createdAt: "2026-11-23T02:45:00Z",
+            content: "<USER_REQUEST>\nAnalyze GravOnboardingMockScenes.swift\n</USER_REQUEST>"
+        )
+        let userOut = classifier.process(step: userStep)
+        if case .working = userOut.state {
+            // expected
+        } else {
+            XCTFail("Expected .working after USER_INPUT, got \(userOut.state)")
+        }
+
+        // 2. Context compaction CHECKPOINT transitions to .compacting
+        let compactStep = TranscriptStep(
+            stepIndex: 2,
+            source: "SYSTEM",
+            type: "CHECKPOINT",
+            status: "RUNNING",
+            createdAt: "2026-11-23T02:45:02Z",
+            content: "# Resuming from a compaction"
+        )
+        let compactOut = classifier.process(step: compactStep)
+        if case let .compacting(event) = compactOut.state {
+            XCTAssertEqual(event.stepIndex, 2)
+            XCTAssertTrue(event.isActive)
+        } else {
+            XCTFail("Expected .compacting after CHECKPOINT, got \(compactOut.state)")
+        }
+
+        // 3. read_file with StartLine/EndLine transitions to .inspecting with #L480-810
+        let inspectStep = TranscriptStep(
+            stepIndex: 3,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T02:45:05Z",
+            thinking: "Reading mock scenes...",
+            toolCalls: [
+                ToolCall(
+                    name: "read_file",
+                    args: [
+                        "Path": .string("/Users/wica/Grav/Grav/Features/Onboarding/GravOnboardingMockScenes.swift"),
+                        "StartLine": .number(480),
+                        "EndLine": .number(810),
+                    ]
+                ),
+            ]
+        )
+        let inspectOut = classifier.process(step: inspectStep)
+        XCTAssertEqual(inspectOut.fileInspections.count, 1)
+        XCTAssertEqual(inspectOut.fileInspections[0].basename, "GravOnboardingMockScenes.swift")
+        XCTAssertEqual(inspectOut.fileInspections[0].lineRangeLabel, "#L480-810")
+        if case let .inspecting(event) = inspectOut.state {
+            XCTAssertEqual(event.lineRangeLabel, "#L480-810")
+        } else {
+            XCTFail("Expected .inspecting after read_file, got \(inspectOut.state)")
+        }
+
+        // 4. Tool returns GENERIC DONE -> model is back to .working
+        let toolDone = TranscriptStep(
+            stepIndex: 4,
+            source: "MODEL",
+            type: "GENERIC",
+            status: "DONE",
+            createdAt: "2026-11-23T02:45:06Z",
+            content: "Showing lines 480-810"
+        )
+        let workingOut = classifier.process(step: toolDone)
+        if case .working = workingOut.state {
+            // expected
+        } else {
+            XCTFail("Expected .working after mid-turn GENERIC tool completion, got \(workingOut.state)")
+        }
+
+        // 5. Final PLANNER_RESPONSE settles cleanly to .idle
+        let doneReply = TranscriptStep(
+            stepIndex: 5,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T02:45:10Z",
+            content: "Done analyzing."
+        )
+        let doneOut = classifier.process(step: doneReply)
+        XCTAssertEqual(doneOut.state, .idle)
+    }
 }

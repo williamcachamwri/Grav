@@ -81,7 +81,11 @@ struct NotchHUDSettingsPane: View {
         switch store.state {
         case .idle:
             return store.connectionStatus.isBrainAccessible ? .green : .orange
-        case .thinking:
+        case .working:
+            return .primary
+        case .compacting:
+            return .purple
+        case .thinking, .inspecting:
             return .cyan
         case .editing:
             return .orange
