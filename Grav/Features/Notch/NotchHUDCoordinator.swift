@@ -309,6 +309,7 @@ public final class NotchHUDCoordinator {
             collapsedTopCornerRadius: 6,
             expandedTopCornerRadius: 22,
             expandedBottomCornerRadius: 22,
+            expandedContentInsetsOverride: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0),
             expandedTopReserve: .cutoutOnly,
             expandsOnHover: hoverToExpand,
             hoverOpenDelay: 0.15,

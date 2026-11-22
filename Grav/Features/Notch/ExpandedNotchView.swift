@@ -39,10 +39,10 @@ public struct ExpandedNotchView: View {
                 TurboKineticAuraCanvas(
                     style: .expanded,
                     isPowerSurging: store.state.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil,
+                    cornerRadius: 22,
                     reduceMotion: reduceMotion
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
                 .transition(.opacity)
             }
 
@@ -70,6 +70,7 @@ public struct ExpandedNotchView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             }
+            .padding(EdgeInsets(top: 8, leading: 30, bottom: 16, trailing: 30))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             if let message = statusBannerMessage {

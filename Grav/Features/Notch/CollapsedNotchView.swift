@@ -39,10 +39,14 @@ public struct CollapsedNotchView: View {
                 TurboKineticAuraCanvas(
                     style: .collapsed,
                     isPowerSurging: isPowerSurging,
+                    cornerRadius: pillHeight * 0.5,
                     reduceMotion: reduceMotion
                 )
+                .frame(
+                    width: hasPhysicalNotch ? nil : presenter.collapsedSurfaceWidth,
+                    height: pillHeight
+                )
                 .frame(maxWidth: .infinity, maxHeight: pillHeight)
-                .clipped()
                 .transition(.opacity)
             }
 
@@ -179,22 +183,10 @@ public struct CollapsedNotchView: View {
 
             case .idle:
                 if !compact {
-                    HStack(spacing: 4.5) {
-                        Text("Grav")
-                            .font(.system(size: 11.5, weight: .medium))
-                            .tracking(-0.2)
-                            .foregroundStyle(Color.white.opacity(0.78))
-                        if isTurbo {
-                            Image(systemName: "bolt.fill")
-                                .font(.system(size: 8.5, weight: .semibold))
-                                .foregroundStyle(GravPalette.turboEmber)
-                        }
-                    }
-                    .transition(.opacity)
-                } else if isTurbo {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 8.5, weight: .semibold))
-                        .foregroundStyle(GravPalette.turboEmber)
+                    Text("Grav")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .tracking(-0.2)
+                        .foregroundStyle(isTurbo ? Color(red: 1.0, green: 0.96, blue: 0.78) : Color.white.opacity(0.78))
                         .transition(.opacity)
                 }
             }
