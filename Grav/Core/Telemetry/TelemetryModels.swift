@@ -301,9 +301,9 @@ public struct FileChangeEvent: Sendable, Equatable, Identifiable {
     public let path: String
     public let basename: String
     public let kind: FileChangeKind
-    public let addedLines: Int
-    public let removedLines: Int
-    public let diffHunks: [FileDiffHunk]
+    public var addedLines: Int
+    public var removedLines: Int
+    public var diffHunks: [FileDiffHunk]
     public let timestamp: Date
     public let toolName: String
 

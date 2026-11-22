@@ -50,6 +50,7 @@ public final class AntigravityTelemetryStore {
 
     private var userPinnedSessionID: String?
     private var isHydratingActiveSession: Bool = false
+    private var hydratedTruncatedFileSteps: Set<Int> = []
     private var idleDecayTask: Task<Void, Never>?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var sessionGeneration: UInt64 = 0
@@ -374,6 +375,7 @@ public final class AntigravityTelemetryStore {
 
         // Reset session-scoped observable state
         activeSession = session
+        hydratedTruncatedFileSteps.removeAll()
         classifier.reset()
         state = .idle
         currentThinking = nil
@@ -531,6 +533,12 @@ public final class AntigravityTelemetryStore {
             }
         }
 
+        if !output.truncatedFileChangeStepIndices.isEmpty {
+            for stepIdx in output.truncatedFileChangeStepIndices {
+                hydrateTruncatedFileChangesIfNeeded(stepIndex: stepIdx, isHistoricalReplay: suppressPeeks)
+            }
+        }
+
         for started in output.startedCommands {
             upsertCommand(started)
             if !suppressPeeks || isRecentlyStarted(started) {
@@ -627,6 +635,55 @@ public final class AntigravityTelemetryStore {
             state = .runningCommand(updated)
             // Reset command liveness timer whenever fresh stdout/stderr arrives
             scheduleIdleDecayIfNeeded()
+        }
+    }
+
+    private func hydrateTruncatedFileChangesIfNeeded(stepIndex: Int, isHistoricalReplay: Bool) {
+        guard !hydratedTruncatedFileSteps.contains(stepIndex) else { return }
+        guard let session = activeSession else { return }
+        // During large historical replay, hydrate only recent truncated steps so startup stays instantaneous
+        if isHistoricalReplay && hydratedTruncatedFileSteps.count >= 20 {
+            return
+        }
+        hydratedTruncatedFileSteps.insert(stepIndex)
+
+        let generation = sessionGeneration
+        let fullURL = session.fullTranscriptURL
+        let tailer = activeTailer
+
+        Task { [weak self] in
+            let fullStep: TranscriptStep?
+            if let tailer {
+                fullStep = await tailer.readFullStep(stepIndex: stepIndex, from: fullURL)
+            } else {
+                fullStep = await Task.detached(priority: .utility) {
+                    TranscriptTailer.readFullStep(stepIndex: stepIndex, from: fullURL)
+                }.value
+            }
+
+            guard let fullStep else { return }
+            let fullChanges = EventClassifier.extractFileChanges(from: fullStep)
+            guard !fullChanges.isEmpty else { return }
+
+            await MainActor.run { [weak self] in
+                guard let self, self.sessionGeneration == generation else { return }
+                for fullChange in fullChanges {
+                    if let idx = self.fileChanges.firstIndex(where: { $0.id == fullChange.id }) {
+                        var merged = self.fileChanges[idx]
+                        merged.diffHunks = fullChange.diffHunks
+                        // Keep authoritative GENERIC counts if larger, otherwise use full untruncated counts
+                        if fullChange.kind == .create || fullChange.kind == .overwrite
+                            || (merged.addedLines <= 2 && merged.removedLines <= 2
+                                && (fullChange.addedLines > merged.addedLines || fullChange.removedLines > merged.removedLines))
+                        {
+                            merged.addedLines = fullChange.addedLines
+                            merged.removedLines = fullChange.removedLines
+                        }
+                        self.fileChanges[idx] = merged
+                        self.upsertActivity(.fileChange(merged))
+                    }
+                }
+            }
         }
     }
 

@@ -9,6 +9,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
     public var responseSnapshot: AssistantResponseSnapshot?
     public var completedThinkingStepIndex: Int?
     public var fileChanges: [FileChangeEvent]
+    public var truncatedFileChangeStepIndices: [Int]
     public var startedCommands: [CommandExecutionEvent]
     public var updatedCommands: [CommandExecutionEvent]
     public var peekEvents: [NotchPeekEvent]
@@ -21,6 +22,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
         responseSnapshot: AssistantResponseSnapshot? = nil,
         completedThinkingStepIndex: Int? = nil,
         fileChanges: [FileChangeEvent] = [],
+        truncatedFileChangeStepIndices: [Int] = [],
         startedCommands: [CommandExecutionEvent] = [],
         updatedCommands: [CommandExecutionEvent] = [],
         peekEvents: [NotchPeekEvent] = []
@@ -32,6 +34,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
         self.responseSnapshot = responseSnapshot
         self.completedThinkingStepIndex = completedThinkingStepIndex
         self.fileChanges = fileChanges
+        self.truncatedFileChangeStepIndices = truncatedFileChangeStepIndices
         self.startedCommands = startedCommands
         self.updatedCommands = updatedCommands
         self.peekEvents = peekEvents
@@ -47,6 +50,7 @@ public struct EventClassifier: Sendable {
     public private(set) var tokenMetrics = TokenMetrics()
     public private(set) var activeThinkingStepIndex: Int?
     public private(set) var pendingCommands: [CommandExecutionEvent] = []
+    internal var pendingFileChanges: [FileChangeEvent] = []
 
     internal var processedTokenStepIndices: Set<Int> = []
     internal var burstEditedPaths: Set<String> = []
@@ -63,6 +67,7 @@ public struct EventClassifier: Sendable {
         tokenMetrics = TokenMetrics()
         activeThinkingStepIndex = nil
         pendingCommands.removeAll()
+        pendingFileChanges.removeAll()
         processedTokenStepIndices.removeAll()
         burstEditedPaths.removeAll()
         hasPeekedMultiFileBurst = false
@@ -216,6 +221,7 @@ public struct EventClassifier: Sendable {
 
         // 3. Classify tool calls (file edits, creates, overwrites, deletes, and shell commands)
         if !toolCalls.isEmpty {
+            pendingFileChanges.removeAll()
             classifyToolCalls(
                 toolCalls,
                 step: step,
@@ -223,9 +229,19 @@ public struct EventClassifier: Sendable {
                 session: session,
                 into: &output
             )
+            if !output.fileChanges.isEmpty {
+                pendingFileChanges = output.fileChanges
+                if step.isFieldTruncated("tool_calls") {
+                    output.truncatedFileChangeStepIndices.append(step.stepIndex)
+                }
+            }
         }
 
-        // 4. Correlate subsequent tool-result steps (`GENERIC` / `SYSTEM_MESSAGE`) with pending commands
+        // 4. Correlate subsequent tool-result steps (`GENERIC` / `SYSTEM_MESSAGE`) with pending file edits & commands
+        if !pendingFileChanges.isEmpty, toolCalls.isEmpty, step.type == "GENERIC" {
+            correlateFileEditResult(step: step, into: &output)
+        }
+
         var commandJustFinished = false
         if !pendingCommands.isEmpty, toolCalls.isEmpty, step.type != "USER_INPUT" {
             commandJustFinished = correlateCommandResult(
@@ -498,6 +514,69 @@ public struct EventClassifier: Sendable {
         )
         pendingCommands.append(event)
         output.startedCommands.append(event)
+    }
+
+    /// Recomputes full untruncated `FileChangeEvent`s for a `PLANNER_RESPONSE` step loaded from
+    /// `transcript_full.jsonl` when `transcript.jsonl` had `truncated_fields: ["tool_calls"]`.
+    public static func extractFileChanges(from fullStep: TranscriptStep) -> [FileChangeEvent] {
+        guard let toolCalls = fullStep.toolCalls, !toolCalls.isEmpty else { return [] }
+        var temp = EventClassifier()
+        var output = EventClassificationOutput()
+        temp.classifyToolCalls(
+            toolCalls,
+            step: fullStep,
+            stepDate: fullStep.parsedDate,
+            session: nil,
+            into: &output
+        )
+        return output.fileChanges
+    }
+
+    // MARK: - File Edit Result Correlation (Authoritative Antigravity `+N/-M` Counts)
+
+    /// Correlates Antigravity's `GENERIC` edit_file result summary
+    /// (e.g. `Made 1 replacement in /path/File.swift starting at line 1043 (+29/-29 lines).`)
+    /// back onto the matching pending `FileChangeEvent` so line diff metrics match Antigravity 1:1
+    /// even when compact `transcript.jsonl` truncated `tool_calls`.
+    private mutating func correlateFileEditResult(
+        step: TranscriptStep,
+        into output: inout EventClassificationOutput
+    ) {
+        guard let content = step.content, !content.isEmpty else { return }
+        guard let parsed = Self.extractFileEditDiffSummary(from: content) else { return }
+
+        let matchIndex = pendingFileChanges.firstIndex { event in
+            event.path == parsed.path || URL(fileURLWithPath: event.path).lastPathComponent == URL(fileURLWithPath: parsed.path).lastPathComponent
+        }
+        guard let idx = matchIndex else { return }
+
+        var matched = pendingFileChanges.remove(at: idx)
+        matched.addedLines = parsed.added
+        matched.removedLines = parsed.removed
+        output.fileChanges.append(matched)
+    }
+
+    /// Extracts `(path, added, removed)` from Antigravity's authoritative `edit_file` result message:
+    /// `Made N replacement(s) in <path> starting at line <L> (+<A>/-<R> lines).`
+    public static func extractFileEditDiffSummary(from content: String) -> (path: String, added: Int, removed: Int)? {
+        let pattern = #"Made\s+\d+\s+replacements?\s+in\s+(.+?)\s+starting\s+at\s+line\s+\d+\s+\(\+(\d+)/-(\d+)\s+lines?\)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            return nil
+        }
+        let ns = content as NSString
+        let range = NSRange(location: 0, length: ns.length)
+        guard let match = regex.firstMatch(in: content, options: [], range: range),
+              match.numberOfRanges >= 4
+        else {
+            return nil
+        }
+        let path = ns.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let added = Int(ns.substring(with: match.range(at: 2))),
+              let removed = Int(ns.substring(with: match.range(at: 3)))
+        else {
+            return nil
+        }
+        return (path, added, removed)
     }
 
     // MARK: - Command Result Correlation

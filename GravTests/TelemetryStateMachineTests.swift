@@ -246,4 +246,67 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(finalOut.responseSnapshot?.text, "All done!")
         XCTAssertEqual(finalOut.responseSnapshot?.isStreaming, false)
     }
+
+    func testCorrelateAuthoritativeEditFileDiffCountsOnTruncatedToolCalls() {
+        var classifier = EventClassifier()
+
+        // Truncated `edit_file` calls in compact `transcript.jsonl` (only first 2 lines survived)
+        let plannerStep = TranscriptStep(
+            stepIndex: 691,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T02:24:11+07:00",
+            toolCalls: [
+                ToolCall(
+                    name: "edit_file",
+                    args: [
+                        "Path": .string("/Users/wica/Grav/Grav/Features/Onboarding/OnboardingWindowController.swift"),
+                        "Target": .string("line1\nline2"),
+                        "Replacement": .string("new1\nnew2"),
+                    ]
+                ),
+                ToolCall(
+                    name: "edit_file",
+                    args: [
+                        "Path": .string("/Users/wica/Grav/Grav/Features/Onboarding/OnboardingWindowController.swift"),
+                        "Target": .string("old1\nold2"),
+                        "Replacement": .string("rep1\nrep2"),
+                    ]
+                ),
+            ],
+            truncatedFields: ["tool_calls"]
+        )
+
+        let callOut = classifier.process(step: plannerStep)
+        XCTAssertEqual(callOut.fileChanges.count, 2)
+        XCTAssertEqual(callOut.truncatedFileChangeStepIndices, [691])
+
+        // First GENERIC edit result: +2/-2
+        let gen1 = TranscriptStep(
+            stepIndex: 693,
+            source: "MODEL",
+            type: "GENERIC",
+            status: "DONE",
+            createdAt: "2026-11-23T02:24:23+07:00",
+            content: "Created At: 2026-11-23T02:24:12+07:00\nCompleted At: 2026-11-23T02:24:23+07:00\nMade 1 replacement in /Users/wica/Grav/Grav/Features/Onboarding/OnboardingWindowController.swift starting at line 554 (+2/-2 lines)."
+        )
+        let out1 = classifier.process(step: gen1)
+        XCTAssertEqual(out1.fileChanges.first?.addedLines, 2)
+        XCTAssertEqual(out1.fileChanges.first?.removedLines, 2)
+
+        // Second GENERIC edit result on same file: +32/-32 (replaces truncated +2/-2!)
+        let gen2 = TranscriptStep(
+            stepIndex: 694,
+            source: "MODEL",
+            type: "GENERIC",
+            status: "DONE",
+            createdAt: "2026-11-23T02:24:24+07:00",
+            content: "Created At: 2026-11-23T02:24:20+07:00\nCompleted At: 2026-11-23T02:24:24+07:00\nMade 1 replacement in /Users/wica/Grav/Grav/Features/Onboarding/OnboardingWindowController.swift starting at line 697 (+32/-32 lines)."
+        )
+        let out2 = classifier.process(step: gen2)
+        XCTAssertEqual(out2.fileChanges.first?.id, callOut.fileChanges[1].id)
+        XCTAssertEqual(out2.fileChanges.first?.addedLines, 32)
+        XCTAssertEqual(out2.fileChanges.first?.removedLines, 32)
+    }
 }
