@@ -52,206 +52,200 @@ struct GravMockConnectScene: View {
 
     private var connectWindow: some View {
         VStack(spacing: 0) {
-            // Window Titlebar
+            // Ultra-clean macOS Instrument Titlebar
             HStack(spacing: 10) {
-                GravMockTrafficLights(size: 9.5, spacing: 6)
+                GravMockTrafficLights(size: 8.5, spacing: 5.5)
 
                 Spacer(minLength: 0)
 
                 HStack(spacing: 6) {
-                    GravOrbitalMark(size: 12, tint: GravMockPalette.gravTeal)
-                    Text("Antigravity Telemetry Bridge")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(GravMockPalette.ink)
+                    NotchSemanticDot(
+                        color: isFullyConnected ? GravPalette.emerald : GravPalette.fileEdit,
+                        size: 5,
+                        isPulsing: isFullyConnected && !GravMotionPreferences.shared.reduceMotion
+                    )
+                    Text(isFullyConnected ? "LOCAL BRIDGE ACTIVE" : "AWAITING BRIDGE")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .tracking(0.8)
+                        .foregroundStyle(Color.white.opacity(0.62))
                 }
 
                 Spacer(minLength: 0)
 
-                // Live connection badge
-                HStack(spacing: 4.5) {
-                    Circle()
-                        .fill(isFullyConnected ? GravMockPalette.gravEmerald : GravMockPalette.gravAmber)
-                        .frame(width: 6, height: 6)
-
-                    Text(isFullyConnected ? "Connected" : "Checking")
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(GravMockPalette.inkSecondary)
-                }
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 36)
-            .background(GravMockPalette.chromeBar)
-
-            Rectangle()
-                .fill(GravMockPalette.chromeRule)
-                .frame(height: 0.5)
-
-            // Diagnostic rows
-            VStack(spacing: 10) {
-                // Row 1: Antigravity App Detection
-                diagnosticCard {
-                    HStack(spacing: 11) {
-                        AntigravityLogoView(icon: store.antigravityIcon, size: 26)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Antigravity Application")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(GravMockPalette.ink)
-
-                            Text(status.appURL.path)
-                                .font(.system(size: 9.5, design: .monospaced))
-                                .foregroundStyle(GravMockPalette.inkTertiary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-
-                        Spacer(minLength: 8)
-
-                        statusPill(
-                            label: status.isAppRunning ? "Running" : (status.isAppInstalled ? "Installed" : "Not Found"),
-                            isPositive: status.isAppInstalled
-                        )
-                    }
-                }
-
-                // Row 2: Brain Directory Access
-                diagnosticCard {
-                    HStack(spacing: 11) {
-                        Image(systemName: status.isBrainAccessible ? "folder" : "lock.shield")
-                            .font(.system(size: 13.5, weight: .medium))
-                            .foregroundStyle(status.isBrainAccessible ? GravMockPalette.gravTeal : GravMockPalette.gravAmber)
-                            .frame(width: 26, height: 26)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Local Telemetry Directory")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(GravMockPalette.ink)
-
-                            Text("~/.gemini/antigravity/brain/")
-                                .font(.system(size: 9.5, design: .monospaced))
-                                .foregroundStyle(GravMockPalette.inkTertiary)
-                                .lineLimit(1)
-                        }
-
-                        Spacer(minLength: 8)
-
-                        statusPill(
-                            label: status.isBrainAccessible ? "Readable" : "Needs Access",
-                            isPositive: status.isBrainAccessible
-                        )
-                    }
-                }
-
-                // Row 3: Live Discovered Conversations
-                diagnosticCard {
-                    HStack(spacing: 11) {
-                        Image(systemName: "waveform.path.ecg")
-                            .font(.system(size: 13.5, weight: .medium))
-                            .foregroundStyle(GravMockPalette.gravTeal)
-                            .frame(width: 26, height: 26)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Discovered Conversations")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(GravMockPalette.ink)
-
-                            Text(
-                                store.activeSession?.title
-                                    ?? (status.activeConversationCount > 0
-                                        ? "Kernel kqueue watcher active"
-                                        : "Start a chat in Antigravity to stream live")
-                            )
-                            .font(.system(size: 9.5))
-                            .foregroundStyle(GravMockPalette.inkTertiary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        }
-
-                        Spacer(minLength: 8)
-
-                        Text("\(status.activeConversationCount)")
-                            .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
-                            .monospacedDigit()
-                            .foregroundStyle(GravMockPalette.inkSecondary)
-                    }
-                }
-            }
-            .padding(14)
-            .background(GravMockPalette.chrome)
-
-            Rectangle()
-                .fill(GravMockPalette.chromeRule)
-                .frame(height: 0.5)
-
-            // Window Footer Bar
-            HStack(spacing: 8) {
-                // Refresh Button
                 Button {
+                    GravOnboardingWelcomeAudio.shared.playButtonTap()
                     store.refreshConnectionStatus()
                     state.recordConnectionRefresh(store.connectionStatus)
                 } label: {
-                    HStack(spacing: 4.5) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 9, weight: .semibold))
-                        Text("Refresh")
-                            .font(.system(size: 10, weight: .medium))
-                    }
-                    .foregroundStyle(GravMockPalette.ink.opacity(0.90))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        Radius.rect(Radius.controlXS)
-                            .fill(isRefreshHovered ? Color.white.opacity(0.14) : Color.white.opacity(0.08))
-                            .overlay(
-                                Radius.rect(Radius.controlXS)
-                                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
-                            )
-                    )
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(isRefreshHovered ? 0.90 : 0.44))
+                        .frame(width: 20, height: 20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(isRefreshHovered ? Color.white.opacity(0.08) : Color.clear)
+                        )
                 }
                 .buttonStyle(.plain)
                 .onHover { isRefreshHovered = $0 }
+                .help("Re-scan Antigravity bridge")
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 32)
+            .background(Color(red: 0.064, green: 0.068, blue: 0.080))
+
+            Rectangle()
+                .fill(Color.white.opacity(0.075))
+                .frame(height: 0.5)
+
+            // Centerpiece: Live Optical Signal Conduit (Antigravity Node ──▶ Grav Notch Node)
+            VStack(spacing: 16) {
+                HStack(alignment: .center, spacing: 0) {
+                    // Source Node: Antigravity Desktop
+                    bridgeHardwareNode(
+                        title: "Antigravity",
+                        subtitle: status.isAppRunning ? "Running" : (status.isAppInstalled ? "Installed" : "Not Found"),
+                        isPositive: status.isAppInstalled
+                    ) {
+                        AntigravityLogoView(icon: store.antigravityIcon, size: 30)
+                    }
+
+                    // Live Animated Optical Fiber Conduit
+                    opticalSignalConduit
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 6)
+                        .padding(.bottom, 18)
+
+                    // Target Node: Grav Notch HUD
+                    bridgeHardwareNode(
+                        title: "Grav Notch",
+                        subtitle: isFullyConnected ? "Streaming" : "Standby",
+                        isPositive: isFullyConnected
+                    ) {
+                        GravAppIconTile(size: 30)
+                    }
+                }
+                .padding(.top, 18)
+                .padding(.horizontal, 20)
+
+                // Hairline Divider
+                Rectangle()
+                    .fill(Color.white.opacity(0.07))
+                    .frame(height: 0.5)
+                    .padding(.horizontal, 16)
+
+                // Precision 3-Column Apple Instruments Metric Strip (Zero Repetitive Cards!)
+                HStack(spacing: 0) {
+                    bridgeMetricColumn(
+                        label: "RUNTIME",
+                        value: status.isAppRunning ? "Active" : (status.isAppInstalled ? "Ready" : "Missing"),
+                        accent: status.isAppRunning ? GravPalette.emerald : (status.isAppInstalled ? Color.white.opacity(0.84) : GravPalette.fileEdit)
+                    )
+
+                    bridgeVerticalRule
+
+                    bridgeMetricColumn(
+                        label: "BRAIN ACCESS",
+                        value: status.isBrainAccessible ? "kqueue R/O" : "Locked",
+                        accent: status.isBrainAccessible ? Color.white.opacity(0.88) : GravPalette.fileEdit
+                    )
+
+                    bridgeVerticalRule
+
+                    bridgeMetricColumn(
+                        label: "CONVERSATIONS",
+                        value: "\(status.activeConversationCount)",
+                        accent: Color.white.opacity(0.94),
+                        isNumeric: true
+                    )
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 14)
+            }
+            .background(
+                ZStack {
+                    Color(red: 0.048, green: 0.052, blue: 0.062)
+                    RadialGradient(
+                        colors: [
+                            (isFullyConnected ? GravPalette.glacialCyan : GravPalette.fileEdit).opacity(0.065),
+                            Color.clear,
+                        ],
+                        center: .top,
+                        startRadius: 10,
+                        endRadius: 210
+                    )
+                }
+            )
+
+            Rectangle()
+                .fill(Color.white.opacity(0.075))
+                .frame(height: 0.5)
+
+            // Whisper-Quiet Live Session Footer + Subtle Dark Glass Action
+            HStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(isFullyConnected ? GravPalette.glacialCyan : Color.white.opacity(0.32))
+
+                    Text(
+                        store.activeSession?.title
+                            ?? (status.isBrainAccessible
+                                ? "~/.gemini/antigravity/brain/"
+                                : "Grant read access to ~/.gemini/antigravity/brain/")
+                    )
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.56))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                }
+
+                Spacer(minLength: 8)
 
                 if !status.isBrainAccessible || status.needsFolderAccess {
                     Button {
+                        GravOnboardingWelcomeAudio.shared.playButtonTap()
                         store.requestBrainFolderAccess()
                         state.recordConnectionRefresh(store.connectionStatus)
                     } label: {
-                        HStack(spacing: 4.5) {
+                        HStack(spacing: 4) {
                             Image(systemName: "folder.badge.plus")
                                 .font(.system(size: 9, weight: .semibold))
                             Text("Grant Access")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.system(size: 10, weight: .medium))
                         }
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Color.white.opacity(0.94))
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .frame(height: 24)
                         .background(
-                            Radius.rect(Radius.controlXS)
-                                .fill(isGrantHovered ? GravMockPalette.gravAmber.opacity(0.90) : GravMockPalette.gravAmber)
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(GravPalette.fileEdit.opacity(isGrantHovered ? 0.90 : 0.78))
                         )
                     }
                     .buttonStyle(.plain)
                     .onHover { isGrantHovered = $0 }
-                }
-
-                Spacer(minLength: 0)
-
-                if status.isAppInstalled {
+                } else if status.isAppInstalled {
                     Button {
+                        GravOnboardingWelcomeAudio.shared.playButtonTap()
                         store.activateAntigravityApp()
                     } label: {
                         HStack(spacing: 4) {
                             Text("Open Antigravity")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.system(size: 10, weight: .medium))
                             Image(systemName: "arrow.up.right")
-                                .font(.system(size: 8, weight: .bold))
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(0.56))
                         }
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
+                        .foregroundStyle(Color.white.opacity(0.90))
+                        .padding(.horizontal, 10)
+                        .frame(height: 24)
                         .background(
-                            Radius.rect(Radius.controlXS)
-                                .fill(isOpenHovered ? GravMockPalette.gravTeal.opacity(0.88) : GravMockPalette.gravTeal)
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(isOpenHovered ? Color.white.opacity(0.13) : Color.white.opacity(0.075))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                                )
                         )
                     }
                     .buttonStyle(.plain)
@@ -259,44 +253,157 @@ struct GravMockConnectScene: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(GravMockPalette.chromeBar)
+            .frame(height: 38)
+            .background(Color(red: 0.060, green: 0.064, blue: 0.075))
         }
-        .frame(maxWidth: 512)
-        .clipShape(Radius.rect(Radius.card))
+        .frame(maxWidth: 496)
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         .overlay(
-            Radius.rect(Radius.card)
-                .strokeBorder(GravMockPalette.chromeEdge, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.16), Color.white.opacity(0.05)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.5
+                )
         )
-        .shadow(color: Color.black.opacity(0.55), radius: 28, x: 0, y: 14)
-        .shadow(color: Color.black.opacity(0.22), radius: 5, x: 0, y: 2)
+        .shadow(color: Color.black.opacity(0.62), radius: 30, x: 0, y: 16)
+        .shadow(color: Color.black.opacity(0.24), radius: 5, x: 0, y: 2)
     }
 
-    private func diagnosticCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(
-                Radius.rect(Radius.controlM)
-                    .fill(GravMockPalette.chromeCard)
+    private func bridgeHardwareNode<Icon: View>(
+        title: String,
+        subtitle: String,
+        isPositive: Bool,
+        @ViewBuilder icon: () -> Icon
+    ) -> some View {
+        VStack(spacing: 7) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color.white.opacity(0.045))
+                    .frame(width: 52, height: 52)
                     .overlay(
-                        Radius.rect(Radius.controlM)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.16), Color.white.opacity(0.04)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 0.5
+                            )
                     )
-            )
+                icon()
+            }
+
+            VStack(spacing: 1.5) {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(-0.15)
+                    .foregroundStyle(Color.white.opacity(0.92))
+                Text(subtitle)
+                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(isPositive ? GravPalette.emerald.opacity(0.86) : Color.white.opacity(0.40))
+            }
+        }
+        .frame(width: 88)
     }
 
-    private func statusPill(label: String, isPositive: Bool) -> some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(isPositive ? GravMockPalette.gravEmerald : GravMockPalette.gravAmber)
-                .frame(width: 5.5, height: 5.5)
+    private var opticalSignalConduit: some View {
+        let reduced = GravMotionPreferences.shared.reduceMotion
+        return VStack(spacing: 7) {
+            Text("~/.gemini/antigravity/brain")
+                .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.34))
+                .lineLimit(1)
 
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(isPositive ? Color.white.opacity(0.76) : GravMockPalette.gravAmber)
+            GeometryReader { geo in
+                let width = max(1, geo.size.width)
+                ZStack(alignment: .leading) {
+                    // Hairline optical rail
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                        .frame(height: 1.5)
+
+                    if isFullyConnected && !reduced {
+                        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                            let t = context.date.timeIntervalSinceReferenceDate
+                            let p1 = (t.truncatingRemainder(dividingBy: 2.2)) / 2.2
+                            let p2 = ((t + 1.1).truncatingRemainder(dividingBy: 2.2)) / 2.2
+                            let pulseWidth: CGFloat = 46
+
+                            ZStack(alignment: .leading) {
+                                conduitPulse(progress: p1, trackWidth: width, pulseWidth: pulseWidth)
+                                conduitPulse(progress: p2, trackWidth: width, pulseWidth: pulseWidth)
+                            }
+                        }
+                    } else if isFullyConnected {
+                        Capsule(style: .continuous)
+                            .fill(GravPalette.glacialCyan.opacity(0.55))
+                            .frame(height: 1.5)
+                    }
+                }
+                .frame(maxHeight: .infinity, alignment: .center)
+                .clipped()
+            }
+            .frame(height: 8)
+
+            Text(isFullyConnected ? "0% idle CPU · event-driven" : "Waiting for permissions")
+                .font(.system(size: 8.5, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.32))
+                .lineLimit(1)
         }
-        .fixedSize()
+    }
+
+    private func conduitPulse(progress: Double, trackWidth: CGFloat, pulseWidth: CGFloat) -> some View {
+        let x = -pulseWidth + CGFloat(progress) * (trackWidth + pulseWidth)
+        return Capsule(style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.clear,
+                        GravPalette.glacialCyan.opacity(0.75),
+                        Color.white.opacity(0.95),
+                        Color.clear,
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(width: pulseWidth, height: 2)
+            .offset(x: x)
+    }
+
+    private var bridgeVerticalRule: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.07))
+            .frame(width: 0.5, height: 28)
+    }
+
+    private func bridgeMetricColumn(
+        label: String,
+        value: String,
+        accent: Color,
+        isNumeric: Bool = false
+    ) -> some View {
+        VStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+                .tracking(0.5)
+                .foregroundStyle(Color.white.opacity(0.34))
+
+            Text(verbatim: value)
+                .font(
+                    isNumeric
+                        ? .system(size: 13.5, weight: .semibold, design: .monospaced)
+                        : .system(size: 11.5, weight: .medium)
+                )
+                .monospacedDigit()
+                .foregroundStyle(accent)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 

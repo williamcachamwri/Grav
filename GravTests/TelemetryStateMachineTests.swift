@@ -530,4 +530,54 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(standalone[0].role, "Codebase Researcher")
         XCTAssertTrue(standalone[0].isActive)
     }
+
+    func testWriteFileOverwriteComputesTrueDeltaAgainstPreviousContent() {
+        var classifier = EventClassifier()
+        let path = "/Users/wica/Grav/Grav/Features/Notch/SwarmTelemetryTabView.swift"
+
+        // 1. Initial write_file creates 4 lines
+        let createStep = TranscriptStep(
+            stepIndex: 10,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T03:15:00Z",
+            toolCalls: [
+                ToolCall(
+                    name: "write_file",
+                    args: [
+                        "Path": .string(path),
+                        "Overwrite": .bool(true),
+                        "Content": .string("line1\nline2\nline3\nline4"),
+                    ]
+                ),
+            ]
+        )
+        let createOut = classifier.process(step: createStep)
+        XCTAssertEqual(createOut.fileChanges.first?.addedLines, 4)
+        XCTAssertEqual(createOut.fileChanges.first?.removedLines, 0)
+
+        // 2. Subsequent write_file(Overwrite: true) changes line2 and appends line5 & line6
+        // Must report +3 -1 (true diff), NOT +6 -0!
+        let overwriteStep = TranscriptStep(
+            stepIndex: 20,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T03:26:00Z",
+            toolCalls: [
+                ToolCall(
+                    name: "write_file",
+                    args: [
+                        "Path": .string(path),
+                        "Overwrite": .bool(true),
+                        "Content": .string("line1\nline2_updated\nline3\nline4\nline5\nline6"),
+                    ]
+                ),
+            ]
+        )
+        let overwriteOut = classifier.process(step: overwriteStep)
+        XCTAssertEqual(overwriteOut.fileChanges.first?.addedLines, 3)
+        XCTAssertEqual(overwriteOut.fileChanges.first?.removedLines, 1)
+    }
 }

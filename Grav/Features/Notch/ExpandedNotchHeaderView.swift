@@ -161,7 +161,7 @@ public struct ExpandedNotchHeaderView: View {
                 switch store.state {
                 case .thinking:
                     NotchThinkingShimmerLabel(
-                        startDate: store.currentThinking?.startedAt ?? Date(),
+                        startDate: store.currentPhaseStartedAt,
                         compact: true,
                         font: .system(size: 11, weight: .medium),
                         reduceMotion: reduceMotion

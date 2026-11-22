@@ -112,12 +112,24 @@ public struct CollapsedNotchView: View {
                     .transition(signalTransition)
 
             case let .inspecting(event):
-                LanguageIconView(path: event.path, changeKind: nil, size: 14)
-                    .transition(signalTransition)
+                TimelineView(.periodic(from: event.timestamp, by: 1.0)) { context in
+                    if context.date.timeIntervalSince(event.timestamp) >= 5.0 {
+                        NotchBars(thinkingWaveStyle)
+                    } else {
+                        LanguageIconView(path: event.path, changeKind: nil, size: 14)
+                    }
+                }
+                .transition(signalTransition)
 
             case let .editing(event):
-                LanguageIconView(path: event.path, changeKind: event.kind, size: 14)
-                    .transition(signalTransition)
+                TimelineView(.periodic(from: event.timestamp, by: 1.0)) { context in
+                    if context.date.timeIntervalSince(event.timestamp) >= 5.0 {
+                        NotchBars(thinkingWaveStyle)
+                    } else {
+                        LanguageIconView(path: event.path, changeKind: event.kind, size: 14)
+                    }
+                }
+                .transition(signalTransition)
 
             case .runningCommand:
                 NotchBars(commandWaveStyle)
@@ -171,7 +183,7 @@ public struct CollapsedNotchView: View {
                         .transition(signalTransition)
 
                 case let .editing(event):
-                    editingTrailingSignal(for: event)
+                    editingTrailingSignal(for: event, compact: compact)
                         .id("collapsed-edit-\(event.id)")
                         .transition(signalTransition)
 
@@ -277,7 +289,7 @@ public struct CollapsedNotchView: View {
     private func thinkingTrailingSignal(compact: Bool) -> some View {
         HStack(alignment: .center, spacing: 5) {
             NotchThinkingShimmerLabel(
-                startDate: store.currentThinking?.startedAt ?? Date(),
+                startDate: store.currentPhaseStartedAt,
                 compact: compact,
                 font: .system(size: compact ? 11 : 11.5, weight: .medium),
                 reduceMotion: reduceMotion
@@ -327,39 +339,50 @@ public struct CollapsedNotchView: View {
         }
     }
 
-    private func editingTrailingSignal(for event: FileChangeEvent) -> some View {
-        HStack(spacing: 6) {
-            NotchPingPongMarqueeText(
-                text: event.basename,
-                font: .system(size: 11.5, weight: .medium),
-                color: Color.white.opacity(0.90),
-                alignment: .trailing,
-                reduceMotion: reduceMotion
-            )
-
-            if event.kind == .delete {
-                Text("DEL")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(GravPalette.coral)
-                    .fixedSize(horizontal: true, vertical: false)
+    private func editingTrailingSignal(for event: FileChangeEvent, compact: Bool) -> some View {
+        TimelineView(.periodic(from: event.timestamp, by: 1.0)) { context in
+            if context.date.timeIntervalSince(event.timestamp) >= 5.0 {
+                NotchThinkingShimmerLabel(
+                    startDate: event.timestamp,
+                    compact: compact,
+                    font: .system(size: compact ? 11 : 11.5, weight: .medium),
+                    reduceMotion: reduceMotion
+                )
             } else {
-                HStack(spacing: 3.5) {
-                    if event.addedLines > 0 || event.removedLines == 0 {
-                        Text("+\(event.addedLines)")
-                            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                            .monospacedDigit()
-                            .foregroundStyle(GravPalette.emerald)
-                            .contentTransition(reduceMotion ? .identity : .numericText())
-                    }
-                    if event.removedLines > 0 {
-                        Text("-\(event.removedLines)")
-                            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                            .monospacedDigit()
+                HStack(spacing: 6) {
+                    NotchPingPongMarqueeText(
+                        text: event.basename,
+                        font: .system(size: 11.5, weight: .medium),
+                        color: Color.white.opacity(0.90),
+                        alignment: .trailing,
+                        reduceMotion: reduceMotion
+                    )
+
+                    if event.kind == .delete {
+                        Text("DEL")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundStyle(GravPalette.coral)
-                            .contentTransition(reduceMotion ? .identity : .numericText())
+                            .fixedSize(horizontal: true, vertical: false)
+                    } else {
+                        HStack(spacing: 3.5) {
+                            if event.addedLines > 0 || event.removedLines == 0 {
+                                Text(verbatim: "+\(event.addedLines)")
+                                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                                    .monospacedDigit()
+                                    .foregroundStyle(GravPalette.emerald)
+                                    .contentTransition(reduceMotion ? .identity : .numericText())
+                            }
+                            if event.removedLines > 0 {
+                                Text(verbatim: "-\(event.removedLines)")
+                                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                                    .monospacedDigit()
+                                    .foregroundStyle(GravPalette.coral)
+                                    .contentTransition(reduceMotion ? .identity : .numericText())
+                            }
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
                     }
                 }
-                .fixedSize(horizontal: true, vertical: false)
             }
         }
     }

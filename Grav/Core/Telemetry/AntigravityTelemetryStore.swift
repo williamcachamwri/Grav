@@ -32,6 +32,7 @@ public final class AntigravityTelemetryStore {
     public internal(set) var activeModel: String?
     public internal(set) var swarmSnapshot: SwarmSnapshot?
     public internal(set) var subagents: [SubagentRecord] = []
+    public internal(set) var currentPhaseStartedAt: Date = Date()
 
     public internal(set) var isPaused: Bool = false
     public internal(set) var isMonitoring: Bool = false
@@ -49,11 +50,16 @@ public final class AntigravityTelemetryStore {
     private var discovery: ConversationDiscovery?
     private var activeTailer: TranscriptTailer?
     private var activeSwarmWatcher: SwarmSubagentWatcher?
+    private var activeWALWatcher: ConversationWALWatcher?
     private var classifier = EventClassifier()
 
     private var userPinnedSessionID: String?
     private var isHydratingActiveSession: Bool = false
     private var hydratedTruncatedFileSteps: Set<Int> = []
+    private var pendingTruncatedHydrationSteps: [Int] = []
+    private var truncatedHydrationTask: Task<Void, Never>?
+    private var hydratedFileContents: [String: String] = [:]
+    private var lastFinalIdleAt: Date = .distantPast
     private var idleDecayTask: Task<Void, Never>?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var sessionGeneration: UInt64 = 0
@@ -105,12 +111,17 @@ public final class AntigravityTelemetryStore {
         activeTailer = nil
         let currentSwarmWatcher = activeSwarmWatcher
         activeSwarmWatcher = nil
+        let currentWALWatcher = activeWALWatcher
+        activeWALWatcher = nil
+        truncatedHydrationTask?.cancel()
+        truncatedHydrationTask = nil
         let logTailer = taskLogTailer
 
         Task {
             await currentDiscovery?.stopWatching()
             await currentTailer?.stopWatching()
             await currentSwarmWatcher?.stopWatching()
+            await currentWALWatcher?.stopWatching()
             await logTailer.stopAll()
         }
 
@@ -125,10 +136,12 @@ public final class AntigravityTelemetryStore {
             cancelIdleDecayTimer()
             let currentTailer = activeTailer
             let currentSwarmWatcher = activeSwarmWatcher
+            let currentWALWatcher = activeWALWatcher
             let logTailer = taskLogTailer
             Task {
                 await currentTailer?.stopWatching()
                 await currentSwarmWatcher?.stopWatching()
+                await currentWALWatcher?.stopWatching()
                 await logTailer.stopAll()
             }
         } else if isMonitoring {
@@ -351,6 +364,8 @@ public final class AntigravityTelemetryStore {
             applyBlock()
         }
 
+        flushTruncatedFileHydrationQueue(isHistoricalReplay: isInitialHydration)
+
         if isInitialHydration {
             // If the latest historical step is older than the idle window, settle calmly to `.idle`
             // (and settle stale running commands whose task log has not been written recently).
@@ -430,11 +445,19 @@ public final class AntigravityTelemetryStore {
         activeTailer = nil
         let previousSwarmWatcher = activeSwarmWatcher
         activeSwarmWatcher = nil
+        let previousWALWatcher = activeWALWatcher
+        activeWALWatcher = nil
+        truncatedHydrationTask?.cancel()
+        truncatedHydrationTask = nil
         let logTailer = taskLogTailer
 
         // Reset session-scoped observable state
         activeSession = session
         hydratedTruncatedFileSteps.removeAll()
+        pendingTruncatedHydrationSteps.removeAll()
+        hydratedFileContents.removeAll()
+        lastFinalIdleAt = .distantPast
+        currentPhaseStartedAt = Date()
         classifier.reset()
         state = .idle
         currentThinking = nil
@@ -453,12 +476,15 @@ public final class AntigravityTelemetryStore {
         activeTailer = tailer
         let swarmWatcher = SwarmSubagentWatcher(sessionDirectoryURL: session.directoryURL)
         activeSwarmWatcher = swarmWatcher
+        let walWatcher = ConversationWALWatcher(session: session)
+        activeWALWatcher = walWatcher
         isHydratingActiveSession = true
 
         guard isMonitoring, !isPaused else {
             Task {
                 await previousTailer?.stopWatching()
                 await previousSwarmWatcher?.stopWatching()
+                await previousWALWatcher?.stopWatching()
                 await logTailer.stopAll()
             }
             return
@@ -467,6 +493,7 @@ public final class AntigravityTelemetryStore {
         Task { [weak self] in
             await previousTailer?.stopWatching()
             await previousSwarmWatcher?.stopWatching()
+            await previousWALWatcher?.stopWatching()
             await logTailer.stopAll()
 
             // Attach live Swarm & Subagent directory watcher
@@ -483,6 +510,15 @@ public final class AntigravityTelemetryStore {
                 guard let self, self.sessionGeneration == generation else { return }
                 self.ingestSteps(initialSteps, isInitialHydration: true)
                 self.isHydratingActiveSession = false
+            }
+
+            // Attach live WAL pulse watcher so `Working` -> `Thinking for Ns` activates at 0ms
+            // the instant the user submits a prompt in Antigravity (before transcript.jsonl flushes).
+            await walWatcher.startWatching { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
+                    self.handleLiveConversationWALActivity()
+                }
             }
 
             // Attach live kqueue watcher for subsequent incremental appends
@@ -513,11 +549,25 @@ public final class AntigravityTelemetryStore {
             activeSwarmWatcher = swarmWatcher
         }
 
+        let walWatcher: ConversationWALWatcher
+        if let existingWAL = activeWALWatcher {
+            walWatcher = existingWAL
+        } else {
+            walWatcher = ConversationWALWatcher(session: session)
+            activeWALWatcher = walWatcher
+        }
+
         Task { [weak self] in
             await swarmWatcher.startWatching { [weak self] update in
                 Task { @MainActor [weak self] in
                     guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
                     self.applySwarmSubagentUpdate(update)
+                }
+            }
+            await walWatcher.startWatching { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
+                    self.handleLiveConversationWALActivity()
                 }
             }
             await tailer.startWatching { [weak self] newSteps in
@@ -536,9 +586,16 @@ public final class AntigravityTelemetryStore {
         activeTailer = nil
         let previousSwarmWatcher = activeSwarmWatcher
         activeSwarmWatcher = nil
+        let previousWALWatcher = activeWALWatcher
+        activeWALWatcher = nil
+        truncatedHydrationTask?.cancel()
+        truncatedHydrationTask = nil
         let logTailer = taskLogTailer
 
         activeSession = nil
+        hydratedTruncatedFileSteps.removeAll()
+        pendingTruncatedHydrationSteps.removeAll()
+        hydratedFileContents.removeAll()
         classifier.reset()
         state = .idle
         currentThinking = nil
@@ -556,7 +613,32 @@ public final class AntigravityTelemetryStore {
         Task {
             await previousTailer?.stopWatching()
             await previousSwarmWatcher?.stopWatching()
+            await previousWALWatcher?.stopWatching()
             await logTailer.stopAll()
+        }
+    }
+
+    private func handleLiveConversationWALActivity() {
+        guard !isHydratingActiveSession, !isPaused else { return }
+        // Ignore the trailing SQLite WAL flush immediately after a final assistant reply settled to `.idle`
+        if Date().timeIntervalSince(lastFinalIdleAt) < 2.2 {
+            return
+        }
+
+        switch state {
+        case .idle:
+            let now = Date()
+            currentPhaseStartedAt = now
+            if GravMotionPreferences.shared.reduceMotion {
+                state = .working(startedAt: now)
+            } else {
+                withAnimation(GravMotionSpec.settle.animation) {
+                    state = .working(startedAt: now)
+                }
+            }
+            scheduleIdleDecayIfNeeded()
+        case .working, .thinking, .inspecting, .editing, .compacting, .runningCommand:
+            scheduleIdleDecayIfNeeded()
         }
     }
 
@@ -649,7 +731,7 @@ public final class AntigravityTelemetryStore {
 
         if !output.truncatedFileChangeStepIndices.isEmpty {
             for stepIdx in output.truncatedFileChangeStepIndices {
-                hydrateTruncatedFileChangesIfNeeded(stepIndex: stepIdx, isHistoricalReplay: suppressPeeks)
+                enqueueTruncatedFileHydration(stepIndex: stepIdx)
             }
         }
 
@@ -672,7 +754,29 @@ public final class AntigravityTelemetryStore {
             }
         }
 
+        let previousState = state
         state = output.state
+
+        if output.state == .idle && previousState != .idle && !suppressPeeks {
+            lastFinalIdleAt = Date()
+        } else if output.state != previousState {
+            switch output.state {
+            case let .working(startedAt):
+                currentPhaseStartedAt = suppressPeeks ? startedAt : Date()
+            case .thinking:
+                currentPhaseStartedAt = suppressPeeks ? (output.thinkingSnapshot?.startedAt ?? Date()) : Date()
+            case let .compacting(event):
+                currentPhaseStartedAt = suppressPeeks ? event.startedAt : Date()
+            case let .inspecting(event):
+                currentPhaseStartedAt = suppressPeeks ? event.timestamp : Date()
+            case let .editing(event):
+                currentPhaseStartedAt = suppressPeeks ? event.timestamp : Date()
+            case let .runningCommand(cmd):
+                currentPhaseStartedAt = cmd.startedAt
+            case .idle:
+                break
+            }
+        }
 
         if output.didMutateAgentsOrSwarm, let watcher = activeSwarmWatcher {
             Task {
@@ -758,49 +862,76 @@ public final class AntigravityTelemetryStore {
         }
     }
 
-    private func hydrateTruncatedFileChangesIfNeeded(stepIndex: Int, isHistoricalReplay: Bool) {
+    private func enqueueTruncatedFileHydration(stepIndex: Int) {
         guard !hydratedTruncatedFileSteps.contains(stepIndex) else { return }
-        guard let session = activeSession else { return }
-        // During large historical replay, hydrate only recent truncated steps so startup stays instantaneous
-        if isHistoricalReplay && hydratedTruncatedFileSteps.count >= 20 {
-            return
+        if !pendingTruncatedHydrationSteps.contains(stepIndex) {
+            pendingTruncatedHydrationSteps.append(stepIndex)
         }
-        hydratedTruncatedFileSteps.insert(stepIndex)
+    }
+
+    /// Hydrates recent truncated file-change steps in ascending chronological order so
+    /// `write_file(Overwrite: true)` diffs against the exact prior file content (`+536 -62`
+    /// instead of treating every line of an overwritten file as newly added).
+    private func flushTruncatedFileHydrationQueue(isHistoricalReplay: Bool) {
+        guard !pendingTruncatedHydrationSteps.isEmpty, let session = activeSession else { return }
+
+        var batch = pendingTruncatedHydrationSteps.sorted()
+        pendingTruncatedHydrationSteps.removeAll()
+        if isHistoricalReplay && batch.count > 36 {
+            batch = Array(batch.suffix(36))
+        }
+        batch = batch.filter { !hydratedTruncatedFileSteps.contains($0) }
+        guard !batch.isEmpty else { return }
+
+        for idx in batch {
+            hydratedTruncatedFileSteps.insert(idx)
+        }
 
         let generation = sessionGeneration
         let fullURL = session.fullTranscriptURL
         let tailer = activeTailer
+        let existingTask = truncatedHydrationTask
 
-        Task { [weak self] in
-            let fullStep: TranscriptStep?
-            if let tailer {
-                fullStep = await tailer.readFullStep(stepIndex: stepIndex, from: fullURL)
-            } else {
-                fullStep = await Task.detached(priority: .utility) {
-                    TranscriptTailer.readFullStep(stepIndex: stepIndex, from: fullURL)
-                }.value
-            }
+        truncatedHydrationTask = Task { [weak self] in
+            await existingTask?.value
+            guard !Task.isCancelled else { return }
 
-            guard let fullStep else { return }
-            let fullChanges = EventClassifier.extractFileChanges(from: fullStep)
-            guard !fullChanges.isEmpty else { return }
+            for stepIndex in batch {
+                guard !Task.isCancelled else { return }
+                let fullStep: TranscriptStep?
+                if let tailer {
+                    fullStep = await tailer.readFullStep(stepIndex: stepIndex, from: fullURL)
+                } else {
+                    fullStep = await Task.detached(priority: .utility) {
+                        TranscriptTailer.readFullStep(stepIndex: stepIndex, from: fullURL)
+                    }.value
+                }
 
-            await MainActor.run { [weak self] in
-                guard let self, self.sessionGeneration == generation else { return }
-                for fullChange in fullChanges {
-                    if let idx = self.fileChanges.firstIndex(where: { $0.id == fullChange.id }) {
-                        var merged = self.fileChanges[idx]
-                        merged.diffHunks = fullChange.diffHunks
-                        // Keep authoritative GENERIC counts if larger, otherwise use full untruncated counts
-                        if fullChange.kind == .create || fullChange.kind == .overwrite
-                            || (merged.addedLines <= 2 && merged.removedLines <= 2
-                                && (fullChange.addedLines > merged.addedLines || fullChange.removedLines > merged.removedLines))
-                        {
-                            merged.addedLines = fullChange.addedLines
-                            merged.removedLines = fullChange.removedLines
+                guard let fullStep else { continue }
+
+                await MainActor.run { [weak self] in
+                    guard let self, self.sessionGeneration == generation else { return }
+                    let result = EventClassifier.extractFileChangesWithContents(
+                        from: fullStep,
+                        priorFileContents: self.hydratedFileContents
+                    )
+                    self.hydratedFileContents = result.updatedContents
+                    for fullChange in result.changes {
+                        if let idx = self.fileChanges.firstIndex(where: { $0.id == fullChange.id }) {
+                            var merged = self.fileChanges[idx]
+                            merged.diffHunks = fullChange.diffHunks
+                            if fullChange.kind == .create || fullChange.kind == .overwrite {
+                                merged.addedLines = fullChange.addedLines
+                                merged.removedLines = fullChange.removedLines
+                            } else if merged.addedLines <= 2 && merged.removedLines <= 2
+                                && (fullChange.addedLines > merged.addedLines || fullChange.removedLines > merged.removedLines)
+                            {
+                                merged.addedLines = fullChange.addedLines
+                                merged.removedLines = fullChange.removedLines
+                            }
+                            self.fileChanges[idx] = merged
+                            self.upsertActivity(.fileChange(merged))
                         }
-                        self.fileChanges[idx] = merged
-                        self.upsertActivity(.fileChange(merged))
                     }
                 }
             }

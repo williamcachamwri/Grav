@@ -360,3 +360,120 @@ public actor TranscriptTailer {
         }
     }
 }
+
+/// Event-driven `O_EVTONLY` kernel watcher on Antigravity's live conversation WAL file
+/// (`~/.gemini/antigravity/conversations/<session-id>.db-wal`).
+///
+/// Antigravity streams user prompts, thinking deltas, and compaction writes into the WAL
+/// immediately (0ms), whereas `transcript.jsonl` flushes only after each step completes.
+/// Watching vnode write events (without opening or locking SQLite) lets Grav surface
+/// `Working` -> `Thinking for Ns` the exact millisecond the user submits a prompt or while
+/// deep reasoning is actively streaming, at 0% idle CPU.
+public actor ConversationWALWatcher {
+    public let walURL: URL
+
+    private let watcherQueue: DispatchQueue
+    private var fileSource: DispatchSourceFileSystemObject?
+    private var dirSource: DispatchSourceFileSystemObject?
+    private var onActivity: (@Sendable () -> Void)?
+    private var isWatching: Bool = false
+
+    public init(session: ConversationSession) {
+        let antigravityRoot = session.directoryURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        self.walURL = antigravityRoot
+            .appendingPathComponent("conversations", isDirectory: true)
+            .appendingPathComponent("\(session.id).db-wal")
+        self.watcherQueue = DispatchQueue(
+            label: "com.grav.telemetry.wal-pulse.\(UUID().uuidString)",
+            qos: .utility
+        )
+    }
+
+    public func startWatching(onActivity: @escaping @Sendable () -> Void) {
+        stopWatching()
+        self.onActivity = onActivity
+        self.isWatching = true
+        attachFileSource()
+        attachDirectorySource()
+    }
+
+    public func stopWatching() {
+        isWatching = false
+        onActivity = nil
+        fileSource?.cancel()
+        fileSource = nil
+        dirSource?.cancel()
+        dirSource = nil
+    }
+
+    private func attachFileSource() {
+        fileSource?.cancel()
+        fileSource = nil
+        guard isWatching else { return }
+
+        let fd = open(walURL.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend, .rename, .delete, .attrib],
+            queue: watcherQueue
+        )
+        source.setEventHandler { [weak self] in
+            let flags = source.data
+            let replaced = flags.contains(.rename) || flags.contains(.delete)
+            Task { [weak self] in
+                await self?.handleWALEvent(replaced: replaced)
+            }
+        }
+        source.setCancelHandler {
+            close(fd)
+        }
+        fileSource = source
+        source.resume()
+    }
+
+    private func attachDirectorySource() {
+        dirSource?.cancel()
+        dirSource = nil
+        guard isWatching else { return }
+
+        let parentPath = walURL.deletingLastPathComponent().path
+        let fd = open(parentPath, O_EVTONLY)
+        guard fd >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename],
+            queue: watcherQueue
+        )
+        source.setEventHandler { [weak self] in
+            Task { [weak self] in
+                await self?.handleDirectoryEvent()
+            }
+        }
+        source.setCancelHandler {
+            close(fd)
+        }
+        dirSource = source
+        source.resume()
+    }
+
+    private func handleDirectoryEvent() {
+        guard isWatching else { return }
+        if fileSource == nil, FileManager.default.fileExists(atPath: walURL.path) {
+            attachFileSource()
+            onActivity?()
+        }
+    }
+
+    private func handleWALEvent(replaced: Bool) {
+        guard isWatching else { return }
+        if replaced {
+            attachFileSource()
+        }
+        onActivity?()
+    }
+}

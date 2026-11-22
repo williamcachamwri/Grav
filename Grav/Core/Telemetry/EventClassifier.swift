@@ -68,6 +68,7 @@ public struct EventClassifier: Sendable {
     internal var confirmedBackgroundCommandIDs: Set<String> = []
     internal var lastUserPromptPreview: String?
     internal var isTurnActive: Bool = false
+    internal var lastKnownFileContents: [String: String] = [:]
 
     public init() {}
 
@@ -86,6 +87,7 @@ public struct EventClassifier: Sendable {
         confirmedBackgroundCommandIDs.removeAll()
         lastUserPromptPreview = nil
         isTurnActive = false
+        lastKnownFileContents.removeAll()
     }
 
     /// Marks the telemetry state as `.idle` (for example after an idle decay timeout) and clears
@@ -406,7 +408,13 @@ public struct EventClassifier: Sendable {
                 }
 
             case "write_file", "write_to_file":
-                if let event = classifyWrite(call: call, stepIndex: step.stepIndex, callIndex: index, date: stepDate) {
+                if let event = classifyWrite(
+                    call: call,
+                    stepIndex: step.stepIndex,
+                    callIndex: index,
+                    date: stepDate,
+                    isTruncatedStep: step.isFieldTruncated("tool_calls")
+                ) {
                     output.fileChanges.append(event)
                     stepEditedPaths.insert(event.path)
                     burstEditedPaths.insert(event.path)
@@ -468,7 +476,7 @@ public struct EventClassifier: Sendable {
         }
     }
 
-    private func classifySingleEdit(
+    private mutating func classifySingleEdit(
         call: ToolCall,
         stepIndex: Int,
         callIndex: Int,
@@ -479,6 +487,10 @@ public struct EventClassifier: Sendable {
         }
         let target = call.stringArg("Target", "TargetContent") ?? ""
         let replacement = call.stringArg("Replacement", "ReplacementContent") ?? ""
+        if !target.isEmpty, var existing = lastKnownFileContents[path], existing.contains(target) {
+            existing = existing.replacingOccurrences(of: target, with: replacement)
+            cacheFileContent(existing, for: path)
+        }
         let diff = DiffComputer.computeDiff(oldText: target, newText: replacement)
 
         return FileChangeEvent(
@@ -494,7 +506,7 @@ public struct EventClassifier: Sendable {
         )
     }
 
-    private func classifyMultiEdit(
+    private mutating func classifyMultiEdit(
         call: ToolCall,
         stepIndex: Int,
         callIndex: Int,
@@ -517,6 +529,12 @@ public struct EventClassifier: Sendable {
                 chunks.append((target: target, replacement: replacement))
             }
         }
+        if var existing = lastKnownFileContents[path] {
+            for chunk in chunks where !chunk.target.isEmpty && existing.contains(chunk.target) {
+                existing = existing.replacingOccurrences(of: chunk.target, with: chunk.replacement)
+            }
+            cacheFileContent(existing, for: path)
+        }
 
         let diff = DiffComputer.computeMultiChunkDiff(chunks: chunks)
         return FileChangeEvent(
@@ -532,11 +550,12 @@ public struct EventClassifier: Sendable {
         )
     }
 
-    private func classifyWrite(
+    private mutating func classifyWrite(
         call: ToolCall,
         stepIndex: Int,
         callIndex: Int,
-        date: Date
+        date: Date,
+        isTruncatedStep: Bool = false
     ) -> FileChangeEvent? {
         guard let path = call.stringArg("Path", "TargetFile"), !path.isEmpty else {
             return nil
@@ -554,18 +573,42 @@ public struct EventClassifier: Sendable {
             kind = .create
         }
 
-        let diff = DiffComputer.computeWriteDiff(content: content)
+        let diff: DiffResult
+        if isOverwrite, let previous = lastKnownFileContents[path], !previous.isEmpty {
+            diff = DiffComputer.computeDiff(oldText: previous, newText: content)
+        } else {
+            diff = DiffComputer.computeWriteDiff(content: content)
+        }
+
+        if !isTruncatedStep && !content.isEmpty {
+            if isAppend, let previous = lastKnownFileContents[path] {
+                cacheFileContent(previous + content, for: path)
+            } else {
+                cacheFileContent(content, for: path)
+            }
+        }
+
         return FileChangeEvent(
             id: "\(stepIndex)-\(callIndex)-\(path)",
             stepIndex: stepIndex,
             path: path,
             kind: kind,
             addedLines: diff.addedLines,
-            removedLines: 0,
+            removedLines: diff.removedLines,
             diffHunks: diff.hunks,
             timestamp: date,
             toolName: call.name
         )
+    }
+
+    private mutating func cacheFileContent(_ content: String, for path: String) {
+        guard content.utf8.count <= 300_000 else { return }
+        if lastKnownFileContents.count >= 32, lastKnownFileContents[path] == nil,
+           let oldestKey = lastKnownFileContents.keys.first
+        {
+            lastKnownFileContents.removeValue(forKey: oldestKey)
+        }
+        lastKnownFileContents[path] = content
     }
 
     internal mutating func registerCommandStart(
@@ -603,10 +646,24 @@ public struct EventClassifier: Sendable {
     }
 
     /// Recomputes full untruncated `FileChangeEvent`s for a `PLANNER_RESPONSE` step loaded from
-    /// `transcript_full.jsonl` when `transcript.jsonl` had `truncated_fields: ["tool_calls"]`.
-    public static func extractFileChanges(from fullStep: TranscriptStep) -> [FileChangeEvent] {
-        guard let toolCalls = fullStep.toolCalls, !toolCalls.isEmpty else { return [] }
+    /// `transcript_full.jsonl` when `transcript.jsonl` had `truncated_fields: ["tool_calls"]`,
+    /// preserving prior file contents so `write_file(Overwrite: true)` computes exact `+added/-removed` diffs.
+    public static func extractFileChanges(
+        from fullStep: TranscriptStep,
+        priorFileContents: [String: String] = [:]
+    ) -> [FileChangeEvent] {
+        extractFileChangesWithContents(from: fullStep, priorFileContents: priorFileContents).changes
+    }
+
+    public static func extractFileChangesWithContents(
+        from fullStep: TranscriptStep,
+        priorFileContents: [String: String] = [:]
+    ) -> (changes: [FileChangeEvent], updatedContents: [String: String]) {
+        guard let toolCalls = fullStep.toolCalls, !toolCalls.isEmpty else {
+            return ([], priorFileContents)
+        }
         var temp = EventClassifier()
+        temp.lastKnownFileContents = priorFileContents
         var output = EventClassificationOutput()
         temp.classifyToolCalls(
             toolCalls,
@@ -615,7 +672,7 @@ public struct EventClassifier: Sendable {
             session: nil,
             into: &output
         )
-        return output.fileChanges
+        return (output.fileChanges, temp.lastKnownFileContents)
     }
 
     // MARK: - File Edit Result Correlation (Authoritative Antigravity `+N/-M` Counts)

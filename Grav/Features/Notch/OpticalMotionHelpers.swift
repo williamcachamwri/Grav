@@ -197,13 +197,13 @@ public struct NotchProportionalDiffMicroBar: View {
                             .foregroundStyle(GravPalette.coral.opacity(0.88))
                     }
                     if added > 0 || (!isDeleted && removed == 0) {
-                        Text("+\(added)")
+                        Text(verbatim: "+\(added)")
                             .font(GravTypography.monoMicro)
                             .monospacedDigit()
                             .foregroundStyle(added > 0 ? GravPalette.emerald : GravPalette.inkQuaternary)
                     }
                     if removed > 0 {
-                        Text("-\(removed)")
+                        Text(verbatim: "-\(removed)")
                             .font(GravTypography.monoMicro)
                             .monospacedDigit()
                             .foregroundStyle(GravPalette.coral)
