@@ -1040,8 +1040,8 @@ private struct WelcomeMesh5x5Backdrop: View {
         return grid
     }()
 
-    // Strictly bounded gentle vertex motion (≤ 0.030 on a 0.25 cell) guarantees the bicubic
-    // surface remains 100% diffeomorphic (no creases, no folds, no dividing lines ever).
+    // Strictly bounded lively interior vertex motion (≤ 0.056 on a 0.25 cell → min gap 0.138)
+    // guarantees the bicubic surface stays 100% diffeomorphic (zero creases/folds) while flowing visibly.
     static func points(at time: TimeInterval) -> [SIMD2<Float>] {
         let t = Float(time)
         var result: [SIMD2<Float>] = []
@@ -1053,9 +1053,9 @@ private struct WelcomeMesh5x5Backdrop: View {
                 let isLeftOrRightEdge = (col == 0 || col == 4)
                 let isTopOrBottomEdge = (row == 0 || row == 4)
 
-                let phase = Float(row * 5 + col) * 0.73
-                let dx: Float = isLeftOrRightEdge ? 0 : sin(t * 0.82 + phase) * 0.030
-                let dy: Float = isTopOrBottomEdge ? 0 : cos(t * 0.72 + phase * 1.29) * 0.030
+                let phase = Float(row * 5 + col) * 0.87
+                let dx: Float = isLeftOrRightEdge ? 0 : (sin(t * 1.45 + phase) * 0.042 + cos(t * 0.92 - phase * 0.6) * 0.014)
+                let dy: Float = isTopOrBottomEdge ? 0 : (cos(t * 1.28 + phase * 1.21) * 0.042 + sin(t * 0.85 + phase * 0.7) * 0.014)
 
                 result.append([base.x + dx, base.y + dy])
             }
@@ -1063,17 +1063,18 @@ private struct WelcomeMesh5x5Backdrop: View {
         return result
     }
 
-    /// Evaluates a full-spectrum liquid-glass prism field across the fold-free 5×5 lattice
-    /// faithful to every color in the Grav logo (Mint upper-left, Solar Amber top crest,
-    /// Coral Rose upper-right, Electric Sky Azure & Cobalt lower sweep, with Crystalline Ice
-    /// silk highlights), while keeping deep azure/obsidian contrast behind center typography.
+    /// Evaluates a lively, continuously flowing full-spectrum liquid-glass prism field across the
+    /// fold-free 5×5 lattice faithful to every color in the Grav logo (Mint, Solar Amber, Coral Rose,
+    /// Electric Sky Azure, Cobalt, and Crystalline Ice silk currents), while keeping crisp contrast
+    /// behind center typography.
     static func colors(at time: TimeInterval, points: [SIMD2<Float>]) -> [Color] {
         let t = time
-        let driftAngle = sin(t * 0.34) * 0.28
-        let cos1 = cos(t * 0.44)
-        let sin1 = sin(t * 0.44)
-        let cos2 = cos(-t * 0.32 + 1.4)
-        let sin2 = sin(-t * 0.32 + 1.4)
+        // Continuous liquid orbit so the prism colors visibly sweep and breathe at 120Hz
+        let continuousOrbit = t * 0.46
+        let cos1 = cos(t * 0.68)
+        let sin1 = sin(t * 0.68)
+        let cos2 = cos(-t * 0.54 + 1.4)
+        let sin2 = sin(-t * 0.54 + 1.4)
 
         var result: [Color] = []
         result.reserveCapacity(points.count)
@@ -1082,27 +1083,26 @@ private struct WelcomeMesh5x5Backdrop: View {
             let dx = Double(pt.x) - 0.5
             let dy = Double(pt.y) - 0.5
 
-            // Map spatial angle around the canvas onto the logo's exact chromatic orientation:
-            // upper-left = Mint, top = Solar Amber, upper-right = Coral Rose, bottom = Electric Azure.
-            let rawAngle = atan2(dy, dx) + 0.35 + driftAngle
-            let waveShift = sin((dx * cos1 + dy * sin1) * 2.4 + t * 0.75) * 0.24
-            var normalized = (rawAngle + waveShift) / (2.0 * Double.pi)
+            // Continuously flowing chromatic prism sweep + traveling bi-harmonic silk waves
+            let rawAngle = atan2(dy, dx) + 0.35 + continuousOrbit
+            let wave1 = sin((dx * cos1 + dy * sin1) * 3.1 + t * 1.75) * 0.42
+            let wave2 = cos((dx * cos2 + dy * sin2) * 2.5 - t * 1.35) * 0.28
+            var normalized = (rawAngle + wave1 + wave2) / (2.0 * Double.pi)
             normalized = normalized - floor(normalized)
 
             var rgb = samplePrismRing(at: normalized)
 
-            // Subtle silk-ice refraction swell drifting across the flanks
-            let silk = 0.5 + 0.5 * cos((dx * cos2 + dy * sin2) * 2.2 - t * 0.65)
-            let radial = min(1.0, hypot(dx, dy) / 0.68)
-            let iceLift = pow(silk, 2.2) * (0.14 + 0.24 * radial)
+            // Briskly gliding silk-ice refraction ribbons across the outer flanks
+            let silk = 0.5 + 0.5 * cos((dx * cos2 + dy * sin2) * 2.8 - t * 1.55)
+            let radial = min(1.0, hypot(dx, dy) / 0.64)
+            let iceLift = pow(silk, 1.9) * (0.16 + 0.34 * radial)
             rgb = WelcomeRGB.mix(rgb, GravWelcomePalette.icePocket, iceLift)
 
-            // Anchor the center typography zone in deep Electric Cobalt-Azure so the white logo,
-            // "Meet Grav." headline, and white arrow pill stay effortlessly crisp and luminous.
-            let nx = dx / 0.36
-            let ny = dy / 0.28
-            let centerProximity = exp(-(nx * nx + ny * ny) * 1.15)
-            rgb = WelcomeRGB.mix(rgb, GravWelcomePalette.brandTeal, centerProximity * 0.54)
+            // Gently deepen only the tight center typography zone so white logo & "Meet Grav." stay razor-sharp
+            let nx = dx / 0.34
+            let ny = dy / 0.25
+            let centerProximity = exp(-(nx * nx + ny * ny) * 1.35)
+            rgb = WelcomeRGB.mix(rgb, GravWelcomePalette.brandTeal, centerProximity * 0.44)
 
             result.append(rgb.color)
         }

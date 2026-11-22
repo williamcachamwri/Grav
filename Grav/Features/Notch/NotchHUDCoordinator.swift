@@ -152,19 +152,29 @@ public final class NotchHUDCoordinator {
         presenter.peek()
     }
 
-    /// Returns the AppKit screen-space target point at the center of the physical notch
-    /// (or standalone collapsed island) for onboarding finale trajectories.
+    /// Returns the exact AppKit screen-space center of the left-side Grav app logo inside
+    /// the collapsed Notch pill so the onboarding completion finale docks pixel-for-pixel onto it.
     public func notchTargetScreenPoint() -> CGPoint {
         presenter.refreshPlacement()
         let geometry = presenter.geometry
+        let hasPhysicalNotch = geometry.hasPhysicalNotch
+        let pillWidth = presenter.collapsedSurfaceWidth > 0
+            ? presenter.collapsedSurfaceWidth
+            : (hasPhysicalNotch ? (geometry.notchWidth + Self.notchedCollapsedReserve * 2) : Self.standaloneCollapsedWidth)
+        let logoInsetFromPillLeft: CGFloat = hasPhysicalNotch ? (11.0 + 9.0) : (12.0 + 9.5)
+
         if geometry.screenFrame != .zero {
-            let rect = geometry.notchRect
-            return CGPoint(x: rect.midX, y: rect.midY)
+            let centerX = geometry.notchRect.midX
+            let pillLeftX = centerX - (pillWidth * 0.5)
+            let logoCenterX = pillLeftX + logoInsetFromPillLeft
+            let logoCenterY = geometry.screenFrame.maxY - (geometry.collapsedHeight * 0.5)
+            return CGPoint(x: logoCenterX, y: logoCenterY)
         }
         if let screen = NSScreen.main ?? NSScreen.screens.first {
+            let pillLeftX = screen.frame.midX - (Self.standaloneCollapsedWidth * 0.5)
             return CGPoint(
-                x: screen.frame.midX,
-                y: screen.frame.maxY - NotchGeometry.simulatedNotchHeight / 2
+                x: pillLeftX + 21.5,
+                y: screen.frame.maxY - (NotchGeometry.simulatedNotchHeight * 0.5)
             )
         }
         return .zero

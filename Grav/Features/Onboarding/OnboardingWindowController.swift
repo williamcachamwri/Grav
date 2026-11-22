@@ -551,10 +551,10 @@ private struct OnboardingFinaleOverlayView: View {
                     .opacity(iconOpacity)
             }
 
-            // Native macOS Dark Liquid Glass Arrival Pill anchored directly beneath the notch
+            // Native macOS Dark Liquid Glass Arrival Pill centered cleanly beneath the notch
             notchArrivalPill
                 .position(
-                    x: min(max(targetPoint.x, 190), screenSize.width - 190),
+                    x: min(max(screenSize.width * 0.5, 190), screenSize.width - 190),
                     y: menuBarHeight + 31
                 )
                 .opacity(pillVisible ? 1 : 0)
@@ -694,7 +694,8 @@ private struct OnboardingFinaleOverlayView: View {
     }
 }
 
-/// Pure GPU 120fps curved ascent of the 60.5pt Grav app icon straight into the 15pt orbital mark.
+/// Pure GPU 120fps curved ascent of the 60.5pt Grav app icon landing pixel-for-pixel onto the
+/// 19pt left-side Grav logo inside the collapsed Notch pill.
 private struct FinaleIconFlightModifier: ViewModifier, Animatable {
     var progress: CGFloat
     let startPoint: CGPoint
@@ -709,44 +710,43 @@ private struct FinaleIconFlightModifier: ViewModifier, Animatable {
         let t = max(0, min(1, progress))
         let arc = sin(t * .pi)
 
-        // Graceful buoyant flight arc toward the MacBook notch
-        let x = startPoint.x + (targetPoint.x - startPoint.x) * t + 34 * arc
-        let y = startPoint.y + (targetPoint.y - startPoint.y) * t - 26 * arc
+        // Graceful zero-gravity curved ascent straight into the left-side Grav logo
+        let x = startPoint.x + (targetPoint.x - startPoint.x) * t - 26 * arc
+        let y = startPoint.y + (targetPoint.y - startPoint.y) * t - 28 * arc
 
         let startSize: CGFloat = 60.5
-        let endSize: CGFloat = 18.0
+        let endSize: CGFloat = 19.0
         let currentSize = startSize + (endSize - startSize) * t
 
         let startRadius: CGFloat = Radius.card * 1.08
-        let endRadius: CGFloat = 5.5
+        let endRadius: CGFloat = 19.0 * 0.225
         let currentRadius = startRadius + (endRadius - startRadius) * t
         let shape = RoundedRectangle(cornerRadius: currentRadius, style: .continuous)
 
-        // Cross-blend cleanly from the Grav app icon into the crisp white orbital mark
-        let markBlend = min(1.0, max(0.0, Double((t - 0.68) / 0.28)))
-        let iconAlpha = 1.0 - markBlend
-
-        ZStack {
-            if iconAlpha > 0.005 {
-                Image(nsImage: GravOnboardingIconCache.appIcon)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: currentSize, height: currentSize)
-                    .clipShape(shape)
-                    .shadow(
-                        color: Color.black.opacity(0.30 * (1.0 - Double(t) * 0.75)),
-                        radius: 14,
-                        y: 7
-                    )
-                    .opacity(iconAlpha)
-            }
-
-            if markBlend > 0.005 {
-                GravOrbitalMark(size: 15, tint: .white)
-                    .opacity(markBlend)
-            }
-        }
-        .position(x: x, y: y)
+        Image(nsImage: GravOnboardingIconCache.appIcon)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: currentSize, height: currentSize)
+            .clipShape(shape)
+            .overlay(
+                shape.strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.28),
+                            Color.white.opacity(0.06),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.5
+                )
+            )
+            .shadow(
+                color: Color.black.opacity(0.34 * (1.0 - Double(t) * 0.85)),
+                radius: 14,
+                y: 7
+            )
+            .position(x: x, y: y)
     }
 }
