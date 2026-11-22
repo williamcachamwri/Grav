@@ -254,93 +254,18 @@ public struct ExpandedNotchHeaderView: View {
         .buttonStyle(NotchChromeButtonStyle(isActive: isShowingMetricsPopover, cornerRadius: 6))
         .fixedSize(horizontal: true, vertical: false)
         .popover(isPresented: $isShowingMetricsPopover, arrowEdge: .bottom) {
-            sessionTelemetryPopover
+            SessionTelemetryInspectorPopover(
+                store: store,
+                reduceMotion: reduceMotion
+            )
         }
         .help(
-            "Click for session telemetry breakdown — In: \(metrics.inputTokens.formatted()) · Cache: \(metrics.cacheReadTokens.formatted()) · Out: \(metrics.outputTokens.formatted())"
+            "Click for token breakdown — In: \(metrics.inputTokens.formatted()) · Cache: \(metrics.cacheReadTokens.formatted()) · Out: \(metrics.outputTokens.formatted())"
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "Tokens: \(inputText) input, \(cacheText) cached, \(outputText) output"
         )
-    }
-
-    private var sessionTelemetryPopover: some View {
-        let metrics = store.tokenMetrics
-        let cachePercent = Int((metrics.cacheHitRate * 100.0).rounded())
-
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Session Telemetry")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.94))
-                Spacer()
-                if let model = store.activeModel, !model.isEmpty {
-                    Text(model)
-                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.45))
-                        .lineLimit(1)
-                }
-            }
-
-            VStack(spacing: 6) {
-                metricRow("Input Tokens", metrics.inputTokens.formatted(), tint: Color.white.opacity(0.84))
-                metricRow("Cache Read", "\(metrics.cacheReadTokens.formatted()) (\(cachePercent)%)", tint: GravPalette.emerald)
-                metricRow("Output Tokens", metrics.outputTokens.formatted(), tint: GravPalette.glacialCyan)
-            }
-
-            // Whisper-thin cache efficiency bar
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                    Capsule(style: .continuous)
-                        .fill(GravPalette.emerald.opacity(0.85))
-                        .frame(width: max(4, geo.size.width * metrics.cacheHitRate))
-                }
-            }
-            .frame(height: 3)
-
-            Rectangle()
-                .fill(Color.white.opacity(0.08))
-                .frame(height: 0.5)
-
-            HStack(spacing: 14) {
-                compactCounter("Replies", store.responses.count)
-                compactCounter("Files", store.fileChanges.count)
-                compactCounter("Commands", store.commands.count)
-                Spacer()
-            }
-        }
-        .padding(12)
-        .frame(width: 244)
-        .background(Color(red: 0.08, green: 0.09, blue: 0.11))
-        .environment(\.colorScheme, .dark)
-    }
-
-    private func metricRow(_ label: String, _ value: String, tint: Color) -> some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 10.5, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.50))
-            Spacer()
-            Text(value)
-                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(tint)
-        }
-    }
-
-    private func compactCounter(_ label: String, _ count: Int) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text("\(count)")
-                .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(Color.white.opacity(0.90))
-            Text(label)
-                .font(.system(size: 9.5, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.42))
-        }
     }
 
     private func tokenPair(prefix: String, value: String, color: Color) -> some View {
@@ -388,5 +313,299 @@ public struct ExpandedNotchHeaderView: View {
         .buttonStyle(NotchChromeButtonStyle(cornerRadius: 6))
         .help("Grav Settings")
         .accessibilityLabel("Open Grav Settings")
+    }
+}
+
+// MARK: - Precision Session Telemetry Inspector Popover
+
+/// Industrial-minimal macOS inspector popover for live token composition and session activity.
+/// Zero boilerplate titles, zero neon text rainbows, balanced full-width grid, and perceptual
+/// 3-segment proportional bar.
+private struct SessionTelemetryInspectorPopover: View {
+    var store: AntigravityTelemetryStore
+    var reduceMotion: Bool
+
+    @State private var revealProgress: CGFloat = 0
+    @State private var copiedFeedback = false
+    @State private var copyResetTask: Task<Void, Never>?
+
+    private var metrics: TokenMetrics { store.tokenMetrics }
+
+    private var netAddedLines: Int {
+        store.fileChanges.reduce(0) { $0 + $1.addedLines }
+    }
+
+    private var netRemovedLines: Int {
+        store.fileChanges.reduce(0) { $0 + $1.removedLines }
+    }
+
+    var body: some View {
+        let total = metrics.totalTokens
+        let cachePercent = Int((metrics.cacheHitRate * 100.0).rounded())
+
+        VStack(alignment: .leading, spacing: 13) {
+            // 1. Hero Total + Quiet Model Identifier & Copy Action
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(TokenMetrics.formatCompact(total))
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .tracking(-0.6)
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(0.96))
+                        .contentTransition(reduceMotion ? .identity : .numericText())
+
+                    Text("tokens")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.36))
+                }
+
+                Spacer(minLength: 8)
+
+                HStack(spacing: 5) {
+                    if let model = store.activeModel, !model.isEmpty {
+                        Text(model)
+                            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.42))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    Button {
+                        copyMetricsSummary()
+                    } label: {
+                        Image(systemName: copiedFeedback ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(copiedFeedback ? GravPalette.emerald : Color.white.opacity(0.42))
+                            .frame(width: 20, height: 20)
+                            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                    }
+                    .buttonStyle(NotchChromeButtonStyle(cornerRadius: 5))
+                    .help("Copy token breakdown")
+                }
+            }
+
+            // 2. Perceptual 3-Segment Token Composition Bar
+            tokenCompositionBar
+
+            // 3. Calm Monochrome Tabular Breakdown Ledger
+            VStack(spacing: 7) {
+                ledgerRow(
+                    dotColor: GravPalette.emerald.opacity(0.84),
+                    label: "Cached",
+                    detail: total > 0 ? "\(cachePercent)%" : nil,
+                    value: metrics.cacheReadTokens.formatted()
+                )
+                ledgerRow(
+                    dotColor: Color.white.opacity(0.86),
+                    label: "Input",
+                    detail: nil,
+                    value: metrics.inputTokens.formatted()
+                )
+                ledgerRow(
+                    dotColor: GravPalette.glacialCyan,
+                    label: "Output",
+                    detail: nil,
+                    value: metrics.outputTokens.formatted()
+                )
+            }
+
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 0.5)
+
+            // 4. Balanced Equal-Width 3-Column Activity Strip (Zero Dead Whitespace)
+            HStack(spacing: 0) {
+                balancedStatCell(count: store.responses.count, label: "Replies")
+                verticalHairline
+                balancedStatCell(count: store.fileChanges.count, label: "Files")
+                verticalHairline
+                balancedStatCell(count: store.commands.count, label: "Commands")
+            }
+
+            if netAddedLines > 0 || netRemovedLines > 0 {
+                Rectangle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(height: 0.5)
+
+                HStack(spacing: 6) {
+                    Text("Session Diff")
+                        .font(.system(size: 10, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.38))
+
+                    Spacer()
+
+                    HStack(spacing: 6) {
+                        Text("+\(netAddedLines.formatted())")
+                            .foregroundStyle(GravPalette.emerald.opacity(0.88))
+                        Text("-\(netRemovedLines.formatted())")
+                            .foregroundStyle(GravPalette.coral.opacity(0.88))
+                    }
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .frame(width: 274)
+        .background(
+            ZStack {
+                Color(red: 0.065, green: 0.070, blue: 0.082)
+                LinearGradient(
+                    colors: [Color.white.opacity(0.032), Color.clear],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+            }
+        )
+        .environment(\.colorScheme, .dark)
+        .onAppear {
+            if reduceMotion {
+                revealProgress = 1
+            } else {
+                revealProgress = 0
+                withAnimation(.spring(duration: 0.42, bounce: 0.08)) {
+                    revealProgress = 1
+                }
+            }
+        }
+        .onDisappear {
+            copyResetTask?.cancel()
+        }
+    }
+
+    // MARK: - Subviews
+
+    private var tokenCompositionBar: some View {
+        let segments = resolvedBarSegments()
+
+        return GeometryReader { geo in
+            let totalWidth = max(1, geo.size.width)
+            let gap: CGFloat = segments.count > 1 ? 2.5 : 0
+            let totalGap = gap * CGFloat(max(0, segments.count - 1))
+            let usable = max(0, totalWidth - totalGap)
+
+            if segments.isEmpty {
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+            } else {
+                let widths = perceptualWidths(for: segments.map(\.fraction), usableWidth: usable, minSegment: 10)
+                HStack(spacing: gap) {
+                    ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
+                        RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                            .fill(segment.color)
+                            .frame(width: max(2, widths[index] * revealProgress))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(height: 5)
+    }
+
+    private struct BarSegment {
+        let fraction: Double
+        let color: Color
+    }
+
+    private func resolvedBarSegments() -> [BarSegment] {
+        let total = Double(metrics.totalTokens)
+        guard total > 0 else { return [] }
+        var list: [BarSegment] = []
+        if metrics.cacheReadTokens > 0 {
+            list.append(BarSegment(fraction: Double(metrics.cacheReadTokens) / total, color: GravPalette.emerald.opacity(0.84)))
+        }
+        if metrics.inputTokens > 0 {
+            list.append(BarSegment(fraction: Double(metrics.inputTokens) / total, color: Color.white.opacity(0.86)))
+        }
+        if metrics.outputTokens > 0 {
+            list.append(BarSegment(fraction: Double(metrics.outputTokens) / total, color: GravPalette.glacialCyan))
+        }
+        return list
+    }
+
+    /// Distributes bar widths proportionally while guaranteeing each active segment stays
+    /// optically readable (at least `minSegment` points) even at 97%+ cache hit ratios.
+    private func perceptualWidths(for fractions: [Double], usableWidth: CGFloat, minSegment: CGFloat) -> [CGFloat] {
+        guard !fractions.isEmpty else { return [] }
+        let raw = fractions.map { CGFloat($0) * usableWidth }
+        let clamped = raw.map { max(minSegment, $0) }
+        let sum = clamped.reduce(0, +)
+        guard sum > 0 else { return raw }
+        let scale = usableWidth / sum
+        return clamped.map { $0 * scale }
+    }
+
+    private func ledgerRow(
+        dotColor: Color,
+        label: String,
+        detail: String?,
+        value: String
+    ) -> some View {
+        HStack(spacing: 7) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(dotColor)
+                .frame(width: 5.5, height: 5.5)
+
+            Text(label)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.54))
+
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.34))
+            }
+
+            Spacer(minLength: 8)
+
+            Text(value)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(Color.white.opacity(0.90))
+        }
+    }
+
+    private var verticalHairline: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.08))
+            .frame(width: 0.5, height: 24)
+    }
+
+    private func balancedStatCell(count: Int, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text("\(count)")
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(Color.white.opacity(0.92))
+                .contentTransition(reduceMotion ? .identity : .numericText())
+
+            Text(label)
+                .font(.system(size: 9.5, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.40))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func copyMetricsSummary() {
+        GravOnboardingWelcomeAudio.shared.playButtonTap()
+        let cachePct = Int((metrics.cacheHitRate * 100.0).rounded())
+        let modelPart = store.activeModel.map { "Model: \($0)\n" } ?? ""
+        let summary = """
+        \(modelPart)Total Tokens: \(metrics.totalTokens.formatted())
+        Cached: \(metrics.cacheReadTokens.formatted()) (\(cachePct)%)
+        Input: \(metrics.inputTokens.formatted())
+        Output: \(metrics.outputTokens.formatted())
+        Activity: \(store.responses.count) replies · \(store.fileChanges.count) files · \(store.commands.count) commands
+        """
+        NotchTelemetryHelpers.copyToPasteboard(summary)
+        copiedFeedback = true
+        copyResetTask?.cancel()
+        copyResetTask = Task {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            guard !Task.isCancelled else { return }
+            copiedFeedback = false
+        }
     }
 }
