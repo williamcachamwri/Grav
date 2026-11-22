@@ -158,28 +158,13 @@ public struct ExpandedNotchHeaderView: View {
             return stateDotColor
         }()
 
-        return HStack(spacing: 4.5) {
+        return HStack(spacing: 5) {
             if isTurbo {
-                HStack(spacing: 2.5) {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 7.5, weight: .bold))
-                    Text("TURBO")
-                        .font(.system(size: 8.5, weight: .bold, design: .monospaced))
-                        .tracking(0.5)
-                }
-                .foregroundStyle(GravPalette.turboEmber)
-                .padding(.horizontal, 5)
-                .frame(height: 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(GravPalette.turboEmber.opacity(0.12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .strokeBorder(GravPalette.turboEmber.opacity(0.36), lineWidth: 0.5)
-                        )
+                TurboSolarEmblem(
+                    isSurging: isActivelyStreaming || runningTasks > 0,
+                    reduceMotion: reduceMotion
                 )
-                .help("Antigravity Turbo Mode — All commands execute without restrictions")
-                .padding(.trailing, 2)
+                .padding(.trailing, 3)
             }
 
             NotchSemanticDot(

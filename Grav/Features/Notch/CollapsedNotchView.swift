@@ -32,7 +32,20 @@ public struct CollapsedNotchView: View {
         let hasPhysicalNotch = presenter.geometry.hasPhysicalNotch
         let pillHeight = presenter.geometry.collapsedHeight
 
-        ZStack(alignment: .bottom) {
+        let isPowerSurging = effectiveState.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil
+
+        ZStack(alignment: .center) {
+            if isTurbo {
+                TurboKineticAuraCanvas(
+                    style: .collapsed,
+                    isPowerSurging: isPowerSurging,
+                    reduceMotion: reduceMotion
+                )
+                .frame(maxWidth: .infinity, maxHeight: pillHeight)
+                .clipped()
+                .transition(.opacity)
+            }
+
             Group {
                 if hasPhysicalNotch {
                     NotchCutoutLayout(
@@ -58,17 +71,6 @@ public struct CollapsedNotchView: View {
                 }
             }
             .frame(height: pillHeight)
-
-            if isTurbo {
-                TurboThermalRimView(
-                    isActive: effectiveState.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil,
-                    reduceMotion: reduceMotion
-                )
-                .padding(.horizontal, hasPhysicalNotch ? 22 : 18)
-                .padding(.bottom, 0.5)
-                .allowsHitTesting(false)
-                .transition(.opacity)
-            }
         }
         .frame(height: pillHeight)
         .accessibilityElement(children: .combine)
@@ -86,8 +88,26 @@ public struct CollapsedNotchView: View {
             Button {
                 store.activateAntigravityApp()
             } label: {
-                GravAppIconTile(size: compact ? 18 : 19)
-                    .opacity(store.isPaused ? 0.42 : 1.0)
+                ZStack {
+                    if isTurbo {
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [
+                                        Color(red: 1.0, green: 0.84, blue: 0.14).opacity(effectiveState.isActive ? 0.45 : 0.22),
+                                        Color.clear,
+                                    ],
+                                    center: .center,
+                                    startRadius: 2,
+                                    endRadius: 14
+                                )
+                            )
+                            .frame(width: 26, height: 26)
+                            .blendMode(.plusLighter)
+                    }
+                    GravAppIconTile(size: compact ? 18 : 19)
+                        .opacity(store.isPaused ? 0.42 : 1.0)
+                }
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open Antigravity")
@@ -496,7 +516,7 @@ public struct CollapsedNotchView: View {
     }
 
     private var workingWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? GravPalette.turboEmber : Color.white.opacity(0.72)
+        let tint = isTurbo ? Color(red: 1.0, green: 0.84, blue: 0.14) : Color.white.opacity(0.72)
         if reduceMotion {
             return .steady([0.38, 0.78, 0.50], barWidth: 1.5, spacing: 1.7, height: 9, tint: tint)
         }
@@ -507,14 +527,14 @@ public struct CollapsedNotchView: View {
             barWidth: 1.5,
             spacing: 1.7,
             height: 9,
-            period: isTurbo ? 0.52 : 0.86,
-            stagger: isTurbo ? 0.10 : 0.14,
+            period: isTurbo ? 0.48 : 0.86,
+            stagger: isTurbo ? 0.09 : 0.14,
             tint: tint
         )
     }
 
     private var thinkingWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? GravPalette.turboEmber : GravPalette.thinking
+        let tint = isTurbo ? Color(red: 1.0, green: 0.86, blue: 0.20) : GravPalette.thinking
         if reduceMotion {
             return .steady([0.38, 0.85, 0.55, 0.92], barWidth: 1.6, spacing: 1.7, height: 10, tint: tint)
         }
@@ -525,14 +545,14 @@ public struct CollapsedNotchView: View {
             barWidth: 1.6,
             spacing: 1.7,
             height: 10,
-            period: isTurbo ? 0.48 : 0.72,
-            stagger: isTurbo ? 0.09 : 0.13,
+            period: isTurbo ? 0.44 : 0.72,
+            stagger: isTurbo ? 0.08 : 0.13,
             tint: tint
         )
     }
 
     private var replyingWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? GravPalette.turboWhiteHot : GravPalette.emerald
+        let tint = isTurbo ? Color(red: 1.0, green: 0.98, blue: 0.82) : GravPalette.emerald
         if reduceMotion {
             return .steady([0.52, 0.88, 0.64], barWidth: 1.6, spacing: 1.7, height: 9.5, tint: tint)
         }
@@ -543,14 +563,14 @@ public struct CollapsedNotchView: View {
             barWidth: 1.6,
             spacing: 1.7,
             height: 9.5,
-            period: isTurbo ? 0.44 : 0.62,
-            stagger: 0.11,
+            period: isTurbo ? 0.40 : 0.62,
+            stagger: 0.10,
             tint: tint
         )
     }
 
     private var commandWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? GravPalette.turboCrimson : Color.white.opacity(0.85)
+        let tint = isTurbo ? Color(red: 1.0, green: 0.68, blue: 0.10) : Color.white.opacity(0.85)
         if reduceMotion {
             return .steady([0.45, 0.9, 0.55], barWidth: 1.6, spacing: 1.7, height: 9.5, tint: tint)
         }

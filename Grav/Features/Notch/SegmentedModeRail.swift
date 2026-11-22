@@ -99,15 +99,15 @@ public struct SegmentedModeRail: View {
 
                     if isSelected {
                         RoundedRectangle(cornerRadius: 6.5, style: .continuous)
-                            .fill(isTurboMode ? GravPalette.turboEmber.opacity(0.14) : Color.white.opacity(0.105))
+                            .fill(Color.white.opacity(isTurboMode ? 0.095 : 0.105))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6.5, style: .continuous)
                                     .strokeBorder(
                                         LinearGradient(
                                             colors: isTurboMode
                                                 ? [
-                                                    GravPalette.turboWhiteHot.opacity(0.46),
-                                                    GravPalette.turboEmber.opacity(0.12),
+                                                    Color(red: 1.0, green: 0.88, blue: 0.35).opacity(0.38),
+                                                    Color.white.opacity(0.04),
                                                 ]
                                                 : [
                                                     Color.white.opacity(0.18),
@@ -119,6 +119,27 @@ public struct SegmentedModeRail: View {
                                         lineWidth: 0.5
                                     )
                             )
+                            .overlay(alignment: .bottom) {
+                                if isTurboMode {
+                                    Capsule(style: .continuous)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [
+                                                    Color.clear,
+                                                    Color(red: 1.0, green: 0.84, blue: 0.14),
+                                                    Color(red: 1.0, green: 0.98, blue: 0.86),
+                                                    Color(red: 1.0, green: 0.84, blue: 0.14),
+                                                    Color.clear,
+                                                ],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .frame(height: 1.4)
+                                        .padding(.horizontal, 12)
+                                        .shadow(color: Color(red: 1.0, green: 0.72, blue: 0.10).opacity(0.75), radius: 3, y: 0)
+                                }
+                            }
                             .matchedGeometryEffect(id: "grav-notch-mode-rail-pill", in: railNamespace)
                     }
                 }

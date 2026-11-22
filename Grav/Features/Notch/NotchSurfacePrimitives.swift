@@ -256,15 +256,15 @@ struct NotchShimmerText: View {
 
     var body: some View {
         let baseColor = turboMode
-            ? GravPalette.turboWhiteHot.opacity(max(baseOpacity, 0.56))
+            ? Color(red: 1.0, green: 0.86, blue: 0.36).opacity(max(baseOpacity, 0.58))
             : Color.white.opacity(baseOpacity)
-        let effectivePeriod = turboMode ? max(1.15, period * 0.72) : period
+        let effectivePeriod = turboMode ? max(1.05, period * 0.66) : period
 
         if reduceMotion {
             Text(text)
                 .font(font)
                 .tracking(tracking)
-                .foregroundStyle(turboMode ? GravPalette.turboWhiteHot.opacity(0.92) : Color.white.opacity(0.78))
+                .foregroundStyle(turboMode ? Color(red: 1.0, green: 0.90, blue: 0.45) : Color.white.opacity(0.78))
                 .lineLimit(1)
         } else {
             TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
@@ -273,7 +273,7 @@ struct NotchShimmerText: View {
                 let phase = rawPhase < 0 ? rawPhase + 1.0 : rawPhase
                 // Sweep highlight smoothly from -0.35 to 1.35 across the glyph width
                 let center = -0.35 + phase * 1.70
-                let bandHalfWidth = turboMode ? 0.28 : 0.24
+                let bandHalfWidth = turboMode ? 0.30 : 0.24
 
                 Text(text)
                     .font(font)
@@ -285,9 +285,9 @@ struct NotchShimmerText: View {
                             stops: turboMode
                                 ? [
                                     .init(color: .clear, location: max(0, min(1, center - bandHalfWidth))),
-                                    .init(color: GravPalette.turboEmber.opacity(0.92), location: max(0, min(1, center - bandHalfWidth * 0.45))),
-                                    .init(color: Color.white.opacity(0.98), location: max(0, min(1, center))),
-                                    .init(color: GravPalette.turboWhiteHot.opacity(0.94), location: max(0, min(1, center + bandHalfWidth * 0.45))),
+                                    .init(color: Color(red: 1.0, green: 0.62, blue: 0.06).opacity(0.95), location: max(0, min(1, center - bandHalfWidth * 0.48))),
+                                    .init(color: Color(red: 1.0, green: 0.99, blue: 0.90), location: max(0, min(1, center))),
+                                    .init(color: Color(red: 1.0, green: 0.84, blue: 0.14).opacity(0.96), location: max(0, min(1, center + bandHalfWidth * 0.48))),
                                     .init(color: .clear, location: max(0, min(1, center + bandHalfWidth))),
                                 ]
                                 : [

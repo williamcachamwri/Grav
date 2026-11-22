@@ -36,28 +36,13 @@ public struct ExpandedNotchView: View {
 
         ZStack(alignment: .bottom) {
             if isTurbo {
-                VStack(spacing: 0) {
-                    TurboThermalRimView(
-                        isActive: store.state.isActive || store.runningTaskCount > 0,
-                        reduceMotion: reduceMotion
-                    )
-                    .padding(.horizontal, 26)
-
-                    RadialGradient(
-                        colors: [
-                            GravPalette.turboEmber.opacity(store.state.isActive ? 0.085 : 0.042),
-                            GravPalette.turboCrimson.opacity(store.state.isActive ? 0.03 : 0.012),
-                            Color.clear,
-                        ],
-                        center: .top,
-                        startRadius: 2,
-                        endRadius: 140
-                    )
-                    .frame(height: 110)
-
-                    Spacer(minLength: 0)
-                }
-                .allowsHitTesting(false)
+                TurboKineticAuraCanvas(
+                    style: .expanded,
+                    isPowerSurging: store.state.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil,
+                    reduceMotion: reduceMotion
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
                 .transition(.opacity)
             }
 
