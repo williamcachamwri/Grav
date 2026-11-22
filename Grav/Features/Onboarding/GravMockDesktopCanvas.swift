@@ -8,6 +8,8 @@
 //  camera notch.
 //
 
+import AppKit
+import ImageIO
 import SwiftUI
 
 // MARK: - Mock App Identity
@@ -77,62 +79,130 @@ struct GravWatermark: Equatable, Sendable {
 
 enum GravMockPalette {
     /// Text and rules drawn on the light desktop surfaces.
-    static let ink = Color(red: 0.12, green: 0.13, blue: 0.15)
-    static let inkSecondary = Color(red: 0.34, green: 0.36, blue: 0.40)
-    static let inkTertiary = Color(red: 0.55, green: 0.57, blue: 0.61)
-    /// Window bodies and the menu bar.
-    static let chrome = Color(red: 0.985, green: 0.987, blue: 0.992)
-    static let chromeBar = Color(red: 0.94, green: 0.945, blue: 0.955)
-    static let chromeEdge = Color(red: 0.80, green: 0.81, blue: 0.83)
-    static let chromeRule = Color.black.opacity(0.08)
+    /// Authentic Dark Mode macOS ink ramp.
+    static let ink = Color.white.opacity(0.92)
+    static let inkSecondary = Color.white.opacity(0.58)
+    static let inkTertiary = Color.white.opacity(0.36)
+    /// Authentic macOS Sequoia/Tahoe Dark Mode window surfaces (`#1C1D22` body, `#24252B` titlebar, `#16171C` sidebar).
+    static let chrome = Color(red: 0.110, green: 0.114, blue: 0.132)
+    static let chromeBar = Color(red: 0.145, green: 0.149, blue: 0.172)
+    static let chromeCard = Color.white.opacity(0.052)
+    static let chromeSidebar = Color(red: 0.095, green: 0.098, blue: 0.115)
+    static let chromeEdge = Color.white.opacity(0.14)
+    static let chromeRule = Color.white.opacity(0.08)
     /// The notch and the display bezel it sits in.
-    static let bezel = Color(red: 0.04, green: 0.045, blue: 0.055)
+    static let bezel = Color.black
     /// Traffic lights, kept at their real macOS system hues (`#FF5F57`, `#FEBC2E`, `#28C840`).
     static let trafficRed = Color(red: 1.00, green: 0.373, blue: 0.341)
     static let trafficYellow = Color(red: 0.996, green: 0.737, blue: 0.180)
     static let trafficGreen = Color(red: 0.157, green: 0.784, blue: 0.251)
     /// Native macOS & Grav accents inside simulated desktop windows.
-    static let macBlue = Color(red: 0.00, green: 0.478, blue: 1.00)
+    static let macBlue = Color(red: 0.102, green: 0.557, blue: 0.992)
     static let gravTeal = Color(red: 0.102, green: 0.557, blue: 0.992)
-    static let gravEmerald = Color(red: 0.12, green: 0.68, blue: 0.48)
-    static let gravAmber = Color(red: 0.88, green: 0.58, blue: 0.08)
-    static let gravCoral = Color(red: 0.88, green: 0.32, blue: 0.30)
+    static let gravEmerald = Color(red: 0.204, green: 0.827, blue: 0.600)
+    static let gravAmber = Color(red: 0.960, green: 0.620, blue: 0.043)
+    static let gravCoral = Color(red: 0.973, green: 0.443, blue: 0.443)
 }
 
-// MARK: - Studio Watermark Wallpaper
+// MARK: - Real Built-In macOS Dark Wallpaper Loader (Cached Once for 120Hz Spaces)
+
+@MainActor
+private enum GravMacOSWallpaperCache {
+    static let darkWallpaper: NSImage? = loadBestDarkMacOSWallpaper()
+
+    private static func loadBestDarkMacOSWallpaper() -> NSImage? {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var candidates: [URL] = [
+            URL(fileURLWithPath: "\(home)/Library/Application Support/com.apple.mobileAssetDesktop/Pro Black.heic"),
+            URL(fileURLWithPath: "/System/Library/Desktop Pictures/.thumbnails/Motion Blue Dark.heic"),
+            URL(fileURLWithPath: "/System/Library/Desktop Pictures/.thumbnails/The Beach Dark.heic"),
+            URL(fileURLWithPath: "/System/Library/Desktop Pictures/.thumbnails/Catalina Evening.heic"),
+            URL(fileURLWithPath: "/System/Library/Desktop Pictures/.thumbnails/Grid Magenta Dark.heic"),
+            URL(fileURLWithPath: "/System/Library/Desktop Pictures/Mac Blue.heic"),
+        ]
+
+        if let screen = NSScreen.main ?? NSScreen.screens.first,
+           let currentURL = NSWorkspace.shared.desktopImageURL(for: screen),
+           FileManager.default.fileExists(atPath: currentURL.path)
+        {
+            candidates.insert(currentURL, at: 1)
+        }
+
+        for url in candidates {
+            if let img = decodeDownsampledImage(at: url, maxPixelSize: 1440) {
+                return img
+            }
+        }
+        return nil
+    }
+
+    private static func decodeDownsampledImage(at url: URL, maxPixelSize: Int) -> NSImage? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+}
+
+// MARK: - Authentic Built-In macOS Dark Desktop Wallpaper
 
 struct GravMockWallpaper: View, Equatable {
     var app: GravMockApp = .antigravity
 
     var body: some View {
         ZStack {
+            // Deep Pro Black studio fallback substrate
             LinearGradient(
                 colors: [
-                    Color(red: 0.945, green: 0.950, blue: 0.960),
-                    Color(red: 0.885, green: 0.895, blue: 0.915),
+                    Color(red: 0.045, green: 0.050, blue: 0.068),
+                    Color(red: 0.025, green: 0.028, blue: 0.040),
+                    Color(red: 0.015, green: 0.017, blue: 0.024),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
-            GeometryReader { proxy in
-                VStack(alignment: .leading, spacing: 38) {
-                    ForEach(0..<8, id: \.self) { row in
-                        HStack(spacing: 44) {
-                            ForEach(0..<6, id: \.self) { col in
-                                let mark = app.watermarks[(row * 3 + col) % app.watermarks.count]
-                                Text(mark.text)
-                                    .font(.system(size: mark.size, weight: mark.weight, design: .monospaced))
-                                    .foregroundStyle(Color.black.opacity(mark.opacity))
-                                    .rotationEffect(.degrees(-14))
-                            }
-                        }
-                    }
+            if let wallpaper = GravMacOSWallpaperCache.darkWallpaper {
+                GeometryReader { proxy in
+                    Image(nsImage: wallpaper)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFill()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
                 }
-                .frame(width: proxy.size.width * 1.8, height: proxy.size.height * 1.8)
-                .offset(x: -80, y: -60)
+            } else {
+                // Refined dark Apple Pro-style subtle radial silk sheen if no system wallpaper file exists
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.10, green: 0.24, blue: 0.44).opacity(0.32),
+                        Color(red: 0.04, green: 0.06, blue: 0.12).opacity(0.18),
+                        Color.clear,
+                    ],
+                    center: UnitPoint(x: 0.65, y: 0.30),
+                    startRadius: 20,
+                    endRadius: 420
+                )
             }
-            .clipped()
+
+            // Subtle dark vignette for crisp macOS Dark Mode window legibility
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.18),
+                    Color.black.opacity(0.08),
+                    Color.black.opacity(0.24),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
         .drawingGroup(opaque: true)
         .accessibilityHidden(true)
@@ -209,13 +279,13 @@ struct GravMockMenuBar: View, Equatable {
             let notchRightEdge = notchCenterX + (notchWidth / 2)
 
             ZStack(alignment: .topLeading) {
-                // Translucent frosted menu bar strip
+                // Authentic macOS Dark Mode smoked translucent menu bar
                 Rectangle()
-                    .fill(Color.white.opacity(0.84))
+                    .fill(Color(red: 0.055, green: 0.060, blue: 0.075).opacity(0.76))
                     .frame(height: Self.barHeight)
                     .overlay(
                         Rectangle()
-                            .fill(Color.black.opacity(0.06))
+                            .fill(Color.white.opacity(0.08))
                             .frame(height: 0.5),
                         alignment: .bottom
                     )
@@ -245,13 +315,13 @@ struct GravMockMenuBar: View, Equatable {
         HStack(spacing: 11) {
             Image(systemName: "apple.logo")
                 .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(Color.black.opacity(0.90))
+                .foregroundStyle(Color.white.opacity(0.94))
                 .offset(y: -0.5)
 
             HStack(spacing: 11) {
                 Text(app.menuTitle)
                     .font(.system(size: 11.5, weight: .bold))
-                    .foregroundStyle(Color.black.opacity(0.92))
+                    .foregroundStyle(Color.white.opacity(0.96))
 
                 ForEach(app.menus, id: \.self) { menu in
                     Text(menu)
@@ -262,13 +332,13 @@ struct GravMockMenuBar: View, Equatable {
             .animation(.timingCurve(0.20, 0.0, 0.12, 1.0, duration: 0.34), value: app)
         }
         .font(.system(size: 11.5, weight: .regular))
-        .foregroundStyle(Color.black.opacity(0.82))
+        .foregroundStyle(Color.white.opacity(0.86))
         .fixedSize()
     }
 
     private var trailingCluster: some View {
         HStack(spacing: 11) {
-            GravOrbitalMark(size: 11, tint: Color.black.opacity(0.84))
+            GravOrbitalMark(size: 11.5, tint: Color.white.opacity(0.90))
 
             Image(systemName: "wifi")
                 .font(.system(size: 10.5, weight: .semibold))
@@ -285,7 +355,7 @@ struct GravMockMenuBar: View, Equatable {
                 .tracking(-0.1)
                 .monospacedDigit()
         }
-        .foregroundStyle(Color.black.opacity(0.84))
+        .foregroundStyle(Color.white.opacity(0.88))
         .fixedSize()
     }
 
@@ -345,7 +415,7 @@ private struct MacOSControlCenterGlyph: View {
                     .fill(.primary)
                     .frame(width: 11, height: 4.4)
                 Circle()
-                    .fill(Color.white.opacity(0.92))
+                    .fill(Color.black.opacity(0.85))
                     .frame(width: 2.6, height: 2.6)
                     .padding(.leading, 1.0)
             }

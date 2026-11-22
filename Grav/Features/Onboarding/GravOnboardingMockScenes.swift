@@ -73,15 +73,9 @@ struct GravMockConnectScene: View {
                         .frame(width: 6, height: 6)
 
                     Text(isFullyConnected ? "Connected" : "Checking")
-                        .font(.system(size: 9.5, weight: .semibold))
+                        .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(GravMockPalette.inkSecondary)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color.black.opacity(0.05))
-                )
             }
             .padding(.horizontal, 14)
             .frame(height: 36)
@@ -96,12 +90,7 @@ struct GravMockConnectScene: View {
                 // Row 1: Antigravity App Detection
                 diagnosticCard {
                     HStack(spacing: 11) {
-                        AntigravityLogoView(icon: store.antigravityIcon, size: 24)
-                            .frame(width: 30, height: 30)
-                            .background(
-                                Radius.rect(Radius.tile)
-                                    .fill(Color.black.opacity(0.04))
-                            )
+                        AntigravityLogoView(icon: store.antigravityIcon, size: 26)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Antigravity Application")
@@ -127,14 +116,10 @@ struct GravMockConnectScene: View {
                 // Row 2: Brain Directory Access
                 diagnosticCard {
                     HStack(spacing: 11) {
-                        Image(systemName: status.isBrainAccessible ? "folder.fill.badge.person.crop" : "lock.shield")
-                            .font(.system(size: 13, weight: .medium))
+                        Image(systemName: status.isBrainAccessible ? "folder" : "lock.shield")
+                            .font(.system(size: 13.5, weight: .medium))
                             .foregroundStyle(status.isBrainAccessible ? GravMockPalette.gravTeal : GravMockPalette.gravAmber)
-                            .frame(width: 30, height: 30)
-                            .background(
-                                Radius.rect(Radius.tile)
-                                    .fill((status.isBrainAccessible ? GravMockPalette.gravTeal : GravMockPalette.gravAmber).opacity(0.10))
-                            )
+                            .frame(width: 26, height: 26)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Local Telemetry Directory")
@@ -160,13 +145,9 @@ struct GravMockConnectScene: View {
                 diagnosticCard {
                     HStack(spacing: 11) {
                         Image(systemName: "waveform.path.ecg")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 13.5, weight: .medium))
                             .foregroundStyle(GravMockPalette.gravTeal)
-                            .frame(width: 30, height: 30)
-                            .background(
-                                Radius.rect(Radius.tile)
-                                    .fill(GravMockPalette.gravTeal.opacity(0.10))
-                            )
+                            .frame(width: 26, height: 26)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Discovered Conversations")
@@ -188,19 +169,14 @@ struct GravMockConnectScene: View {
                         Spacer(minLength: 8)
 
                         Text("\(status.activeConversationCount)")
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundStyle(GravMockPalette.ink)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.black.opacity(0.06))
-                            )
+                            .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(GravMockPalette.inkSecondary)
                     }
                 }
             }
             .padding(14)
-            .background(Color(red: 0.962, green: 0.965, blue: 0.972))
+            .background(GravMockPalette.chrome)
 
             Rectangle()
                 .fill(GravMockPalette.chromeRule)
@@ -219,17 +195,16 @@ struct GravMockConnectScene: View {
                         Text("Refresh")
                             .font(.system(size: 10, weight: .medium))
                     }
-                    .foregroundStyle(GravMockPalette.ink.opacity(0.88))
+                    .foregroundStyle(GravMockPalette.ink.opacity(0.90))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(
                         Radius.rect(Radius.controlXS)
-                            .fill(isRefreshHovered ? Color(white: 0.94) : Color.white)
+                            .fill(isRefreshHovered ? Color.white.opacity(0.14) : Color.white.opacity(0.08))
                             .overlay(
                                 Radius.rect(Radius.controlXS)
-                                    .strokeBorder(Color.black.opacity(0.14), lineWidth: 0.5)
+                                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
                             )
-                            .shadow(color: Color.black.opacity(0.06), radius: 1, y: 0.5)
                     )
                 }
                 .buttonStyle(.plain)
@@ -276,7 +251,6 @@ struct GravMockConnectScene: View {
                         .background(
                             Radius.rect(Radius.controlXS)
                                 .fill(isOpenHovered ? GravMockPalette.gravTeal.opacity(0.88) : GravMockPalette.gravTeal)
-                                .shadow(color: Color.black.opacity(0.12), radius: 1, y: 0.5)
                         )
                     }
                     .buttonStyle(.plain)
@@ -291,10 +265,10 @@ struct GravMockConnectScene: View {
         .clipShape(Radius.rect(Radius.card))
         .overlay(
             Radius.rect(Radius.card)
-                .strokeBorder(Color.black.opacity(0.14), lineWidth: 0.5)
+                .strokeBorder(GravMockPalette.chromeEdge, lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.24), radius: 22, x: 0, y: 10)
-        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+        .shadow(color: Color.black.opacity(0.55), radius: 28, x: 0, y: 14)
+        .shadow(color: Color.black.opacity(0.22), radius: 5, x: 0, y: 2)
     }
 
     private func diagnosticCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -303,30 +277,24 @@ struct GravMockConnectScene: View {
             .padding(.vertical, 10)
             .background(
                 Radius.rect(Radius.controlM)
-                    .fill(Color.white)
+                    .fill(GravMockPalette.chromeCard)
                     .overlay(
                         Radius.rect(Radius.controlM)
-                            .strokeBorder(Color.black.opacity(0.07), lineWidth: 0.5)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
                     )
             )
     }
 
     private func statusPill(label: String, isPositive: Bool) -> some View {
-        HStack(spacing: 4.5) {
+        HStack(spacing: 5) {
             Circle()
                 .fill(isPositive ? GravMockPalette.gravEmerald : GravMockPalette.gravAmber)
                 .frame(width: 5.5, height: 5.5)
 
             Text(label)
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(isPositive ? GravMockPalette.gravEmerald : GravMockPalette.gravAmber)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(isPositive ? Color.white.opacity(0.76) : GravMockPalette.gravAmber)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3.5)
-        .background(
-            Capsule(style: .continuous)
-                .fill((isPositive ? GravMockPalette.gravEmerald : GravMockPalette.gravAmber).opacity(0.11))
-        )
         .fixedSize()
     }
 }
@@ -401,15 +369,15 @@ struct GravMockNotchScene: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white)
+            .background(GravMockPalette.chrome)
         }
         .frame(maxWidth: 486)
         .clipShape(Radius.rect(Radius.card))
         .overlay(
             Radius.rect(Radius.card)
-                .strokeBorder(Color.black.opacity(0.10), lineWidth: 0.5)
+                .strokeBorder(GravMockPalette.chromeEdge, lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.14), radius: 16, y: 6)
+        .shadow(color: Color.black.opacity(0.50), radius: 24, y: 12)
     }
 
     private func codeLine(_ number: String, _ text: String, accent: Color) -> some View {
@@ -456,17 +424,17 @@ struct GravMockNotchOverlay: View {
                     Text("Hover or click the notch to expand")
                         .font(.system(size: 10.5, weight: .medium))
                 }
-                .foregroundStyle(GravMockPalette.inkSecondary)
+                .foregroundStyle(Color.white.opacity(0.84))
                 .padding(.horizontal, 11)
                 .padding(.vertical, 5)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.90))
+                        .fill(Color(red: 0.10, green: 0.11, blue: 0.14).opacity(0.88))
                         .overlay(
                             Capsule(style: .continuous)
-                                .strokeBorder(Color.black.opacity(0.08), lineWidth: 0.5)
+                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
                         )
-                        .shadow(color: Color.black.opacity(0.08), radius: 6, y: 2)
+                        .shadow(color: Color.black.opacity(0.36), radius: 10, y: 4)
                 )
                 .allowsHitTesting(false)
                 .transition(GravMockScene.hudTransition)
@@ -837,17 +805,17 @@ struct GravMockPreferencesScene: View {
                 HStack(spacing: 4) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 8.5))
-                        .foregroundStyle(Color.black.opacity(0.42))
+                        .foregroundStyle(Color.white.opacity(0.38))
                     Text("Search")
                         .font(.system(size: 9.5))
-                        .foregroundStyle(Color.black.opacity(0.42))
+                        .foregroundStyle(Color.white.opacity(0.38))
                     Spacer()
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3.5)
                 .background(
                     Radius.rect(Radius.controlXS)
-                        .fill(Color.black.opacity(0.06))
+                        .fill(Color.white.opacity(0.07))
                 )
                 .padding(.horizontal, 8)
 
@@ -867,24 +835,24 @@ struct GravMockPreferencesScene: View {
                 .padding(.top, 3)
 
                 Rectangle()
-                    .fill(Color.black.opacity(0.06))
+                    .fill(GravMockPalette.chromeRule)
                     .frame(height: 0.5)
                     .padding(.horizontal, 8)
 
                 VStack(spacing: 2) {
                     sidebarItem(icon: "gearshape.fill", title: "Startup & HUD", badgeColor: GravMockPalette.gravTeal, isSelected: true)
                     sidebarItem(icon: "macbook", title: "Notch Behavior", badgeColor: GravMockPalette.macBlue, isSelected: false)
-                    sidebarItem(icon: "sparkles", title: "Liquid Glass", badgeColor: Color(white: 0.45), isSelected: false)
-                    sidebarItem(icon: "hand.raised.fill", title: "Local Telemetry", badgeColor: GravMockPalette.gravEmerald, isSelected: false)
+                    sidebarItem(icon: "square.on.square.dashed", title: "Liquid Glass", badgeColor: Color(white: 0.42), isSelected: false)
+                    sidebarItem(icon: "waveform.path.ecg", title: "Local Telemetry", badgeColor: GravMockPalette.gravEmerald, isSelected: false)
                 }
 
                 Spacer()
             }
             .frame(width: 140)
-            .background(Color(red: 0.942, green: 0.946, blue: 0.955))
+            .background(GravMockPalette.chromeSidebar)
 
             Rectangle()
-                .fill(Color.black.opacity(0.09))
+                .fill(GravMockPalette.chromeRule)
                 .frame(width: 0.5)
 
             // Right Detail Pane bound LIVE to PreferencesStore
@@ -892,9 +860,9 @@ struct GravMockPreferencesScene: View {
                 HStack(spacing: 8) {
                     HStack(spacing: 6) {
                         Image(systemName: "chevron.left")
-                            .foregroundStyle(Color.black.opacity(0.45))
+                            .foregroundStyle(Color.white.opacity(0.42))
                         Image(systemName: "chevron.right")
-                            .foregroundStyle(Color.black.opacity(0.18))
+                            .foregroundStyle(Color.white.opacity(0.16))
                     }
                     .font(.system(size: 9.5, weight: .semibold))
 
@@ -904,22 +872,21 @@ struct GravMockPreferencesScene: View {
 
                     Spacer()
 
-                    Text("Live")
-                        .font(.system(size: 8.5, weight: .semibold))
-                        .foregroundStyle(GravMockPalette.gravTeal)
-                        .padding(.horizontal, 6.5)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(GravMockPalette.gravTeal.opacity(0.12))
-                        )
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(GravMockPalette.gravEmerald)
+                            .frame(width: 5, height: 5)
+                        Text("Live")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.56))
+                    }
                 }
                 .padding(.horizontal, 14)
                 .frame(height: 36)
-                .background(Color(red: 0.968, green: 0.970, blue: 0.976))
+                .background(GravMockPalette.chromeBar)
 
                 Rectangle()
-                    .fill(Color.black.opacity(0.06))
+                    .fill(GravMockPalette.chromeRule)
                     .frame(height: 0.5)
 
                 VStack(spacing: 0) {
@@ -977,11 +944,11 @@ struct GravMockPreferencesScene: View {
                         )
                     )
                 }
-                .background(Color.white)
+                .background(GravMockPalette.chromeCard)
                 .clipShape(Radius.rect(Radius.controlM))
                 .overlay(
                     Radius.rect(Radius.controlM)
-                        .strokeBorder(Color.black.opacity(0.08), lineWidth: 0.5)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
                 )
                 .padding(.horizontal, 14)
                 .padding(.top, 12)
@@ -989,7 +956,7 @@ struct GravMockPreferencesScene: View {
                 Spacer(minLength: 8)
 
                 Rectangle()
-                    .fill(Color.black.opacity(0.07))
+                    .fill(GravMockPalette.chromeRule)
                     .frame(height: 0.5)
 
                 // Footer
@@ -1009,10 +976,10 @@ struct GravMockPreferencesScene: View {
                             .padding(.vertical, 4)
                             .background(
                                 Radius.rect(Radius.controlXS)
-                                    .fill(isRestoreHovered ? Color(white: 0.94) : Color.white)
+                                    .fill(isRestoreHovered ? Color.white.opacity(0.14) : Color.white.opacity(0.08))
                                     .overlay(
                                         Radius.rect(Radius.controlXS)
-                                            .strokeBorder(Color.black.opacity(0.14), lineWidth: 0.5)
+                                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
                                     )
                             )
                     }
@@ -1032,7 +999,6 @@ struct GravMockPreferencesScene: View {
                             .background(
                                 Radius.rect(Radius.controlXS)
                                     .fill(isDoneHovered ? GravMockPalette.gravTeal.opacity(0.88) : GravMockPalette.gravTeal)
-                                    .shadow(color: Color.black.opacity(0.12), radius: 1, y: 0.5)
                             )
                     }
                     .buttonStyle(.plain)
@@ -1040,23 +1006,23 @@ struct GravMockPreferencesScene: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(Color(red: 0.955, green: 0.958, blue: 0.965))
+                .background(GravMockPalette.chromeBar)
             }
-            .background(Color(red: 0.962, green: 0.965, blue: 0.972))
+            .background(GravMockPalette.chrome)
         }
         .frame(width: 512, height: 322)
         .clipShape(Radius.rect(Radius.card))
         .overlay(
             Radius.rect(Radius.card)
-                .strokeBorder(Color.black.opacity(0.14), lineWidth: 0.5)
+                .strokeBorder(GravMockPalette.chromeEdge, lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.24), radius: 22, x: 0, y: 10)
-        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+        .shadow(color: Color.black.opacity(0.55), radius: 28, x: 0, y: 14)
+        .shadow(color: Color.black.opacity(0.22), radius: 5, x: 0, y: 2)
     }
 
     private var rowDivider: some View {
         Rectangle()
-            .fill(Color.black.opacity(0.06))
+            .fill(GravMockPalette.chromeRule)
             .frame(height: 0.5)
             .padding(.leading, 12)
     }
@@ -1120,7 +1086,7 @@ private struct MockMacOSToggle: View {
         } label: {
             ZStack(alignment: isOn ? .trailing : .leading) {
                 Capsule(style: .continuous)
-                    .fill(isOn ? GravMockPalette.gravTeal : Color.black.opacity(0.16))
+                    .fill(isOn ? GravMockPalette.gravTeal : Color.white.opacity(0.16))
                     .frame(width: 28, height: 16)
 
                 Circle()

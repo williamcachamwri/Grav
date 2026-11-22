@@ -36,34 +36,42 @@ private struct WelcomeRGB: Sendable {
 
 private enum GravWelcomePalette {
     /// Luminous silk-white cloud peak (clean, never muddy gray).
-    static let pureLight = WelcomeRGB(r: 0.980, g: 0.994, b: 1.000)
-    /// Crystalline ice-sky pocket sampled from the logo's inner bar (`#A8E4F5` lifted to airy ice).
-    static let icePocket = WelcomeRGB(r: 0.845, g: 0.945, b: 0.995)
-    /// Luminous mist sky bridging white clouds into Electric Azure without desaturation.
-    static let mistCyan = WelcomeRGB(r: 0.620, g: 0.865, b: 0.990)
-    /// Vibrant Sky Azure mid-tone (`#34A8FB` lifted).
-    static let skyCyan = WelcomeRGB(r: 0.275, g: 0.720, b: 0.992)
-    /// Radiant Azure surrounding the plasma core (`#3296FB`).
-    static let radiantTeal = WelcomeRGB(r: 0.165, g: 0.590, b: 0.985)
-    /// Signature Grav Logo Electric Azure (`#1A8EFD`).
+    static let pureLight = WelcomeRGB(r: 0.985, g: 0.994, b: 1.000)
+    /// Crystalline ice-sky highlight sampled from the logo's inner bar (`#A8E4F5` lifted).
+    static let icePocket = WelcomeRGB(r: 0.720, g: 0.920, b: 0.985)
+    /// Glacial Aqua Cyan from the logo's mid-left ascent (`#25BAD9`).
+    static let logoAqua = WelcomeRGB(r: 0.145, g: 0.729, b: 0.851)
+    /// Fresh Luminous Mint from the logo's upper-left curve (`#62D87A`, sampled `#79D873`).
+    static let logoMint = WelcomeRGB(r: 0.340, g: 0.835, b: 0.495)
+    /// Warm Solar Amber from the logo's top crest (`#F29A38`, sampled `#E2953F`).
+    static let logoAmber = WelcomeRGB(r: 0.945, g: 0.595, b: 0.215)
+    /// Coral Rose from the logo's upper-right tip (`#EB5874`, sampled `#E45970`).
+    static let logoCoral = WelcomeRGB(r: 0.915, g: 0.345, b: 0.465)
+    /// Electric Sky Azure from the logo's lower-left & bottom-right sweep (`#1A8EFD`).
     static let brandCyan = WelcomeRGB(r: 0.102, g: 0.557, b: 0.992)
-    /// Deep Cobalt Horizon anchoring the aurora without dark muddiness.
-    static let brandTeal = WelcomeRGB(r: 0.068, g: 0.425, b: 0.910)
+    /// Vibrant Cobalt Blue from the logo's right curve (`#328BF9`).
+    static let radiantTeal = WelcomeRGB(r: 0.196, g: 0.545, b: 0.978)
+    /// Deep Cobalt Horizon anchoring center typography contrast without muddy troughs.
+    static let brandTeal = WelcomeRGB(r: 0.072, g: 0.385, b: 0.885)
 
-    /// Deep obsidian night-sky void matching the logo's `#16161A` substrate for the opening bloom.
-    static let voidDark = Color(red: 0.025, green: 0.032, blue: 0.055)
+    // Backwards-compatible aliases used inside aurora helpers
+    static let mistCyan = icePocket
+    static let skyCyan = logoAqua
+
+    /// Deep obsidian void matching the logo's `#16161A` carbon substrate for the opening bloom.
+    static let voidDark = Color(red: 0.035, green: 0.036, blue: 0.048)
 
     /// Atmospheric cobalt shadow tint (keeps white text luminous instead of muddy black).
-    static let tealShadow = Color(red: 0.032, green: 0.155, blue: 0.365)
+    static let tealShadow = Color(red: 0.040, green: 0.135, blue: 0.320)
 
     /// Crisp hover & press Electric Azure fills for the arrow button (flat, editorial, zero gloss).
     static let buttonHoverFill = Color(red: 0.085, green: 0.460, blue: 0.910)
     static let buttonPressFill = Color(red: 0.062, green: 0.375, blue: 0.790)
 
-    /// Secondary iridescent sky-azure accents for the 4×4 swirling plasma core & ambient corona.
-    static let electricAqua = Color(red: 0.420, green: 0.835, blue: 1.000)
-    static let vibrantAqua = Color(red: 0.102, green: 0.557, blue: 0.992)
-    static let causticCyan = Color(red: 0.659, green: 0.894, blue: 0.985)
+    /// Secondary iridescent prism accents for the 4×4 swirling plasma core & ambient corona.
+    static let electricAqua = Color(red: 0.340, green: 0.835, blue: 0.495) // Mint
+    static let vibrantAqua = Color(red: 0.915, green: 0.345, blue: 0.465)  // Coral Rose
+    static let causticCyan = Color(red: 0.960, green: 0.670, blue: 0.290)  // Warm Solar Amber
 }
 
 // MARK: - Main Welcome View
@@ -894,22 +902,22 @@ private struct WelcomeOrbSwirlCore: View, Animatable {
                     [0.0, 1.0], [0.333, 1.0], [0.667, 1.0], [1.0, 1.0],
                 ],
                 colors: [
+                    GravWelcomePalette.logoMint.color,
+                    GravWelcomePalette.logoAmber.color,
+                    GravWelcomePalette.logoCoral.color,
+                    GravWelcomePalette.radiantTeal.color,
+                    GravWelcomePalette.logoAqua.color,
                     GravWelcomePalette.pureLight.color,
-                    GravWelcomePalette.electricAqua,
+                    GravWelcomePalette.logoAmber.color,
+                    GravWelcomePalette.logoCoral.color,
                     GravWelcomePalette.brandCyan.color,
-                    GravWelcomePalette.vibrantAqua,
-                    GravWelcomePalette.brandTeal.color,
-                    GravWelcomePalette.pureLight.color,
-                    GravWelcomePalette.electricAqua,
                     GravWelcomePalette.icePocket.color,
-                    GravWelcomePalette.vibrantAqua,
+                    GravWelcomePalette.pureLight.color,
                     GravWelcomePalette.brandCyan.color,
-                    GravWelcomePalette.pureLight.color,
-                    GravWelcomePalette.skyCyan.color,
                     GravWelcomePalette.brandTeal.color,
-                    GravWelcomePalette.icePocket.color,
-                    GravWelcomePalette.electricAqua,
-                    GravWelcomePalette.pureLight.color,
+                    GravWelcomePalette.brandCyan.color,
+                    GravWelcomePalette.logoAqua.color,
+                    GravWelcomePalette.radiantTeal.color,
                 ],
                 smoothsColors: true
             )
@@ -1007,16 +1015,17 @@ private struct WelcomeMesh5x5Backdrop: View {
     var drifts: Bool
     @State private var clock = WelcomeAuroraClock()
 
-    // Luminous radiant Grav glacial teal-cyan → pure silk-white ramp: eliminates dark muddy troughs
-    // and keeps the vibrant aerospace teal flowing smoothly into bright glacial mist.
-    private static let paletteRamp: [WelcomeRGB] = [
-        GravWelcomePalette.brandTeal,
-        GravWelcomePalette.brandCyan,
-        GravWelcomePalette.radiantTeal,
-        GravWelcomePalette.skyCyan,
-        GravWelcomePalette.mistCyan,
-        GravWelcomePalette.icePocket,
-        GravWelcomePalette.pureLight,
+    // Full cyclic chromatic ring extracted directly from the Grav logo's sweeping prism arc:
+    // Electric Azure → Glacial Aqua → Fresh Mint → Solar Amber → Coral Rose → Cobalt Azure → Electric Azure.
+    // Adjacent color-wheel neighbors prevent muddy midpoints while preserving all 5 signature logo pigments.
+    private static let logoPrismRing: [WelcomeRGB] = [
+        GravWelcomePalette.logoCoral,     // ~0°   (upper-right crest)
+        GravWelcomePalette.radiantTeal,   // ~60°  (lower-right cobalt sweep)
+        GravWelcomePalette.brandCyan,     // ~120° (bottom electric azure)
+        GravWelcomePalette.logoAqua,      // ~180° (left ice-cyan flank)
+        GravWelcomePalette.logoMint,      // ~240° (upper-left mint ascent)
+        GravWelcomePalette.logoAmber,     // ~300° (top-center solar amber crown)
+        GravWelcomePalette.logoCoral,     // ~360° (wrap seamlessly)
     ]
 
     // Uniform 5×5 base lattice (row-major, step = 0.25).
@@ -1045,8 +1054,8 @@ private struct WelcomeMesh5x5Backdrop: View {
                 let isTopOrBottomEdge = (row == 0 || row == 4)
 
                 let phase = Float(row * 5 + col) * 0.73
-                let dx: Float = isLeftOrRightEdge ? 0 : sin(t * 0.85 + phase) * 0.030
-                let dy: Float = isTopOrBottomEdge ? 0 : cos(t * 0.74 + phase * 1.29) * 0.030
+                let dx: Float = isLeftOrRightEdge ? 0 : sin(t * 0.82 + phase) * 0.030
+                let dy: Float = isTopOrBottomEdge ? 0 : cos(t * 0.72 + phase * 1.29) * 0.030
 
                 result.append([base.x + dx, base.y + dy])
             }
@@ -1054,18 +1063,17 @@ private struct WelcomeMesh5x5Backdrop: View {
         return result
     }
 
-    /// Evaluates a vivid, briskly-flowing rotating two-wave silk field across the fold-free 5×5
-    /// lattice so bold pure-white clouds and rich Grav glacial-teal rivers sweep continuously
-    /// while keeping vivid teal-cyan contrast behind center typography.
+    /// Evaluates a full-spectrum liquid-glass prism field across the fold-free 5×5 lattice
+    /// faithful to every color in the Grav logo (Mint upper-left, Solar Amber top crest,
+    /// Coral Rose upper-right, Electric Sky Azure & Cobalt lower sweep, with Crystalline Ice
+    /// silk highlights), while keeping deep azure/obsidian contrast behind center typography.
     static func colors(at time: TimeInterval, points: [SIMD2<Float>]) -> [Color] {
         let t = time
-        let theta1 = t * 0.56
-        let cos1 = cos(theta1)
-        let sin1 = sin(theta1)
-
-        let theta2 = -t * 0.40 + 1.4
-        let cos2 = cos(theta2)
-        let sin2 = sin(theta2)
+        let driftAngle = sin(t * 0.34) * 0.28
+        let cos1 = cos(t * 0.44)
+        let sin1 = sin(t * 0.44)
+        let cos2 = cos(-t * 0.32 + 1.4)
+        let sin2 = sin(-t * 0.32 + 1.4)
 
         var result: [Color] = []
         result.reserveCapacity(points.count)
@@ -1074,39 +1082,40 @@ private struct WelcomeMesh5x5Backdrop: View {
             let dx = Double(pt.x) - 0.5
             let dy = Double(pt.y) - 0.5
 
-            // Brisk, sweeping primary silk ribbon
-            let u = dx * cos1 + dy * sin1
-            let wave1 = sin(u * 2.55 + t * 1.15)
+            // Map spatial angle around the canvas onto the logo's exact chromatic orientation:
+            // upper-left = Mint, top = Solar Amber, upper-right = Coral Rose, bottom = Electric Azure.
+            let rawAngle = atan2(dy, dx) + 0.35 + driftAngle
+            let waveShift = sin((dx * cos1 + dy * sin1) * 2.4 + t * 0.75) * 0.24
+            var normalized = (rawAngle + waveShift) / (2.0 * Double.pi)
+            normalized = normalized - floor(normalized)
 
-            // Counter-flowing harmonic swell creating organic luminous white pockets
-            let v = dx * cos2 + dy * sin2
-            let wave2 = cos(v * 2.05 - t * 0.85 + 0.7)
+            var rgb = samplePrismRing(at: normalized)
 
-            // Full-range amplitude reaches both deep brand teal (0.0) and luminous silk white (1.0)
-            let raw = 0.46 + 0.46 * wave1 + 0.28 * wave2
-            var field = max(0.0, min(1.0, raw))
+            // Subtle silk-ice refraction swell drifting across the flanks
+            let silk = 0.5 + 0.5 * cos((dx * cos2 + dy * sin2) * 2.2 - t * 0.65)
+            let radial = min(1.0, hypot(dx, dy) / 0.68)
+            let iceLift = pow(silk, 2.2) * (0.14 + 0.24 * radial)
+            rgb = WelcomeRGB.mix(rgb, GravWelcomePalette.icePocket, iceLift)
 
-            // Keep the center typography zone anchored in radiant teal-cyan (≤ 0.34) so white text
-            // stays crisp while bright silk-white clouds sweep boldly around all four flanks and corners.
-            let nx = dx / 0.34
-            let ny = dy / 0.24
-            let centerProximity = exp(-(nx * nx + ny * ny) * 1.25)
-            let maxCenterField = 0.34
-            if field > maxCenterField {
-                field -= (field - maxCenterField) * centerProximity * 0.90
-            }
+            // Anchor the center typography zone in deep Electric Cobalt-Azure so the white logo,
+            // "Meet Grav." headline, and white arrow pill stay effortlessly crisp and luminous.
+            let nx = dx / 0.36
+            let ny = dy / 0.28
+            let centerProximity = exp(-(nx * nx + ny * ny) * 1.15)
+            rgb = WelcomeRGB.mix(rgb, GravWelcomePalette.brandTeal, centerProximity * 0.54)
 
-            result.append(sampleRamp(at: field))
+            result.append(rgb.color)
         }
         return result
     }
 
-    private static func sampleRamp(at t: Double) -> Color {
+    private static func samplePrismRing(at t: Double) -> WelcomeRGB {
         let clamped = max(0.0, min(1.0, t))
-        let scaled = clamped * Double(paletteRamp.count - 1)
-        let index = min(Int(scaled), paletteRamp.count - 2)
+        let scaled = clamped * Double(logoPrismRing.count - 1)
+        let index = min(Int(scaled), logoPrismRing.count - 2)
         let frac = scaled - Double(index)
-        return WelcomeRGB.mix(paletteRamp[index], paletteRamp[index + 1], frac).color
+        let smoothFrac = frac * frac * (3.0 - 2.0 * frac)
+        return WelcomeRGB.mix(logoPrismRing[index], logoPrismRing[index + 1], smoothFrac)
     }
 
     var body: some View {
