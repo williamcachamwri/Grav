@@ -15,6 +15,7 @@ public struct TerminalTelemetryTabView: View {
     @State private var logFilter: String = ""
     @State private var isAutoScrollEnabled: Bool = true
     @State private var copiedCommandID: String?
+    @State private var copiedCommandLineID: String?
     @State private var copyFeedbackTask: Task<Void, Never>?
 
     public init(
@@ -187,14 +188,35 @@ public struct TerminalTelemetryTabView: View {
 
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 5) {
-                Text("$ \(command.commandLine)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.72))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(command.commandLine)
+                Button {
+                    copyCommandLine(for: command)
+                } label: {
+                    HStack(spacing: 4) {
+                        if copiedCommandLineID == command.id {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundStyle(GravPalette.emerald)
+                        }
+                        Text("$ \(command.commandLine)")
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(copiedCommandLineID == command.id ? GravPalette.emerald : Color.white.opacity(0.74))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                }
+                .buttonStyle(NotchChromeButtonStyle(cornerRadius: 4.5))
+                .help("Click to copy command: \(command.commandLine)")
 
                 Spacer(minLength: 4)
+
+                if !allFilteredLines.isEmpty {
+                    Text("\(allFilteredLines.count)L")
+                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(0.30))
+                }
 
                 HStack(spacing: 4) {
                     Image(systemName: "magnifyingglass")
@@ -206,7 +228,7 @@ public struct TerminalTelemetryTabView: View {
                         .font(.system(size: 10, weight: .regular, design: .monospaced))
                         .foregroundStyle(Color.white.opacity(0.90))
                         .focused($filterFocus)
-                        .frame(width: 64)
+                        .frame(width: 58)
 
                     if !logFilter.isEmpty {
                         Button {
@@ -252,6 +274,18 @@ public struct TerminalTelemetryTabView: View {
                 .buttonStyle(NotchChromeButtonStyle(isActive: isCopied, cornerRadius: 5))
                 .help("Copy command output (⌘C)")
                 .accessibilityLabel("Copy Log")
+
+                Button {
+                    store.openCommandInTerminal(command.commandLine)
+                } label: {
+                    Image(systemName: "apple.terminal")
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.54))
+                        .frame(width: 20, height: 19)
+                }
+                .buttonStyle(NotchChromeButtonStyle(cornerRadius: 5))
+                .help("Copy command & open Terminal")
+                .accessibilityLabel("Open in Terminal")
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
@@ -362,6 +396,19 @@ public struct TerminalTelemetryTabView: View {
             return GravPalette.fileEdit.opacity(0.90)
         }
         return Color.white.opacity(0.78)
+    }
+
+    private func copyCommandLine(for command: CommandExecutionEvent) {
+        NotchTelemetryHelpers.copyToPasteboard(command.commandLine)
+        copiedCommandLineID = command.id
+        copyFeedbackTask?.cancel()
+        copyFeedbackTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.2))
+            guard !Task.isCancelled else { return }
+            if copiedCommandLineID == command.id {
+                copiedCommandLineID = nil
+            }
+        }
     }
 
     private func copyLog(for command: CommandExecutionEvent, filteredLines: [String]) {

@@ -11,6 +11,7 @@ public struct LiveTelemetryTabView: View {
     @Namespace private var activityHoverNamespace
 
     @State private var isThinkingExpanded: Bool = true
+    @State private var selectedThoughtIndex: Int = 0
     @State private var hoveredActivityID: String?
     @State private var isHoveringThinkingHeader: Bool = false
     @State private var loadingStepIndex: Int?
@@ -27,8 +28,20 @@ public struct LiveTelemetryTabView: View {
         self.onInspectCommand = onInspectCommand
     }
 
+    private var availableThoughts: [ThinkingSnapshot] {
+        if !store.thinkingHistory.isEmpty {
+            return store.thinkingHistory
+        }
+        if let current = store.currentThinking {
+            return [current]
+        }
+        return []
+    }
+
     private var displayedThinking: ThinkingSnapshot? {
-        store.currentThinking ?? store.thinkingHistory.first
+        guard !availableThoughts.isEmpty else { return nil }
+        let safeIndex = min(max(0, selectedThoughtIndex), availableThoughts.count - 1)
+        return availableThoughts[safeIndex]
     }
 
     private var hasAnyTelemetry: Bool {
@@ -51,6 +64,10 @@ public struct LiveTelemetryTabView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onChange(of: store.thinkingHistory.first?.stepIndex) { _, _ in
+            // Auto-snap back to the freshest streaming thought whenever a new step arrives
+            selectedThoughtIndex = 0
+        }
     }
 
     // MARK: - Editorial Thinking Sheet
@@ -102,6 +119,39 @@ public struct LiveTelemetryTabView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+
+                if availableThoughts.count > 1 {
+                    HStack(spacing: 2) {
+                        Button {
+                            stepThought(by: 1)
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(selectedThoughtIndex < availableThoughts.count - 1 ? 0.56 : 0.20))
+                                .frame(width: 15, height: 18)
+                        }
+                        .buttonStyle(NotchChromeButtonStyle(cornerRadius: 4))
+                        .disabled(selectedThoughtIndex >= availableThoughts.count - 1)
+                        .help("Previous thought")
+
+                        Text("\(selectedThoughtIndex + 1)/\(availableThoughts.count)")
+                            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.white.opacity(0.36))
+
+                        Button {
+                            stepThought(by: -1)
+                        } label: {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(selectedThoughtIndex > 0 ? 0.56 : 0.20))
+                                .frame(width: 15, height: 18)
+                        }
+                        .buttonStyle(NotchChromeButtonStyle(cornerRadius: 4))
+                        .disabled(selectedThoughtIndex <= 0)
+                        .help("Newer thought")
+                    }
+                }
 
                 if !resolvedText.isEmpty {
                     Button {
@@ -223,6 +273,19 @@ public struct LiveTelemetryTabView: View {
                         )
                 )
         )
+    }
+
+    private func stepThought(by delta: Int) {
+        let maxIdx = max(0, availableThoughts.count - 1)
+        let target = min(max(0, selectedThoughtIndex + delta), maxIdx)
+        guard target != selectedThoughtIndex else { return }
+        if reduceMotion {
+            selectedThoughtIndex = target
+        } else {
+            withAnimation(GravMotion.subtleFade) {
+                selectedThoughtIndex = target
+            }
+        }
     }
 
     private func toggleThinking() {
@@ -444,7 +507,10 @@ public struct LiveTelemetryTabView: View {
 
     private func handleActivityTap(_ item: TelemetryActivityItem) {
         switch item {
-        case .thinking:
+        case let .thinking(snapshot):
+            if let idx = availableThoughts.firstIndex(where: { $0.stepIndex == snapshot.stepIndex }) {
+                selectedThoughtIndex = idx
+            }
             if !isThinkingExpanded {
                 toggleThinking()
             }

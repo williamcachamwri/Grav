@@ -44,13 +44,14 @@ public final class NotchHUDCoordinator {
         self.onOpenSettings = onOpenSettings
         self.lastTrackedPinnedState = preferences.isNotchPinned
 
+        let gravMotion = Self.makeNotchMotion()
         let initialPresenter = NotchPresenter(
             configuration: Self.makeConfiguration(
                 hasPhysicalNotch: true,
                 hoverToExpand: preferences.hoverToExpand,
                 isPinned: preferences.isNotchPinned
             ),
-            motion: .resolved(.standard),
+            motion: .resolved(gravMotion),
             style: .standard,
             preferredScreenID: preferredScreenID
         )
@@ -252,9 +253,20 @@ public final class NotchHUDCoordinator {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.presenter.motion = .resolved(.standard)
+                self.presenter.motion = .resolved(Self.makeNotchMotion())
             }
         }
+    }
+
+    private static func makeNotchMotion() -> NotchMotion {
+        NotchMotion(
+            expand: .spring(response: 0.34, dampingFraction: 0.84, blendDuration: 0),
+            collapse: .timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.24),
+            peek: .spring(response: 0.32, dampingFraction: 0.66),
+            hover: .spring(response: 0.28, dampingFraction: 0.82),
+            contentMorph: .timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.26),
+            highlight: .easeOut(duration: 0.14)
+        )
     }
 
     private static func makeConfiguration(

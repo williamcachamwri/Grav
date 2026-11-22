@@ -94,6 +94,24 @@ public struct ExpandedNotchHeaderView: View {
                     }
                 }
             }
+
+            Divider()
+
+            Button("Focus Antigravity") {
+                store.activateAntigravityApp()
+            }
+
+            if store.activeSession != nil {
+                Button("Reveal Transcript in Finder") {
+                    store.revealActiveTranscriptInFinder()
+                }
+            }
+
+            if store.state.isActive {
+                Button("Mark Idle") {
+                    store.forceSettleIdle()
+                }
+            }
         } label: {
             HStack(spacing: 4) {
                 Text(cleanActiveSessionTitle)
@@ -157,10 +175,30 @@ public struct ExpandedNotchHeaderView: View {
                 .frame(width: 0.5, height: 11)
                 .padding(.horizontal, 3)
 
+            pauseTelemetryButton
             pinNotchButton
             settingsButton
         }
         .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var pauseTelemetryButton: some View {
+        Button {
+            let nextPaused = !store.isPaused
+            preferences.isTelemetryPaused = nextPaused
+            store.setPaused(nextPaused)
+        } label: {
+            Image(systemName: store.isPaused ? "play.fill" : "pause")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(
+                    store.isPaused ? GravPalette.fileEdit : Color.white.opacity(0.52)
+                )
+                .frame(width: 22, height: 22)
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+        }
+        .buttonStyle(NotchChromeButtonStyle(isActive: store.isPaused, cornerRadius: 6))
+        .help(store.isPaused ? "Resume Telemetry" : "Pause Telemetry")
+        .accessibilityLabel(store.isPaused ? "Resume Telemetry" : "Pause Telemetry")
     }
 
     private var tokenMetricsReadout: some View {

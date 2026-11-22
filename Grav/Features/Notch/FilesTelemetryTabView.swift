@@ -9,9 +9,44 @@ public struct FilesTelemetryTabView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var fileHoverNamespace
 
+    private enum FileFilter: String, CaseIterable, Identifiable {
+        case all = "All"
+        case edited = "Edited"
+        case created = "Created"
+        case deleted = "Deleted"
+
+        var id: String { rawValue }
+
+        func matches(_ event: FileChangeEvent) -> Bool {
+            switch self {
+            case .all: return true
+            case .edited: return event.kind == .edit || event.kind == .overwrite
+            case .created: return event.kind == .create
+            case .deleted: return event.kind == .delete
+            }
+        }
+    }
+
+    @State private var activeFilter: FileFilter = .all
     @State private var hoveredFileID: String?
     @State private var copiedFileID: String?
+    @State private var copiedPathFileID: String?
     @State private var copyFeedbackTask: Task<Void, Never>?
+
+    private var filteredFileChanges: [FileChangeEvent] {
+        store.fileChanges.filter { activeFilter.matches($0) }
+    }
+
+    private var shouldShowFilterBar: Bool {
+        let kinds = Set(store.fileChanges.map { event -> FileFilter in
+            switch event.kind {
+            case .create: return .created
+            case .delete: return .deleted
+            case .edit, .overwrite: return .edited
+            }
+        })
+        return kinds.count >= 2
+    }
 
     public init(
         store: AntigravityTelemetryStore,
@@ -26,33 +61,69 @@ public struct FilesTelemetryTabView: View {
             if store.fileChanges.isEmpty {
                 emptyState
             } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(spacing: 2) {
-                        ForEach(store.fileChanges) { event in
-                            fileRowCard(for: event)
-                                .transition(
-                                    reduceMotion
-                                        ? .opacity
-                                        : .asymmetric(
-                                            insertion: .opacity.combined(with: .move(edge: .top)),
-                                            removal: .opacity
-                                        )
-                                )
+                VStack(spacing: 4) {
+                    if shouldShowFilterBar {
+                        HStack(spacing: 10) {
+                            ForEach(FileFilter.allCases) { filter in
+                                let isSelected = activeFilter == filter
+                                let count = store.fileChanges.filter { filter.matches($0) }.count
+                                if filter == .all || count > 0 {
+                                    Button {
+                                        if reduceMotion {
+                                            activeFilter = filter
+                                        } else {
+                                            withAnimation(GravMotion.subtleFade) {
+                                                activeFilter = filter
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 3.5) {
+                                            Text(filter.rawValue)
+                                                .font(.system(size: 10.5, weight: isSelected ? .medium : .regular))
+                                                .foregroundStyle(isSelected ? Color.white.opacity(0.92) : Color.white.opacity(0.38))
+                                            Text("\(count)")
+                                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                                .monospacedDigit()
+                                                .foregroundStyle(isSelected ? Color.white.opacity(0.56) : Color.white.opacity(0.24))
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            Spacer()
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.top, 1)
                     }
-                    .padding(.vertical, 1)
-                }
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .black, location: 0.0),
-                            .init(color: .black, location: 0.93),
-                            .init(color: .clear, location: 1.0),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
+
+                    ScrollView(.vertical, showsIndicators: false) {
+                        LazyVStack(spacing: 2) {
+                            ForEach(filteredFileChanges) { event in
+                                fileRowCard(for: event)
+                                    .transition(
+                                        reduceMotion
+                                            ? .opacity
+                                            : .asymmetric(
+                                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                                removal: .opacity
+                                            )
+                                    )
+                            }
+                        }
+                        .padding(.vertical, 1)
+                    }
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0.0),
+                                .init(color: .black, location: 0.93),
+                                .init(color: .clear, location: 1.0),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                )
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -257,6 +328,22 @@ public struct FilesTelemetryTabView: View {
             Spacer(minLength: 4)
 
             Button {
+                copyPath(for: event)
+            } label: {
+                let isPathCopied = copiedPathFileID == event.id
+                HStack(spacing: 4) {
+                    Image(systemName: isPathCopied ? "checkmark" : "link")
+                        .font(.system(size: 9.5, weight: .medium))
+                    Text(isPathCopied ? "Copied" : "Path")
+                        .font(.system(size: 10.5, weight: .medium))
+                }
+                .foregroundStyle(isPathCopied ? GravPalette.emerald : Color.white.opacity(0.68))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3.5)
+            }
+            .buttonStyle(NotchChromeButtonStyle(isActive: copiedPathFileID == event.id, cornerRadius: 5.5))
+
+            Button {
                 copyDiff(for: event)
             } label: {
                 HStack(spacing: 4) {
@@ -283,6 +370,19 @@ public struct FilesTelemetryTabView: View {
         } else {
             withAnimation(GravMotion.contentSlide) {
                 selectedFileID = next
+            }
+        }
+    }
+
+    private func copyPath(for event: FileChangeEvent) {
+        NotchTelemetryHelpers.copyToPasteboard(event.path)
+        copiedPathFileID = event.id
+        copyFeedbackTask?.cancel()
+        copyFeedbackTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.3))
+            guard !Task.isCancelled else { return }
+            if copiedPathFileID == event.id {
+                copiedPathFileID = nil
             }
         }
     }
