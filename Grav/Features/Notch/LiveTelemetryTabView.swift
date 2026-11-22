@@ -400,12 +400,18 @@ public struct LiveTelemetryTabView: View {
         }
     }
 
+    @ViewBuilder
     private func activityLeadingGlyph(for item: TelemetryActivityItem) -> some View {
-        let spec = activityGlyphSpec(for: item)
-        return Image(systemName: spec.symbol)
-            .font(.system(size: 10.5, weight: .medium))
-            .foregroundStyle(spec.color)
-            .frame(width: 14, alignment: .center)
+        switch item {
+        case let .fileChange(event):
+            LanguageIconView(path: event.path, changeKind: event.kind, size: 14.5)
+        default:
+            let spec = activityGlyphSpec(for: item)
+            Image(systemName: spec.symbol)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(spec.color)
+                .frame(width: 14.5, alignment: .center)
+        }
     }
 
     private func activityGlyphSpec(for item: TelemetryActivityItem) -> (symbol: String, color: Color) {

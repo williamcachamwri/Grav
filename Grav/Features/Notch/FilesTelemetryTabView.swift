@@ -138,17 +138,13 @@ public struct FilesTelemetryTabView: View {
     private func fileRowCard(for event: FileChangeEvent) -> some View {
         let isExpanded = selectedFileID == event.id
         let isHovered = hoveredFileID == event.id
-        let tint = NotchTelemetryHelpers.color(for: event.kind)
 
         return VStack(alignment: .leading, spacing: 0) {
             Button {
                 toggleSelection(for: event)
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: kindSymbol(for: event.kind))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(tint)
-                        .frame(width: 14, alignment: .center)
+                    LanguageIconView(path: event.path, changeKind: event.kind, size: 15.5)
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(event.basename)
@@ -398,14 +394,6 @@ public struct FilesTelemetryTabView: View {
             if copiedFileID == event.id {
                 copiedFileID = nil
             }
-        }
-    }
-
-    private func kindSymbol(for kind: FileChangeKind) -> String {
-        switch kind {
-        case .create: return "plus.circle"
-        case .edit, .overwrite: return "pencil"
-        case .delete: return "trash"
         }
     }
 

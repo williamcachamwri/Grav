@@ -93,12 +93,7 @@ public struct CollapsedNotchView: View {
                     .transition(signalTransition)
 
             case let .editing(event):
-                let color = NotchTelemetryHelpers.color(for: event.kind)
-                let symbol = event.kind == .delete ? "trash" : (event.kind == .create ? "plus" : "pencil")
-                Image(systemName: symbol)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(color)
-                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                LanguageIconView(path: event.path, changeKind: event.kind, size: 13.5)
                     .transition(signalTransition)
 
             case .runningCommand:
@@ -150,12 +145,13 @@ public struct CollapsedNotchView: View {
     private func thinkingTrailingSignal(compact: Bool) -> some View {
         HStack(spacing: 6) {
             if !compact {
-                Text(cleanThinkingSnippet)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .tracking(-0.15)
-                    .foregroundStyle(Color.white.opacity(0.84))
-                    .lineLimit(1)
-                    .mask(trailingEdgeFadeMask)
+                NotchPingPongMarqueeText(
+                    text: cleanThinkingSnippet,
+                    font: .system(size: 11.5, weight: .medium),
+                    color: Color.white.opacity(0.84),
+                    alignment: .trailing,
+                    reduceMotion: reduceMotion
+                )
             } else {
                 Text("Thinking")
                     .font(.system(size: 11, weight: .medium))
@@ -186,12 +182,13 @@ public struct CollapsedNotchView: View {
 
     private func editingTrailingSignal(for event: FileChangeEvent) -> some View {
         HStack(spacing: 6) {
-            Text(event.basename)
-                .font(.system(size: 11.5, weight: .medium))
-                .tracking(-0.15)
-                .foregroundStyle(Color.white.opacity(0.90))
-                .lineLimit(1)
-                .truncationMode(.middle)
+            NotchPingPongMarqueeText(
+                text: event.basename,
+                font: .system(size: 11.5, weight: .medium),
+                color: Color.white.opacity(0.90),
+                alignment: .trailing,
+                reduceMotion: reduceMotion
+            )
 
             if event.kind == .delete {
                 Text("DEL")
@@ -222,12 +219,13 @@ public struct CollapsedNotchView: View {
 
     private func commandTrailingSignal(for command: CommandExecutionEvent, compact: Bool) -> some View {
         HStack(spacing: 6) {
-            Text(command.displayTitle)
-                .font(.system(size: 11.5, weight: .medium))
-                .tracking(-0.15)
-                .foregroundStyle(Color.white.opacity(0.88))
-                .lineLimit(1)
-                .mask(trailingEdgeFadeMask)
+            NotchPingPongMarqueeText(
+                text: command.displayTitle,
+                font: .system(size: 11.5, weight: .medium),
+                color: Color.white.opacity(0.88),
+                alignment: .trailing,
+                reduceMotion: reduceMotion
+            )
 
             if !compact {
                 ActiveElapsedTimerText(
@@ -259,19 +257,7 @@ public struct CollapsedNotchView: View {
         .padding(.trailing, 1)
     }
 
-    // MARK: - Subtle Masks, Transitions & Bare Harmonic Waveforms
-
-    private var trailingEdgeFadeMask: some View {
-        LinearGradient(
-            stops: [
-                .init(color: .black, location: 0.0),
-                .init(color: .black, location: 0.85),
-                .init(color: .clear, location: 1.0),
-            ],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
-    }
+    // MARK: - Transitions & Bare Harmonic Waveforms
 
     private var signalTransition: AnyTransition {
         if reduceMotion {
@@ -317,6 +303,8 @@ public struct CollapsedNotchView: View {
         )
     }
 
+    // MARK: - Accessibility
+
     private var accessibilityStatusLabel: String {
         if store.isPaused {
             return "Grav telemetry paused"
@@ -332,6 +320,124 @@ public struct CollapsedNotchView: View {
                 : "Editing \(event.basename), +\(event.addedLines) -\(event.removedLines)"
         case let .runningCommand(command):
             return "Running \(command.displayTitle)"
+        }
+    }
+}
+
+/// Smooth 120Hz ping-pong back-and-forth marquee for long titles inside the collapsed Notch pill.
+/// - Zero animation & zero CPU when `textWidth <= containerWidth`.
+/// - When overflowing: pauses briefly at leading edge, glides smoothly left to reveal the end,
+///   pauses, and glides back smoothly with soft feathered leading/trailing masks.
+struct NotchPingPongMarqueeText: View {
+    let text: String
+    let font: Font
+    let color: Color
+    var alignment: Alignment = .trailing
+    let reduceMotion: Bool
+
+    @State private var containerWidth: CGFloat = 0
+    @State private var textWidth: CGFloat = 0
+    @State private var offsetX: CGFloat = 0
+    @State private var marqueeTask: Task<Void, Never>?
+
+    private var overflow: CGFloat {
+        max(0, textWidth - containerWidth)
+    }
+
+    private var shouldScroll: Bool {
+        !reduceMotion && containerWidth > 12 && overflow > 3
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: shouldScroll ? .leading : alignment) {
+                Text(text)
+                    .font(font)
+                    .tracking(-0.15)
+                    .foregroundStyle(color)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .background(
+                        GeometryReader { textGeo in
+                            Color.clear
+                                .onAppear { textWidth = textGeo.size.width }
+                                .onChange(of: textGeo.size.width) { _, w in textWidth = w }
+                        }
+                    )
+                    .offset(x: shouldScroll ? offsetX : 0)
+            }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: shouldScroll ? .leading : alignment)
+            .clipped()
+            .mask(edgeFadeMask)
+            .onAppear {
+                containerWidth = geo.size.width
+                restartMarqueeIfNeeded()
+            }
+            .onChange(of: geo.size.width) { _, w in
+                containerWidth = w
+                restartMarqueeIfNeeded()
+            }
+            .onChange(of: text) { _, _ in
+                offsetX = 0
+                restartMarqueeIfNeeded()
+            }
+            .onChange(of: textWidth) { _, _ in
+                restartMarqueeIfNeeded()
+            }
+            .onChange(of: reduceMotion) { _, _ in
+                restartMarqueeIfNeeded()
+            }
+            .onDisappear {
+                marqueeTask?.cancel()
+                marqueeTask = nil
+            }
+        }
+        .frame(height: 16)
+    }
+
+    @ViewBuilder
+    private var edgeFadeMask: some View {
+        if shouldScroll {
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0.0),
+                    .init(color: .black, location: 0.06),
+                    .init(color: .black, location: 0.92),
+                    .init(color: .clear, location: 1.0),
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        } else {
+            Rectangle().fill(Color.black)
+        }
+    }
+
+    private func restartMarqueeIfNeeded() {
+        marqueeTask?.cancel()
+        marqueeTask = nil
+        offsetX = 0
+
+        guard shouldScroll else { return }
+        let travel = overflow + 6.0
+        let duration = max(1.6, min(6.0, Double(travel) / 34.0))
+
+        marqueeTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1.15))
+                guard !Task.isCancelled else { break }
+
+                withAnimation(.easeInOut(duration: duration)) {
+                    offsetX = -travel
+                }
+                try? await Task.sleep(for: .seconds(duration + 1.15))
+                guard !Task.isCancelled else { break }
+
+                withAnimation(.easeInOut(duration: duration)) {
+                    offsetX = 0
+                }
+                try? await Task.sleep(for: .seconds(duration))
+            }
         }
     }
 }
