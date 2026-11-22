@@ -15,6 +15,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
     public var startedCommands: [CommandExecutionEvent]
     public var updatedCommands: [CommandExecutionEvent]
     public var peekEvents: [NotchPeekEvent]
+    public var didMutateAgentsOrSwarm: Bool
 
     public init(
         state: TelemetryState = .idle,
@@ -29,7 +30,8 @@ public struct EventClassificationOutput: Sendable, Equatable {
         truncatedFileChangeStepIndices: [Int] = [],
         startedCommands: [CommandExecutionEvent] = [],
         updatedCommands: [CommandExecutionEvent] = [],
-        peekEvents: [NotchPeekEvent] = []
+        peekEvents: [NotchPeekEvent] = [],
+        didMutateAgentsOrSwarm: Bool = false
     ) {
         self.state = state
         self.activeModel = activeModel
@@ -44,6 +46,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
         self.startedCommands = startedCommands
         self.updatedCommands = updatedCommands
         self.peekEvents = peekEvents
+        self.didMutateAgentsOrSwarm = didMutateAgentsOrSwarm
     }
 }
 
@@ -62,6 +65,7 @@ public struct EventClassifier: Sendable {
     internal var burstEditedPaths: Set<String> = []
     internal var hasPeekedMultiFileBurst: Bool = false
     internal var lastBackgroundNoticeStepIndex: Int?
+    internal var confirmedBackgroundCommandIDs: Set<String> = []
     internal var lastUserPromptPreview: String?
     internal var isTurnActive: Bool = false
 
@@ -79,6 +83,7 @@ public struct EventClassifier: Sendable {
         burstEditedPaths.removeAll()
         hasPeekedMultiFileBurst = false
         lastBackgroundNoticeStepIndex = nil
+        confirmedBackgroundCommandIDs.removeAll()
         lastUserPromptPreview = nil
         isTurnActive = false
     }
@@ -125,6 +130,7 @@ public struct EventClassifier: Sendable {
         burstEditedPaths.removeAll()
         hasPeekedMultiFileBurst = false
         lastBackgroundNoticeStepIndex = nil
+        confirmedBackgroundCommandIDs.removeAll()
         isTurnActive = false
         return settled
     }
@@ -251,6 +257,17 @@ public struct EventClassifier: Sendable {
         // 3. Classify tool calls (file edits, creates, overwrites, deletes, and shell commands)
         if !toolCalls.isEmpty {
             pendingFileChanges.removeAll()
+            let hasNonCommandTool = toolCalls.contains { $0.name != "run_command" }
+            if hasNonCommandTool {
+                isTurnActive = true
+            }
+            let agentSwarmTools: Set<String> = [
+                "swarm", "post_message", "read_board", "swarm_wait",
+                "invoke_subagent", "define_subagent", "manage_subagents", "send_message",
+            ]
+            if toolCalls.contains(where: { agentSwarmTools.contains($0.name) }) {
+                output.didMutateAgentsOrSwarm = true
+            }
             classifyToolCalls(
                 toolCalls,
                 step: step,
@@ -282,11 +299,12 @@ public struct EventClassifier: Sendable {
         }
 
         // 4b. If Antigravity delivered a final response (`PLANNER_RESPONSE`, no tool calls, `DONE`)
-        // and it is NOT the immediate "waiting for background task..." ack right after a RUNNING notice,
-        // settle any stale pending commands so the Notch immediately drops to `.idle`.
+        // and there is NO confirmed running background task, settle any stale pending commands so
+        // the Notch drops cleanly to `.idle`. If a background task IS running, keep tracking it!
+        let hasConfirmedBackgroundTask = pendingCommands.contains { confirmedBackgroundCommandIDs.contains($0.id) }
         let isWaitingForFreshBackgroundTask = isFinalPlannerResponse
             && !pendingCommands.isEmpty
-            && lastBackgroundNoticeStepIndex == step.stepIndex - 1
+            && (hasConfirmedBackgroundTask || lastBackgroundNoticeStepIndex == step.stepIndex - 1)
 
         if isFinalPlannerResponse && !isWaitingForFreshBackgroundTask && !pendingCommands.isEmpty {
             let settled = forceIdle(at: stepDate)
@@ -721,6 +739,7 @@ public struct EventClassifier: Sendable {
             )
 
             pendingCommands.remove(at: idx)
+            confirmedBackgroundCommandIDs.remove(existing.id)
             output.updatedCommands.append(completedEvent)
 
             if code == 0 {
@@ -751,6 +770,7 @@ public struct EventClassifier: Sendable {
             )
 
             pendingCommands.remove(at: idx)
+            confirmedBackgroundCommandIDs.remove(existing.id)
             output.updatedCommands.append(completedEvent)
             if status == .failed {
                 output.peekEvents.append(.commandFailed(completedEvent.displayTitle, 1))
@@ -761,6 +781,7 @@ public struct EventClassifier: Sendable {
         // Still running (e.g., backgrounded with a `task-<id>.log` reference)
         if isRunningNotice {
             lastBackgroundNoticeStepIndex = step.stepIndex
+            confirmedBackgroundCommandIDs.insert(existing.id)
         }
         let runningEvent = CommandExecutionEvent(
             id: existing.id,

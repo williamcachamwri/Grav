@@ -48,6 +48,7 @@
 		55C7E80C28E3AFA41C629D95 /* LiquidGlassActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888E4277FA52AC0BCA011AC2 /* LiquidGlassActionBar.swift */; };
 		5AA98595AC4EF3BC7DC89CE1 /* RadiusTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F1A494C81801D1F154CC3A9 /* RadiusTokens.swift */; };
 		5F8E626E4CCD2C8E5B3437BE /* GravOnboardingEntrance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00DFF1005545C70EBE436FDC /* GravOnboardingEntrance.swift */; };
+		5FC3FB7825E8579DF386D360 /* SwarmModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A88509B96DB07EB20A5B641 /* SwarmModels.swift */; };
 		686921E4B89B40C7B351A501 /* SemanticDot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FC148A4927C7357583D93F4 /* SemanticDot.swift */; };
 		6930D1FA15DB4B5EF2ACB3C5 /* LiquidGlassVibrancy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492EBDF0A1F66AF48FA59A0E /* LiquidGlassVibrancy.swift */; };
 		6CB7AF53459E2FE6B2D26BEC /* LiquidGlassButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD22835A8776EB9C33858DB5 /* LiquidGlassButton.swift */; };
@@ -66,9 +67,11 @@
 		8CF109A20EDC98490D24E345 /* NotchHUDSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC6AD83E77E0351195E31D2 /* NotchHUDSettingsPane.swift */; };
 		8EA536B96D3FD137481EDB3B /* LanguageIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECA5F119FC0A9559C7E19B80 /* LanguageIconView.swift */; };
 		91D3F498CDC55C2DBAFDBA40 /* ExpandedNotchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D80414C1DE01980C28A80A7E /* ExpandedNotchView.swift */; };
+		99C6DDB49219B483546F383D /* SwarmSubagentWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AA4D5DAB9532096AF75857D /* SwarmSubagentWatcher.swift */; };
 		A067CAF76F04349D2BCC5E94 /* GravOnboardingInstructionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0ED16A6DD522EF786F805CC /* GravOnboardingInstructionPanel.swift */; };
 		A308F5FE2738E1576F19DC3F /* GravKeycapBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAE3AC855B91A25DE4BFBA52 /* GravKeycapBadge.swift */; };
 		A8348B77222EB7F1CC64241C /* TelemetryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40E846C8A8D0F975578DC4A3 /* TelemetryModels.swift */; };
+		A8EF34D0A303948C1FB2B25C /* SwarmTelemetryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963418B974EA472DFDB529F9 /* SwarmTelemetryTabView.swift */; };
 		A96AECB5987FD2B690B30363 /* ResponseTelemetryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFB7B35F20C3023A4D53AA2D /* ResponseTelemetryTabView.swift */; };
 		AA9467D1F610664C47AD30AD /* GravOnboardingChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF72E703711EF7C02C996F6F /* GravOnboardingChrome.swift */; };
 		B6364C0B87177A4045319E2C /* TaskLogTailerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27BA097A7AA63BB6924CA2C9 /* TaskLogTailerTests.swift */; };
@@ -147,6 +150,7 @@
 		7584C05AC97E1BBBDA47D994 /* LiquidGlassTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassTokens.swift; sourceTree = "<group>"; };
 		76FC3CE779D11F7A2EDBEF03 /* GravPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravPalette.swift; sourceTree = "<group>"; };
 		78D5F95F5AD7C5A27385D1BF /* LiquidGlassWindowBackdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassWindowBackdrop.swift; sourceTree = "<group>"; };
+		7A88509B96DB07EB20A5B641 /* SwarmModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmModels.swift; sourceTree = "<group>"; };
 		7AF84ABC6939425A99D95535 /* GravOnboardingWelcomeAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingWelcomeAudio.swift; sourceTree = "<group>"; };
 		7ED4B2A0D94552FAB23AB341 /* GravTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravTokens.swift; sourceTree = "<group>"; };
 		7F1A494C81801D1F154CC3A9 /* RadiusTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadiusTokens.swift; sourceTree = "<group>"; };
@@ -163,6 +167,8 @@
 		8F6C215E35EBA9F7D3735BF6 /* PreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesStore.swift; sourceTree = "<group>"; };
 		8F6D0C56A09AC458AF195BB2 /* GravButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravButtonStyles.swift; sourceTree = "<group>"; };
 		943F323D0FFF409F539D13E7 /* NotchSurfacePrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchSurfacePrimitives.swift; sourceTree = "<group>"; };
+		963418B974EA472DFDB529F9 /* SwarmTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmTelemetryTabView.swift; sourceTree = "<group>"; };
+		9AA4D5DAB9532096AF75857D /* SwarmSubagentWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmSubagentWatcher.swift; sourceTree = "<group>"; };
 		9AC6AD83E77E0351195E31D2 /* NotchHUDSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchHUDSettingsPane.swift; sourceTree = "<group>"; };
 		9C6E389E281027F8D41C3CEE /* GravOnboardingStepRail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingStepRail.swift; sourceTree = "<group>"; };
 		A189B95D103E3C1285184C3F /* FilesTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesTelemetryTabView.swift; sourceTree = "<group>"; };
@@ -294,6 +300,8 @@
 				0EAA8B09A6284B1B6BE9DC71 /* DiffComputer.swift */,
 				5D5D7A3171BFD3583CB88FEB /* EventClassifier.swift */,
 				B8212969EB91066FDF724464 /* JSONValue.swift */,
+				7A88509B96DB07EB20A5B641 /* SwarmModels.swift */,
+				9AA4D5DAB9532096AF75857D /* SwarmSubagentWatcher.swift */,
 				3AA30702A27E78DEF0415086 /* TaskLogTailer.swift */,
 				40E846C8A8D0F975578DC4A3 /* TelemetryModels.swift */,
 				680E5CAA331FE60B756716D2 /* TranscriptTailer.swift */,
@@ -315,6 +323,7 @@
 				0FE40147E8C4DAAED64BB1E5 /* OpticalMotionHelpers.swift */,
 				FFB7B35F20C3023A4D53AA2D /* ResponseTelemetryTabView.swift */,
 				E7EE32D22339B9911813728D /* SegmentedModeRail.swift */,
+				963418B974EA472DFDB529F9 /* SwarmTelemetryTabView.swift */,
 				B0C0F3062C170F4F485AC076 /* TerminalTelemetryTabView.swift */,
 			);
 			path = Notch;
@@ -597,6 +606,9 @@
 				17D285D9AD739CE7637C0C32 /* SettingsSidebarView.swift in Sources */,
 				3FADDFDC019758CC62E43CC1 /* SettingsView.swift in Sources */,
 				70C8A2656C93FC3588380484 /* SettingsWindowController.swift in Sources */,
+				5FC3FB7825E8579DF386D360 /* SwarmModels.swift in Sources */,
+				99C6DDB49219B483546F383D /* SwarmSubagentWatcher.swift in Sources */,
+				A8EF34D0A303948C1FB2B25C /* SwarmTelemetryTabView.swift in Sources */,
 				0EA0053BE0125B75F89FED9D /* TaskLogTailer.swift in Sources */,
 				A8348B77222EB7F1CC64241C /* TelemetryModels.swift in Sources */,
 				31ED620382689ACC323BF8AC /* TelemetrySettingsPane.swift in Sources */,

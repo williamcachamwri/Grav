@@ -87,6 +87,14 @@ public struct CollapsedNotchView: View {
                 .font(.system(size: 8.5, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.38))
                 .transition(.opacity)
+        } else if store.activeSwarmSnapshot != nil {
+            Image(systemName: "point.3.connected.trianglepath.dotted")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(GravPalette.prismViolet)
+                .transition(signalTransition)
+        } else if store.runningTaskCount > 0 && effectiveState == .idle {
+            NotchBars(commandWaveStyle)
+                .transition(signalTransition)
         } else {
             switch effectiveState {
             case .working:
@@ -132,56 +140,126 @@ public struct CollapsedNotchView: View {
     @ViewBuilder
     private func trailingWing(compact: Bool) -> some View {
         ZStack(alignment: .trailing) {
-            switch effectiveState {
-            case .working:
-                workingTrailingSignal(compact: compact)
-                    .id("collapsed-working")
+            if !store.isPaused, let activeSwarm = store.activeSwarmSnapshot {
+                swarmTrailingSignal(for: activeSwarm, compact: compact)
+                    .id("collapsed-swarm-\(activeSwarm.runningWorkers.count)-\(activeSwarm.waitingWorkers.count)")
                     .transition(signalTransition)
-
-            case .compacting:
-                compactingTrailingSignal(compact: compact)
-                    .id("collapsed-compacting")
+            } else if !store.isPaused, store.runningTaskCount > 0, effectiveState == .idle {
+                runningTasksTrailingSignal(count: store.runningTaskCount, compact: compact)
+                    .id("collapsed-tasks-\(store.runningTaskCount)")
                     .transition(signalTransition)
+            } else {
+                switch effectiveState {
+                case let .working(startedAt):
+                    workingTrailingSignal(startedAt: startedAt, compact: compact)
+                        .id("collapsed-working")
+                        .transition(signalTransition)
 
-            case .thinking:
-                thinkingTrailingSignal(compact: compact)
-                    .id("collapsed-thinking")
-                    .transition(signalTransition)
+                case .compacting:
+                    compactingTrailingSignal(compact: compact)
+                        .id("collapsed-compacting")
+                        .transition(signalTransition)
 
-            case let .inspecting(event):
-                inspectingTrailingSignal(for: event, compact: compact)
-                    .id("collapsed-inspect-\(event.id)")
-                    .transition(signalTransition)
+                case .thinking:
+                    thinkingTrailingSignal(compact: compact)
+                        .id("collapsed-thinking")
+                        .transition(signalTransition)
 
-            case let .editing(event):
-                editingTrailingSignal(for: event)
-                    .id("collapsed-edit-\(event.id)")
-                    .transition(signalTransition)
+                case let .inspecting(event):
+                    inspectingTrailingSignal(for: event, compact: compact)
+                        .id("collapsed-inspect-\(event.id)")
+                        .transition(signalTransition)
 
-            case let .runningCommand(command):
-                commandTrailingSignal(for: command, compact: compact)
-                    .id("collapsed-cmd-\(command.id)")
-                    .transition(signalTransition)
+                case let .editing(event):
+                    editingTrailingSignal(for: event)
+                        .id("collapsed-edit-\(event.id)")
+                        .transition(signalTransition)
 
-            case .idle:
-                idleTrailingSignal(compact: compact)
-                    .id("collapsed-idle")
-                    .transition(.opacity)
+                case let .runningCommand(command):
+                    if store.runningTaskCount >= 2 {
+                        runningTasksTrailingSignal(count: store.runningTaskCount, compact: compact)
+                            .id("collapsed-multi-tasks-\(store.runningTaskCount)")
+                            .transition(signalTransition)
+                    } else {
+                        commandTrailingSignal(for: command, compact: compact)
+                            .id("collapsed-cmd-\(command.id)")
+                            .transition(signalTransition)
+                    }
+
+                case .idle:
+                    idleTrailingSignal(compact: compact)
+                        .id("collapsed-idle")
+                        .transition(.opacity)
+                }
             }
         }
         .animation(reduceMotion ? nil : islandSpring, value: effectiveState)
+        .animation(reduceMotion ? nil : islandSpring, value: store.runningTaskCount)
+        .animation(reduceMotion ? nil : islandSpring, value: store.activeSwarmSnapshot?.collapsedRatioBadge)
     }
 
-    private func workingTrailingSignal(compact: Bool) -> some View {
-        NotchShimmerText(
-            text: "Working",
+    private func swarmTrailingSignal(for swarm: SwarmSnapshot, compact: Bool) -> some View {
+        HStack(alignment: .center, spacing: 6) {
+            if compact {
+                NotchShimmerText(
+                    text: "Swarm \(swarm.collapsedRatioBadge)",
+                    font: .system(size: 11, weight: .medium),
+                    tracking: -0.15,
+                    baseOpacity: 0.48,
+                    peakOpacity: 0.96,
+                    period: 1.8,
+                    reduceMotion: reduceMotion
+                )
+                .monospacedDigit()
+            } else {
+                NotchPingPongMarqueeText(
+                    text: swarm.collapsedSummaryText,
+                    font: .system(size: 11.5, weight: .medium),
+                    color: Color.white.opacity(0.88),
+                    alignment: .trailing,
+                    reduceMotion: reduceMotion
+                )
+
+                Text(swarm.collapsedRatioBadge)
+                    .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(GravPalette.prismViolet)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private func runningTasksTrailingSignal(count: Int, compact: Bool) -> some View {
+        let label = count == 1 ? "1 task running" : "\(count) tasks running"
+        return NotchShimmerText(
+            text: compact ? "\(count) task\(count == 1 ? "" : "s")" : label,
             font: .system(size: compact ? 11 : 11.5, weight: .medium),
             tracking: -0.15,
-            baseOpacity: 0.44,
+            baseOpacity: 0.46,
             peakOpacity: 0.96,
             period: 1.75,
             reduceMotion: reduceMotion
         )
+        .monospacedDigit()
+    }
+
+    private func workingTrailingSignal(startedAt: Date, compact: Bool) -> some View {
+        HStack(alignment: .center, spacing: 5) {
+            NotchWorkingThinkingShimmerLabel(
+                startDate: startedAt,
+                compact: compact,
+                font: .system(size: compact ? 11 : 11.5, weight: .medium),
+                reduceMotion: reduceMotion
+            )
+
+            if !compact && store.runningTaskCount > 0 {
+                Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(GravPalette.glacialCyan.opacity(0.84))
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
     }
 
     private func compactingTrailingSignal(compact: Bool) -> some View {
@@ -197,12 +275,22 @@ public struct CollapsedNotchView: View {
     }
 
     private func thinkingTrailingSignal(compact: Bool) -> some View {
-        NotchThinkingShimmerLabel(
-            startDate: store.currentThinking?.startedAt ?? Date(),
-            compact: compact,
-            font: .system(size: compact ? 11 : 11.5, weight: .medium),
-            reduceMotion: reduceMotion
-        )
+        HStack(alignment: .center, spacing: 5) {
+            NotchThinkingShimmerLabel(
+                startDate: store.currentThinking?.startedAt ?? Date(),
+                compact: compact,
+                font: .system(size: compact ? 11 : 11.5, weight: .medium),
+                reduceMotion: reduceMotion
+            )
+
+            if !compact && store.runningTaskCount > 0 {
+                Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(GravPalette.glacialCyan.opacity(0.84))
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
     }
 
     private func inspectingTrailingSignal(for event: FileInspectionEvent, compact: Bool) -> some View {

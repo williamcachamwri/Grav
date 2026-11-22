@@ -403,4 +403,131 @@ final class TelemetryStateMachineTests: XCTestCase {
         let doneOut = classifier.process(step: doneReply)
         XCTAssertEqual(doneOut.state, .idle)
     }
+
+    func testConfirmedBackgroundTaskSurvivesFinalPlannerAckAndSettlesOnSystemMessage() {
+        var classifier = EventClassifier()
+
+        let callStep = TranscriptStep(
+            stepIndex: 100,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T03:00:00Z",
+            toolCalls: [
+                ToolCall(
+                    name: "run_command",
+                    args: [
+                        "CommandLine": .string("xcodebuild test"),
+                        "toolSummary": .string("Run XCTest suite"),
+                    ]
+                ),
+            ]
+        )
+        _ = classifier.process(step: callStep)
+
+        // Background task notice (e.g. step 101)
+        let bgNotice = TranscriptStep(
+            stepIndex: 101,
+            source: "MODEL",
+            type: "GENERIC",
+            status: "RUNNING",
+            createdAt: "2026-11-23T03:00:08Z",
+            content: "Tool is running as a background task with task id: conv/task-101"
+        )
+        _ = classifier.process(step: bgNotice)
+
+        // Even if another step intervened before the planner's waiting message (step 103)
+        let ackReply = TranscriptStep(
+            stepIndex: 103,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T03:00:10Z",
+            content: "Tests running in background..."
+        )
+        let ackOut = classifier.process(step: ackReply)
+        if case .runningCommand = ackOut.state {
+            // expected: confirmed background task MUST remain active
+        } else {
+            XCTFail("Expected confirmed background task to stay .runningCommand, got \(ackOut.state)")
+        }
+        XCTAssertEqual(classifier.pendingCommands.count, 1)
+
+        // System message arrives when background task finishes
+        let doneMsg = TranscriptStep(
+            stepIndex: 104,
+            source: "SYSTEM",
+            type: "SYSTEM_MESSAGE",
+            status: "DONE",
+            createdAt: "2026-11-23T03:00:35Z",
+            content: "Task id \"conv/task-101\" finished with result:\nCommand exited with code 0.\n\nCommand output:\nTEST SUCCEEDED"
+        )
+        let doneOut = classifier.process(step: doneMsg)
+        XCTAssertEqual(doneOut.updatedCommands.first?.status, .succeeded)
+        XCTAssertTrue(classifier.pendingCommands.isEmpty)
+    }
+
+    func testSwarmAndSubagentSnapshotParsing() throws {
+        let rootDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("grav-swarm-\(UUID().uuidString)", isDirectory: true)
+        let convDir = rootDir.appendingPathComponent("coord-1", isDirectory: true)
+        let swarmDir = convDir.appendingPathComponent(".system_generated/swarm", isDirectory: true)
+        let subagentsDir = convDir.appendingPathComponent(".system_generated/subagents", isDirectory: true)
+        try FileManager.default.createDirectory(at: swarmDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: subagentsDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootDir) }
+
+        try #"{"version":1,"swarm_id":"coord-1","created_at":"2026-11-23T03:00:00Z"}"#
+            .write(to: swarmDir.appendingPathComponent("swarm.json"), atomically: true, encoding: .utf8)
+
+        let membersJSON = """
+        {
+          "title": "Build Grav Swarm",
+          "members": {
+            "coordinator": { "conversation_id": "coord-1", "role": "coordinator", "phase": "RUNNING", "killed": false, "model": "gemini-4-argon-high" },
+            "notch-hud": { "conversation_id": "worker-1", "role": "worker", "phase": "RUNNING", "wake_mode": "working", "killed": false, "model": "gemini-4-neon-high" },
+            "telemetry": { "conversation_id": "worker-2", "role": "worker", "phase": "WAITING", "wake_mode": "waiting", "killed": false, "model": "gemini-4-neon-high" },
+            "docs": { "conversation_id": "worker-3", "role": "worker", "phase": "KILLED", "killed": true, "model": "gemini-4-neon-high" }
+          }
+        }
+        """
+        try membersJSON.write(to: swarmDir.appendingPathComponent("members.json"), atomically: true, encoding: .utf8)
+
+        let planJSON = """
+        {
+          "goal": { "title": "Ship Swarm HUD", "line": "Parallel workers & live board." },
+          "tasks": { "notch-hud": "Build collapsed summary and Swarm tab" }
+        }
+        """
+        try planJSON.write(to: swarmDir.appendingPathComponent("plan.json"), atomically: true, encoding: .utf8)
+
+        let boardJSONL = """
+        {"seq":1,"agent":"coordinator","text":"@notch-hud Please build Swarm tab","time":"2026-11-23 03:01:00"}
+        {"seq":2,"agent":"notch-hud","text":"@coordinator Working on SwarmTelemetryTabView","time":"2026-11-23 03:02:00"}
+        """
+        try boardJSONL.write(to: swarmDir.appendingPathComponent("board.jsonl"), atomically: true, encoding: .utf8)
+
+        // One swarm worker subagent + one standalone research subagent
+        let workerSubagent = #"{"conversationId":"worker-1","subagentDescriptor":{"typeName":"worker","role":"Swarm Worker (notch-hud)"},"state":"SUBAGENT_STATE_RUNNING","spawnStepIndex":10}"#
+        let researchSubagent = #"{"conversationId":"sub-research-1","subagentDescriptor":{"typeName":"research","role":"Codebase Researcher"},"state":"SUBAGENT_STATE_RUNNING","spawnStepIndex":12}"#
+        try workerSubagent.write(to: subagentsDir.appendingPathComponent("worker-1.json"), atomically: true, encoding: .utf8)
+        try researchSubagent.write(to: subagentsDir.appendingPathComponent("sub-research-1.json"), atomically: true, encoding: .utf8)
+
+        let update = SwarmSubagentWatcher.readSnapshot(sessionDirectoryURL: convDir, brainDirectoryURL: rootDir)
+        let swarm = try XCTUnwrap(update.swarm)
+        XCTAssertEqual(swarm.displayTitle, "Ship Swarm HUD")
+        XCTAssertEqual(swarm.runningWorkers.count, 1)
+        XCTAssertEqual(swarm.waitingWorkers.count, 1)
+        XCTAssertEqual(swarm.finishedWorkers.count, 1)
+        XCTAssertTrue(swarm.hasLiveWorkers)
+        XCTAssertEqual(swarm.collapsedRatioBadge, "1/3")
+        XCTAssertTrue(swarm.collapsedSummaryText.contains("notch-hud"))
+        XCTAssertEqual(swarm.boardMessages.first?.seq, 2)
+
+        // Standalone subagent filtered cleanly from swarm workers
+        let standalone = update.subagents.filter { !$0.isSwarmWorker }
+        XCTAssertEqual(standalone.count, 1)
+        XCTAssertEqual(standalone[0].role, "Codebase Researcher")
+        XCTAssertTrue(standalone[0].isActive)
+    }
 }

@@ -342,12 +342,7 @@ public struct LiveTelemetryTabView: View {
                 if !store.isPaused {
                     switch store.state {
                     case let .working(startedAt):
-                        liveInlineStatusRow(
-                            symbol: "ellipsis",
-                            symbolColor: Color.white.opacity(0.56),
-                            label: "Working",
-                            startedAt: startedAt
-                        )
+                        liveWorkingThinkingStatusRow(startedAt: startedAt)
                     case let .compacting(event) where !store.recentActivity.contains(where: { $0.id == event.id }):
                         liveInlineStatusRow(
                             symbol: "rectangle.compress.vertical",
@@ -355,6 +350,8 @@ public struct LiveTelemetryTabView: View {
                             label: "Compacting",
                             startedAt: event.startedAt
                         )
+                    case .idle where store.runningTaskCount > 0:
+                        liveRunningTasksStatusRow(count: store.runningTaskCount)
                     default:
                         EmptyView()
                     }
@@ -444,6 +441,57 @@ public struct LiveTelemetryTabView: View {
                 .foregroundStyle(spec.color)
                 .frame(width: 14.5, alignment: .center)
         }
+    }
+
+    private func liveWorkingThinkingStatusRow(startedAt: Date) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(GravPalette.thinking)
+                .frame(width: 14.5, alignment: .center)
+
+            NotchWorkingThinkingShimmerLabel(
+                startDate: startedAt,
+                compact: false,
+                font: .system(size: 11.5, weight: .medium),
+                reduceMotion: reduceMotion
+            )
+
+            Spacer(minLength: 8)
+
+            if store.runningTaskCount > 0 {
+                Text("\(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s") running")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(GravPalette.glacialCyan.opacity(0.84))
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5.5)
+    }
+
+    private func liveRunningTasksStatusRow(count: Int) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "terminal")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(GravPalette.glacialCyan)
+                .frame(width: 14.5, alignment: .center)
+
+            NotchShimmerText(
+                text: count == 1 ? "1 task running" : "\(count) tasks running",
+                font: .system(size: 11.5, weight: .medium),
+                tracking: -0.15,
+                baseOpacity: 0.46,
+                peakOpacity: 0.96,
+                period: 1.75,
+                reduceMotion: reduceMotion
+            )
+            .monospacedDigit()
+
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5.5)
     }
 
     private func liveInlineStatusRow(

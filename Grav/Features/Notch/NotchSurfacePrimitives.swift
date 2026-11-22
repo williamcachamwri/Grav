@@ -326,3 +326,42 @@ struct NotchThinkingShimmerLabel: View {
         }
     }
 }
+
+/// Seamless `"Working"` (0–1s) -> `"Thinking for Ns"` (2s+) shimmer label matching Antigravity's
+/// exact real-time cadence between tool steps and deep reasoning turns.
+struct NotchWorkingThinkingShimmerLabel: View {
+    var startDate: Date
+    var compact: Bool = false
+    var font: Font = .system(size: 11.5, weight: .medium)
+    var reduceMotion: Bool = false
+
+    var body: some View {
+        TimelineView(.periodic(from: startDate, by: 1.0)) { context in
+            let elapsed = max(0, Int(context.date.timeIntervalSince(startDate)))
+            let label: String = {
+                if elapsed < 2 {
+                    return "Working"
+                }
+                let durationString: String
+                if elapsed < 60 {
+                    durationString = "\(elapsed)s"
+                } else {
+                    let mins = elapsed / 60
+                    let secs = elapsed % 60
+                    durationString = secs == 0 ? "\(mins)m" : "\(mins)m \(secs)s"
+                }
+                return compact ? "Thinking \(durationString)" : "Thinking for \(durationString)"
+            }()
+            NotchShimmerText(
+                text: label,
+                font: font,
+                tracking: -0.15,
+                baseOpacity: 0.46,
+                peakOpacity: 0.96,
+                period: 1.80,
+                reduceMotion: reduceMotion
+            )
+            .monospacedDigit()
+        }
+    }
+}

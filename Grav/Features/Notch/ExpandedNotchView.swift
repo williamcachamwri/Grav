@@ -46,8 +46,10 @@ public struct ExpandedNotchView: View {
                     replyCount: store.responses.count,
                     filesCount: store.fileChanges.count,
                     terminalCount: store.commands.count,
+                    swarmCount: store.totalAgentsBadgeCount,
                     hasStreamingReply: store.latestResponse?.isStreaming == true && !store.isPaused,
-                    hasRunningCommand: store.activeCommand != nil && !store.isPaused
+                    hasRunningCommand: store.activeCommand != nil && !store.isPaused,
+                    hasActiveSwarm: (store.activeSwarmSnapshot != nil || store.runningSubagentCount > 0) && !store.isPaused
                 )
 
                 tabViewport
@@ -89,7 +91,7 @@ public struct ExpandedNotchView: View {
         .background {
             hiddenShortcutControls
         }
-        .onKeyPress(keys: [.escape, "1", "2", "3", "4"]) { keyPress in
+        .onKeyPress(keys: [.escape, "1", "2", "3", "4", "5"]) { keyPress in
             handleKeyPress(keyPress)
         }
         .onDisappear {
@@ -144,6 +146,17 @@ public struct ExpandedNotchView: View {
                     isSearchFieldFocused: $isTerminalSearchFocused
                 )
                 .id(NotchTab.terminal)
+                .transition(tabTransition)
+
+            case .swarm:
+                SwarmTelemetryTabView(
+                    store: store,
+                    onSelectWorkerSession: { conversationID in
+                        store.selectSessionByID(conversationID)
+                        switchTab(to: .live)
+                    }
+                )
+                .id(NotchTab.swarm)
                 .transition(tabTransition)
             }
         }
@@ -228,6 +241,9 @@ public struct ExpandedNotchView: View {
         case "4":
             switchTab(to: .terminal)
             return .handled
+        case "5":
+            switchTab(to: .swarm)
+            return .handled
         default:
             return .ignored
         }
@@ -277,6 +293,14 @@ public struct ExpandedNotchView: View {
             }
             NotchTelemetryHelpers.copyToPasteboard(thought.text)
             showBanner("Copied reasoning")
+
+        case .swarm:
+            guard let swarm = store.swarmSnapshot else { return }
+            let summary = swarm.members
+                .map { "\($0.name) [\($0.phase.displayLabel)]" }
+                .joined(separator: ", ")
+            NotchTelemetryHelpers.copyToPasteboard("\(swarm.displayTitle): \(summary)")
+            showBanner("Copied swarm roster")
         }
     }
 

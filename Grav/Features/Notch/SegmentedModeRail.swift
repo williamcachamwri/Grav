@@ -8,8 +8,10 @@ public struct SegmentedModeRail: View {
     public var replyCount: Int
     public var filesCount: Int
     public var terminalCount: Int
+    public var swarmCount: Int
     public var hasStreamingReply: Bool
     public var hasRunningCommand: Bool
+    public var hasActiveSwarm: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var railNamespace
@@ -21,16 +23,20 @@ public struct SegmentedModeRail: View {
         replyCount: Int = 0,
         filesCount: Int = 0,
         terminalCount: Int = 0,
+        swarmCount: Int = 0,
         hasStreamingReply: Bool = false,
-        hasRunningCommand: Bool = false
+        hasRunningCommand: Bool = false,
+        hasActiveSwarm: Bool = false
     ) {
         self._selection = selection
         self.liveCount = liveCount
         self.replyCount = replyCount
         self.filesCount = filesCount
         self.terminalCount = terminalCount
+        self.swarmCount = swarmCount
         self.hasStreamingReply = hasStreamingReply
         self.hasRunningCommand = hasRunningCommand
+        self.hasActiveSwarm = hasActiveSwarm
     }
 
     public var body: some View {
@@ -54,23 +60,26 @@ public struct SegmentedModeRail: View {
         return Button {
             select(tab)
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Image(systemName: tab.symbolName)
-                    .font(.system(size: 10.5, weight: isSelected ? .medium : .regular))
+                    .font(.system(size: 10, weight: isSelected ? .medium : .regular))
                     .foregroundStyle(isSelected ? Color.white : Color.white.opacity(isHovered ? 0.76 : 0.46))
 
                 Text(tab.title)
-                    .font(.system(size: 11.5, weight: isSelected ? .medium : .regular))
+                    .font(.system(size: 11, weight: isSelected ? .medium : .regular))
                     .tracking(-0.15)
                     .foregroundStyle(isSelected ? Color.white : Color.white.opacity(isHovered ? 0.82 : 0.56))
+                    .lineLimit(1)
 
                 if tab == .terminal && hasRunningCommand {
                     NotchSemanticDot(color: GravPalette.glacialCyan, size: 4.5, isPulsing: true)
                 } else if tab == .reply && hasStreamingReply {
                     NotchSemanticDot(color: GravPalette.thinking, size: 4.5, isPulsing: true)
+                } else if tab == .swarm && hasActiveSwarm {
+                    NotchSemanticDot(color: GravPalette.prismViolet, size: 4.5, isPulsing: true)
                 } else if count > 0 {
                     Text(formatBadgeCount(count))
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
                         .monospacedDigit()
                         .foregroundStyle(isSelected ? Color.white.opacity(0.56) : Color.white.opacity(0.30))
                         .contentTransition(reduceMotion ? .identity : .numericText())
@@ -147,6 +156,8 @@ public struct SegmentedModeRail: View {
             return filesCount
         case .terminal:
             return terminalCount
+        case .swarm:
+            return swarmCount
         }
     }
 }

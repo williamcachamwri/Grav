@@ -30,6 +30,8 @@ public final class AntigravityTelemetryStore {
     public internal(set) var recentActivity: [TelemetryActivityItem] = []
     public internal(set) var tokenMetrics = TokenMetrics()
     public internal(set) var activeModel: String?
+    public internal(set) var swarmSnapshot: SwarmSnapshot?
+    public internal(set) var subagents: [SubagentRecord] = []
 
     public internal(set) var isPaused: Bool = false
     public internal(set) var isMonitoring: Bool = false
@@ -46,6 +48,7 @@ public final class AntigravityTelemetryStore {
 
     private var discovery: ConversationDiscovery?
     private var activeTailer: TranscriptTailer?
+    private var activeSwarmWatcher: SwarmSubagentWatcher?
     private var classifier = EventClassifier()
 
     private var userPinnedSessionID: String?
@@ -100,11 +103,14 @@ public final class AntigravityTelemetryStore {
         discovery = nil
         let currentTailer = activeTailer
         activeTailer = nil
+        let currentSwarmWatcher = activeSwarmWatcher
+        activeSwarmWatcher = nil
         let logTailer = taskLogTailer
 
         Task {
             await currentDiscovery?.stopWatching()
             await currentTailer?.stopWatching()
+            await currentSwarmWatcher?.stopWatching()
             await logTailer.stopAll()
         }
 
@@ -118,9 +124,11 @@ public final class AntigravityTelemetryStore {
         if paused {
             cancelIdleDecayTimer()
             let currentTailer = activeTailer
+            let currentSwarmWatcher = activeSwarmWatcher
             let logTailer = taskLogTailer
             Task {
                 await currentTailer?.stopWatching()
+                await currentSwarmWatcher?.stopWatching()
                 await logTailer.stopAll()
             }
         } else if isMonitoring {
@@ -142,6 +150,18 @@ public final class AntigravityTelemetryStore {
     public func selectSession(_ session: ConversationSession) {
         userPinnedSessionID = session.id
         activateSession(session)
+    }
+
+    public func selectSessionByID(_ conversationID: String) {
+        if let existing = sessions.first(where: { $0.id == conversationID }) {
+            selectSession(existing)
+            return
+        }
+        let candidateDir = appDetector.brainDirectoryURL.appendingPathComponent(conversationID, isDirectory: true)
+        let candidate = ConversationSession(id: conversationID, directoryURL: candidateDir)
+        if FileManager.default.fileExists(atPath: candidate.transcriptURL.path) {
+            selectSession(candidate)
+        }
     }
 
     public func activateAntigravityApp() {
@@ -265,6 +285,42 @@ public final class AntigravityTelemetryStore {
         commands.first(where: { $0.status == .running })
     }
 
+    /// Number of currently running shell commands / background tasks.
+    public var runningCommandCount: Int {
+        commands.filter { $0.status == .running }.count
+    }
+
+    /// Standalone non-swarm subagents (`research`, `browser`, `self`, etc.).
+    public var standaloneSubagents: [SubagentRecord] {
+        subagents.filter { !$0.isSwarmWorker }
+    }
+
+    /// Number of currently running standalone subagents.
+    public var runningSubagentCount: Int {
+        standaloneSubagents.filter(\.isActive).count
+    }
+
+    /// Number of currently working swarm workers.
+    public var runningSwarmWorkerCount: Int {
+        swarmSnapshot?.runningWorkers.count ?? 0
+    }
+
+    /// Total concurrent running tasks across background commands, subagents, and swarm workers.
+    public var runningTaskCount: Int {
+        runningCommandCount + runningSubagentCount + runningSwarmWorkerCount
+    }
+
+    /// Non-nil when a swarm has live working or waiting workers.
+    public var activeSwarmSnapshot: SwarmSnapshot? {
+        guard let snap = swarmSnapshot, snap.hasLiveWorkers else { return nil }
+        return snap
+    }
+
+    /// Total number of swarm workers + standalone subagents for the Swarm tab badge.
+    public var totalAgentsBadgeCount: Int {
+        (swarmSnapshot?.workers.count ?? 0) + standaloneSubagents.count
+    }
+
     /// Convenience accessor for the most recent file change, if any.
     public var latestFileChange: FileChangeEvent? {
         fileChanges.first
@@ -372,6 +428,8 @@ public final class AntigravityTelemetryStore {
         cancelIdleDecayTimer()
         let previousTailer = activeTailer
         activeTailer = nil
+        let previousSwarmWatcher = activeSwarmWatcher
+        activeSwarmWatcher = nil
         let logTailer = taskLogTailer
 
         // Reset session-scoped observable state
@@ -388,14 +446,19 @@ public final class AntigravityTelemetryStore {
         recentActivity = []
         tokenMetrics = TokenMetrics()
         activeModel = nil
+        swarmSnapshot = nil
+        subagents = []
 
         let tailer = TranscriptTailer(transcriptURL: session.transcriptURL, initialOffset: 0)
         activeTailer = tailer
+        let swarmWatcher = SwarmSubagentWatcher(sessionDirectoryURL: session.directoryURL)
+        activeSwarmWatcher = swarmWatcher
         isHydratingActiveSession = true
 
         guard isMonitoring, !isPaused else {
             Task {
                 await previousTailer?.stopWatching()
+                await previousSwarmWatcher?.stopWatching()
                 await logTailer.stopAll()
             }
             return
@@ -403,7 +466,16 @@ public final class AntigravityTelemetryStore {
 
         Task { [weak self] in
             await previousTailer?.stopWatching()
+            await previousSwarmWatcher?.stopWatching()
             await logTailer.stopAll()
+
+            // Attach live Swarm & Subagent directory watcher
+            await swarmWatcher.startWatching { [weak self] update in
+                Task { @MainActor [weak self] in
+                    guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
+                    self.applySwarmSubagentUpdate(update)
+                }
+            }
 
             // Initial synchronous catch-up read (suppressing peek bursts for historical steps)
             let initialSteps = await tailer.readNewSteps()
@@ -433,7 +505,21 @@ public final class AntigravityTelemetryStore {
             activeTailer = tailer
         }
 
+        let swarmWatcher: SwarmSubagentWatcher
+        if let existingSwarm = activeSwarmWatcher, existingSwarm.sessionDirectoryURL == session.directoryURL {
+            swarmWatcher = existingSwarm
+        } else {
+            swarmWatcher = SwarmSubagentWatcher(sessionDirectoryURL: session.directoryURL)
+            activeSwarmWatcher = swarmWatcher
+        }
+
         Task { [weak self] in
+            await swarmWatcher.startWatching { [weak self] update in
+                Task { @MainActor [weak self] in
+                    guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
+                    self.applySwarmSubagentUpdate(update)
+                }
+            }
             await tailer.startWatching { [weak self] newSteps in
                 Task { @MainActor [weak self] in
                     guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
@@ -448,6 +534,8 @@ public final class AntigravityTelemetryStore {
         cancelIdleDecayTimer()
         let previousTailer = activeTailer
         activeTailer = nil
+        let previousSwarmWatcher = activeSwarmWatcher
+        activeSwarmWatcher = nil
         let logTailer = taskLogTailer
 
         activeSession = nil
@@ -462,10 +550,25 @@ public final class AntigravityTelemetryStore {
         recentActivity = []
         tokenMetrics = TokenMetrics()
         activeModel = nil
+        swarmSnapshot = nil
+        subagents = []
 
         Task {
             await previousTailer?.stopWatching()
+            await previousSwarmWatcher?.stopWatching()
             await logTailer.stopAll()
+        }
+    }
+
+    private func applySwarmSubagentUpdate(_ update: SwarmSubagentUpdate) {
+        if GravMotionPreferences.shared.reduceMotion {
+            swarmSnapshot = update.swarm
+            subagents = update.subagents
+        } else {
+            withAnimation(GravMotionSpec.settle.animation) {
+                swarmSnapshot = update.swarm
+                subagents = update.subagents
+            }
         }
     }
 
@@ -570,6 +673,12 @@ public final class AntigravityTelemetryStore {
         }
 
         state = output.state
+
+        if output.didMutateAgentsOrSwarm, let watcher = activeSwarmWatcher {
+            Task {
+                await watcher.triggerRefresh()
+            }
+        }
 
         if !suppressPeeks {
             for peekEvent in output.peekEvents {
@@ -753,16 +862,25 @@ public final class AntigravityTelemetryStore {
 
         guard state.isActive, !isPaused else { return }
 
-        // While a shell command is running, give it a generous quiet-liveness window (45s);
-        // if no transcript step or task log byte arrives in 45s (e.g., user clicked Stop),
-        // re-check log mtime and settle gracefully to `.idle`.
+        // Antigravity writes `PLANNER_RESPONSE` only after a model finishes thinking for that step,
+        // which routinely takes 15–60s on deep reasoning models. Keep active turns alive generously
+        // (75s safety fallback for manual Cancel/Stop) while normal turn completions still drop to
+        // `.idle` instantaneously (0ms) on the final `PLANNER_RESPONSE`.
         let isRunningCommand: Bool
         if case .runningCommand = state {
             isRunningCommand = true
         } else {
             isRunningCommand = false
         }
-        let timeout = isRunningCommand ? max(45.0, idleDecaySeconds * 3.5) : idleDecaySeconds
+        let timeout: TimeInterval
+        if idleDecaySeconds < 5.0 {
+            // Preserve fast deterministic timeouts in unit tests
+            timeout = isRunningCommand ? max(45.0, idleDecaySeconds * 3.5) : idleDecaySeconds
+        } else if isRunningCommand {
+            timeout = max(60.0, idleDecaySeconds * 5.0)
+        } else {
+            timeout = max(75.0, idleDecaySeconds * 6.0)
+        }
         let delayNanoseconds = UInt64(timeout * 1_000_000_000)
 
         idleDecayTask = Task { [weak self] in

@@ -145,11 +145,17 @@ public struct ExpandedNotchHeaderView: View {
     }
 
     private var inlineStatusReadout: some View {
-        HStack(spacing: 4.5) {
+        let runningTasks = store.isPaused ? 0 : store.runningTaskCount
+        let effectivePulsing = isActivelyStreaming || runningTasks > 0
+        let effectiveDotColor = (runningTasks > 0 && !isActivelyStreaming)
+            ? GravPalette.glacialCyan
+            : stateDotColor
+
+        return HStack(spacing: 4.5) {
             NotchSemanticDot(
-                color: stateDotColor,
+                color: effectiveDotColor,
                 size: 5,
-                isPulsing: isActivelyStreaming
+                isPulsing: effectivePulsing
             )
             if !store.isPaused {
                 switch store.state {
@@ -161,7 +167,15 @@ public struct ExpandedNotchHeaderView: View {
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
-                case .working, .compacting:
+                case let .working(startedAt):
+                    NotchWorkingThinkingShimmerLabel(
+                        startDate: startedAt,
+                        compact: true,
+                        font: .system(size: 11, weight: .medium),
+                        reduceMotion: reduceMotion
+                    )
+                    .fixedSize(horizontal: true, vertical: false)
+                case .compacting:
                     NotchShimmerText(
                         text: stateLabel,
                         font: .system(size: 11, weight: .medium),
@@ -172,12 +186,32 @@ public struct ExpandedNotchHeaderView: View {
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
+                case .idle where runningTasks > 0:
+                    NotchShimmerText(
+                        text: runningTasks == 1 ? "1 task running" : "\(runningTasks) tasks running",
+                        font: .system(size: 11, weight: .medium),
+                        tracking: -0.1,
+                        baseOpacity: 0.48,
+                        peakOpacity: 0.96,
+                        period: 1.75,
+                        reduceMotion: reduceMotion
+                    )
+                    .monospacedDigit()
+                    .fixedSize(horizontal: true, vertical: false)
                 default:
                     Text(stateLabel)
                         .font(.system(size: 11, weight: .medium))
                         .tracking(-0.1)
                         .foregroundStyle(isActivelyStreaming ? Color.white.opacity(0.76) : Color.white.opacity(0.40))
                         .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                if runningTasks > 0 && store.state != .idle {
+                    Text("· \(runningTasks) task\(runningTasks == 1 ? "" : "s")")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(GravPalette.glacialCyan.opacity(0.84))
                         .fixedSize(horizontal: true, vertical: false)
                 }
             } else {

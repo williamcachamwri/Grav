@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Primary telemetry inspection tabs inside Grav's expanded Notch HUD (`Live | Reply | Files | Terminal`).
+/// Primary telemetry inspection tabs inside Grav's expanded Notch HUD (`Live | Reply | Files | Terminal | Swarm`).
 public enum NotchTab: Int, CaseIterable, Identifiable, Sendable, Hashable {
     case live = 0
     case reply = 1
     case files = 2
     case terminal = 3
+    case swarm = 4
 
     public var id: Int { rawValue }
 
@@ -20,6 +21,8 @@ public enum NotchTab: Int, CaseIterable, Identifiable, Sendable, Hashable {
             return "Files"
         case .terminal:
             return "Terminal"
+        case .swarm:
+            return "Swarm"
         }
     }
 
@@ -34,10 +37,12 @@ public enum NotchTab: Int, CaseIterable, Identifiable, Sendable, Hashable {
             return "doc.text"
         case .terminal:
             return "terminal"
+        case .swarm:
+            return "point.3.connected.trianglepath.dotted"
         }
     }
 
-    /// 1-based numeric keyboard shortcut index (`1`, `2`, `3`, `4`).
+    /// 1-based numeric keyboard shortcut index (`1`–`5`).
     public var shortcutIndex: Int {
         rawValue + 1
     }
@@ -58,6 +63,8 @@ public enum NotchTab: Int, CaseIterable, Identifiable, Sendable, Hashable {
             return "3"
         case .terminal:
             return "4"
+        case .swarm:
+            return "5"
         }
     }
 }
