@@ -151,9 +151,8 @@ public struct ExpandedNotchView: View {
             case .swarm:
                 SwarmTelemetryTabView(
                     store: store,
-                    onSelectWorkerSession: { conversationID in
+                    onPinSessionAsMain: { conversationID in
                         store.selectSessionByID(conversationID)
-                        switchTab(to: .live)
                     }
                 )
                 .id(NotchTab.swarm)

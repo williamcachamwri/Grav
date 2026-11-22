@@ -313,11 +313,11 @@ struct GravMockNotchScene: View {
         ZStack(alignment: .top) {
             GravMockWallpaper(app: .notchHud).equatable()
 
-            // Calm Antigravity IDE background card framing the interactive notch HUD above
+            // 1:1 Antigravity Desktop Window framing the interactive Notch HUD above
             workspaceBackdropWindow
-                .padding(.top, 96)
-                .padding(.horizontal, 30)
-                .opacity(isExpanded ? 0.54 : 0.94)
+                .padding(.top, 64)
+                .padding(.horizontal, 18)
+                .opacity(isExpanded ? 0.42 : 0.98)
                 .scaleEffect(isExpanded ? 0.985 : 1.0)
                 .animation(GravMotionPreferences.shared.spec(.morph).animation, value: isExpanded)
 
@@ -340,58 +340,401 @@ struct GravMockNotchScene: View {
         }
     }
 
+    /// 1:1 pixel-faithful macOS Antigravity desktop application window matching the real
+    /// Antigravity dark obsidian shell, sidebar, step rail, Analyzed/Edited timeline, and composer.
     private var workspaceBackdropWindow: some View {
         VStack(spacing: 0) {
+            // Top Window Titlebar
             HStack(spacing: 8) {
-                GravMockTrafficLights(size: 8.5, spacing: 5.5)
-                Spacer()
-                Text("NotchHUDCoordinator.swift — Antigravity")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(GravMockPalette.inkSecondary)
-                Spacer()
+                GravMockTrafficLights(size: 8, spacing: 5)
+
+                HStack(spacing: 7) {
+                    Image(systemName: "sidebar.left")
+                    Image(systemName: "arrow.left")
+                    Image(systemName: "arrow.right")
+                        .opacity(0.45)
+                    Image(systemName: "magnifyingglass")
+                }
+                .font(.system(size: 8.5, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.56))
+                .padding(.leading, 4)
+
+                Text("Grav Telemetry Companion App")
+                    .font(.system(size: 9.5, weight: .medium))
+                    .tracking(-0.1)
+                    .foregroundStyle(Color.white.opacity(0.84))
+                    .lineLimit(1)
+                    .padding(.leading, 18)
+
+                Spacer(minLength: 6)
+
+                HStack(spacing: 8) {
+                    Image(systemName: "ellipsis")
+                        .rotationEffect(.degrees(90))
+                    Image(systemName: "list.bullet.rectangle")
+                    Image(systemName: "sidebar.right")
+                }
+                .font(.system(size: 8.5, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.52))
             }
-            .padding(.horizontal, 12)
-            .frame(height: 30)
-            .background(GravMockPalette.chromeBar)
+            .padding(.horizontal, 11)
+            .frame(height: 27)
+            .background(Color(red: 0.062, green: 0.066, blue: 0.078))
 
             Rectangle()
-                .fill(GravMockPalette.chromeRule)
+                .fill(Color.white.opacity(0.08))
                 .frame(height: 0.5)
 
-            VStack(alignment: .leading, spacing: 7) {
-                codeLine("01", "import NotchKit", accent: GravMockPalette.gravTeal)
-                codeLine("02", "import SwiftUI", accent: GravMockPalette.gravTeal)
-                codeLine("03", "", accent: GravMockPalette.inkTertiary)
-                codeLine("04", "@MainActor final class NotchHUDCoordinator {", accent: GravMockPalette.ink)
-                codeLine("05", "    func triggerWelcomePeek() {", accent: GravMockPalette.inkSecondary)
-                codeLine("06", "        presenter.peek(duration: 2.6)", accent: GravMockPalette.gravTeal)
-                codeLine("07", "    }", accent: GravMockPalette.inkSecondary)
-                codeLine("08", "}", accent: GravMockPalette.ink)
+            // Main Split Body: Left Antigravity Sidebar + Pure Obsidian Conversation Canvas
+            HStack(spacing: 0) {
+                antigravitySidebar
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.075))
+                    .frame(width: 0.5)
+
+                antigravityChatCanvas
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(GravMockPalette.chrome)
         }
-        .frame(maxWidth: 486)
-        .clipShape(Radius.rect(Radius.card))
+        .frame(maxWidth: 534, maxHeight: 374)
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay(
-            Radius.rect(Radius.card)
-                .strokeBorder(GravMockPalette.chromeEdge, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.11), lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.50), radius: 24, y: 12)
+        .shadow(color: Color.black.opacity(0.62), radius: 28, y: 14)
+        .shadow(color: Color.black.opacity(0.28), radius: 5, y: 2)
     }
 
-    private func codeLine(_ number: String, _ text: String, accent: Color) -> some View {
-        HStack(spacing: 12) {
-            Text(number)
-                .font(.system(size: 9.5, design: .monospaced))
-                .foregroundStyle(GravMockPalette.inkTertiary.opacity(0.75))
-                .frame(width: 16, alignment: .trailing)
+    private var antigravitySidebar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // `+ New Conversation` dark bordered pill
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 8, weight: .semibold))
+                Text("New Conversation")
+                    .font(.system(size: 8.5, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Color.white.opacity(0.86))
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .background(
+                RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+                    )
+            )
 
-            Text(text)
-                .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(accent)
+            VStack(alignment: .leading, spacing: 5.5) {
+                sidebarNavRow(icon: "clock", label: "Automations")
+                sidebarNavRow(icon: "shippingbox", label: "Customizations")
+            }
+            .padding(.top, 2)
+
+            // Projects Header
+            HStack(spacing: 4) {
+                Text("Projects")
+                    .font(.system(size: 7.5, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.42))
+                Spacer()
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.system(size: 7.5))
+                    .foregroundStyle(Color.white.opacity(0.36))
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 7.5))
+                    .foregroundStyle(Color.white.opacity(0.36))
+            }
+            .padding(.top, 6)
+            .padding(.horizontal, 2)
+
+            // Project Tree
+            VStack(alignment: .leading, spacing: 5) {
+                sidebarProjectRow("Snapzy")
+                HStack(spacing: 4) {
+                    Text("Codebase Analysis…")
+                        .font(.system(size: 8, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.50))
+                        .lineLimit(1)
+                    Spacer(minLength: 2)
+                    Text("2h")
+                        .font(.system(size: 7.5, weight: .regular, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.30))
+                }
+                .padding(.leading, 8)
+                .padding(.trailing, 3)
+
+                sidebarProjectRow("Grav")
+                    .padding(.top, 2)
+
+                // Active highlighted conversation row
+                HStack(spacing: 4) {
+                    Text("Grav Telemetry Com…")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .lineLimit(1)
+                    Spacer(minLength: 2)
+                    Image(systemName: "circle.grid.2x2.fill")
+                        .font(.system(size: 6.5))
+                        .foregroundStyle(Color.white.opacity(0.54))
+                }
+                .padding(.horizontal, 6)
+                .frame(height: 20)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Color.white.opacity(0.085))
+                )
+            }
+
+            Spacer(minLength: 0)
+
+            sidebarNavRow(icon: "gearshape", label: "Settings")
+                .padding(.bottom, 1)
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .frame(width: 124)
+        .background(Color(red: 0.072, green: 0.076, blue: 0.090))
+    }
+
+    private func sidebarNavRow(icon: String, label: String) -> some View {
+        HStack(spacing: 5.5) {
+            Image(systemName: icon)
+                .font(.system(size: 8, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.46))
+                .frame(width: 10)
+            Text(label)
+                .font(.system(size: 8.5, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.68))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 3)
+    }
+
+    private func sidebarProjectRow(_ name: String) -> some View {
+        HStack(spacing: 4.5) {
+            Image(systemName: "folder")
+                .font(.system(size: 7.5))
+                .foregroundStyle(Color.white.opacity(0.42))
+            Text(name)
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.56))
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private var antigravityChatCanvas: some View {
+        HStack(alignment: .center, spacing: 0) {
+            // Signature Antigravity miniature step progress dot rail
+            VStack(spacing: 4.5) {
+                ForEach(0..<10, id: \.self) { idx in
+                    Circle()
+                        .fill(idx == 9 ? Color.white.opacity(0.86) : Color.white.opacity(0.18))
+                        .frame(width: idx == 9 ? 3.5 : 2.5, height: idx == 9 ? 3.5 : 2.5)
+                }
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 10)
+
+            VStack(alignment: .leading, spacing: 0) {
+                // Top-right user request bubble
+                HStack {
+                    Spacer(minLength: 36)
+                    Text("Stream live Thinking, Analyzed files, running tasks & /swarm telemetry into the Notch HUD")
+                        .font(.system(size: 8.2, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.88))
+                        .lineSpacing(1.5)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6.5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color(red: 0.11, green: 0.115, blue: 0.132))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
+                                )
+                        )
+                }
+                .padding(.top, 9)
+
+                // Authentic Antigravity Agent Timeline
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 5) {
+                        Text("Thinking")
+                            .foregroundStyle(Color.white.opacity(0.52))
+                        Text("2m 45s")
+                            .foregroundStyle(Color.white.opacity(0.38))
+                            .monospacedDigit()
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 6.5, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.36))
+                    }
+                    .font(.system(size: 8.2, weight: .medium))
+                    .padding(.top, 9)
+
+                    // Highlighted blue-bordered `Ran ...` step exactly matching Antigravity
+                    HStack(spacing: 4) {
+                        Text("Ran inspect brain directory for swarm & subagent artifacts")
+                            .lineLimit(1)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 6.5, weight: .semibold))
+                            .opacity(0.55)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.system(size: 8.2, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.76))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color(red: 0.08, green: 0.12, blue: 0.20).opacity(0.52))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .strokeBorder(Color(red: 0.22, green: 0.44, blue: 0.78).opacity(0.72), lineWidth: 0.75)
+                            )
+                    )
+
+                    antigravityTimelineRanRow("Ran read members.json, plan.json, and board.jsonl")
+                    antigravityTimelineAnalyzedRow(file: "ExpandedNotchView.swift", range: "#L1-250")
+                    antigravityTimelineAnalyzedRow(file: "AntigravityTelemetryStore.swift", range: "#L1-120")
+                    antigravityTimelineEditedRow(file: "SwarmModels.swift", added: 323, removed: 0)
+                    antigravityTimelineAnalyzedRow(file: "project.yml", range: "#L1-80")
+
+                    NotchShimmerText(
+                        text: "Thinking for 20s",
+                        font: .system(size: 8.3, weight: .medium),
+                        tracking: -0.1,
+                        baseOpacity: 0.44,
+                        peakOpacity: 0.94,
+                        period: 1.85,
+                        reduceMotion: GravMotionPreferences.shared.reduceMotion
+                    )
+                    .monospacedDigit()
+                    .padding(.top, 2)
+                }
+                .padding(.horizontal, 8)
+
+                Spacer(minLength: 6)
+
+                // Exact Antigravity Bottom Composer Bar
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Ask anything, @ to mention, / for workflows")
+                        .font(.system(size: 8.2, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.32))
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 8.5, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.56))
+
+                        HStack(spacing: 3) {
+                            Text("Gemini 4 Neon High")
+                                .font(.system(size: 7.8, weight: .medium))
+                                .foregroundStyle(Color.white.opacity(0.66))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 6, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(0.40))
+                        }
+
+                        Spacer(minLength: 4)
+
+                        HStack(spacing: 3) {
+                            Image(systemName: "lightbulb")
+                                .font(.system(size: 7.5))
+                                .foregroundStyle(Color.white.opacity(0.48))
+                            Text("Turbo")
+                                .font(.system(size: 7.8, weight: .medium))
+                                .foregroundStyle(Color.white.opacity(0.60))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 6, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(0.40))
+                        }
+
+                        Image(systemName: "mic")
+                            .font(.system(size: 8))
+                            .foregroundStyle(Color.white.opacity(0.46))
+
+                        Circle()
+                            .fill(Color(red: 0.24, green: 0.53, blue: 0.96))
+                            .frame(width: 16, height: 16)
+                            .overlay(
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 7.5, weight: .bold))
+                                    .foregroundStyle(Color.white)
+                            )
+                    }
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color(red: 0.082, green: 0.086, blue: 0.100))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+                        )
+                )
+                .padding(.horizontal, 8)
+                .padding(.bottom, 9)
+            }
+            .padding(.trailing, 8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.038, green: 0.040, blue: 0.048))
+    }
+
+    private func antigravityTimelineRanRow(_ text: String) -> some View {
+        HStack(spacing: 3.5) {
+            Text(text)
+                .lineLimit(1)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 6.2, weight: .semibold))
+                .opacity(0.45)
+        }
+        .font(.system(size: 8.1, weight: .regular))
+        .foregroundStyle(Color.white.opacity(0.46))
+        .padding(.horizontal, 2)
+    }
+
+    private func antigravityTimelineAnalyzedRow(file: String, range: String) -> some View {
+        HStack(spacing: 4) {
+            Text("Analyzed")
+                .foregroundStyle(Color.white.opacity(0.44))
+            LanguageIconView(path: file, changeKind: nil, size: 10)
+            Text(file)
+                .foregroundStyle(Color.white.opacity(0.68))
+                .lineLimit(1)
+            Text(range)
+                .font(.system(size: 7.8, weight: .regular, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.44))
+        }
+        .font(.system(size: 8.1, weight: .regular))
+        .padding(.horizontal, 2)
+    }
+
+    private func antigravityTimelineEditedRow(file: String, added: Int, removed: Int) -> some View {
+        HStack(spacing: 4) {
+            Text("Created")
+                .foregroundStyle(Color.white.opacity(0.44))
+            LanguageIconView(path: file, changeKind: .create, size: 10)
+            Text(file)
+                .foregroundStyle(Color.white.opacity(0.74))
+                .lineLimit(1)
+            HStack(spacing: 2.5) {
+                Text("+\(added)")
+                    .foregroundStyle(GravPalette.emerald.opacity(0.88))
+                Text("-\(removed)")
+                    .foregroundStyle(GravPalette.coral.opacity(0.88))
+            }
+            .font(.system(size: 7.8, weight: .medium, design: .monospaced))
+            .monospacedDigit()
+        }
+        .font(.system(size: 8.1, weight: .regular))
+        .padding(.horizontal, 2)
     }
 }
 

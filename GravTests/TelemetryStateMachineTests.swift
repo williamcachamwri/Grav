@@ -375,7 +375,7 @@ final class TelemetryStateMachineTests: XCTestCase {
             XCTFail("Expected .inspecting after read_file, got \(inspectOut.state)")
         }
 
-        // 4. Tool returns GENERIC DONE -> model is back to .working
+        // 4. Instant GENERIC DONE for read_file preserves .inspecting so Notch shows `Analyzed File #L...`
         let toolDone = TranscriptStep(
             stepIndex: 4,
             source: "MODEL",
@@ -384,11 +384,11 @@ final class TelemetryStateMachineTests: XCTestCase {
             createdAt: "2026-11-23T02:45:06Z",
             content: "Showing lines 480-810"
         )
-        let workingOut = classifier.process(step: toolDone)
-        if case .working = workingOut.state {
-            // expected
+        let preservedOut = classifier.process(step: toolDone)
+        if case let .inspecting(event) = preservedOut.state {
+            XCTAssertEqual(event.basename, "GravOnboardingMockScenes.swift")
         } else {
-            XCTFail("Expected .working after mid-turn GENERIC tool completion, got \(workingOut.state)")
+            XCTFail("Expected .inspecting to be preserved after immediate read_file GENERIC DONE, got \(preservedOut.state)")
         }
 
         // 5. Final PLANNER_RESPONSE settles cleanly to .idle

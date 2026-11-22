@@ -345,8 +345,15 @@ public struct EventClassifier: Sendable {
                 state = .idle
             }
         } else if isTurnActive && step.type == "GENERIC" && step.status != "RUNNING" {
-            // A tool call just returned its result; Antigravity is now Working on the next model turn
-            state = .working(startedAt: stepDate)
+            // Preserve `.inspecting` / `.editing` right after their instant GENERIC DONE result so
+            // the Notch actually displays `Analyzed File.swift #L...` / `File.swift +N -M` instead
+            // of getting stomped in <1ms; for all other tool completions, transition to `.working`.
+            switch state {
+            case .inspecting, .editing:
+                break
+            default:
+                state = .working(startedAt: stepDate)
+            }
         } else if step.type == "PLANNER_RESPONSE" && step.status == "RUNNING" {
             state = .working(startedAt: stepDate)
         }

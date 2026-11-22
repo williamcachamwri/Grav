@@ -119,7 +119,7 @@ struct GravOnboardingInstructionPanel: View {
 
         case .notchHud:
             if !state.isMockNotchExpanded {
-                return "Click here (or hover the notch on the right) to expand the live 3-tab HUD."
+                return "Click here (or hover the notch on the right) to expand the live Notch HUD."
             } else if state.visitedMockTabs.count < 2 {
                 return "Notch expanded on \(state.selectedMockNotchTab.title). Click here to cycle to the next telemetry tab."
             } else {

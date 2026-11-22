@@ -294,21 +294,35 @@ public struct CollapsedNotchView: View {
     }
 
     private func inspectingTrailingSignal(for event: FileInspectionEvent, compact: Bool) -> some View {
-        HStack(alignment: .center, spacing: 6) {
-            NotchPingPongMarqueeText(
-                text: compact ? event.basename : "Analyzed \(event.basename)",
-                font: .system(size: 11.5, weight: .medium),
-                color: Color.white.opacity(0.86),
-                alignment: .trailing,
-                reduceMotion: reduceMotion
-            )
+        TimelineView(.periodic(from: event.timestamp, by: 1.0)) { context in
+            let elapsed = max(0, context.date.timeIntervalSince(event.timestamp))
+            if elapsed >= 5.0 {
+                // After clearly showcasing the analyzed file for 5s, smoothly morph to live
+                // `Thinking for Ns` while Antigravity reasons about the next step.
+                NotchThinkingShimmerLabel(
+                    startDate: event.timestamp,
+                    compact: compact,
+                    font: .system(size: compact ? 11 : 11.5, weight: .medium),
+                    reduceMotion: reduceMotion
+                )
+            } else {
+                HStack(alignment: .center, spacing: 6) {
+                    NotchPingPongMarqueeText(
+                        text: compact ? event.basename : "Analyzed \(event.basename)",
+                        font: .system(size: 11.5, weight: .medium),
+                        color: Color.white.opacity(0.86),
+                        alignment: .trailing,
+                        reduceMotion: reduceMotion
+                    )
 
-            if let range = event.lineRangeLabel {
-                Text(range)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.white.opacity(0.46))
-                    .fixedSize(horizontal: true, vertical: false)
+                    if let range = event.lineRangeLabel {
+                        Text(range)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.white.opacity(0.46))
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
             }
         }
     }
