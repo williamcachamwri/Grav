@@ -24,32 +24,50 @@ public struct CollapsedNotchView: View {
         store.isPaused ? .idle : store.state
     }
 
+    private var isTurbo: Bool {
+        store.isTurboMode && !store.isPaused
+    }
+
     public var body: some View {
         let hasPhysicalNotch = presenter.geometry.hasPhysicalNotch
         let pillHeight = presenter.geometry.collapsedHeight
 
-        Group {
-            if hasPhysicalNotch {
-                NotchCutoutLayout(
-                    cutoutWidth: presenter.geometry.notchWidth,
-                    gutterWidth: presenter.collapsedGutterWidth,
-                    pillHeight: pillHeight,
-                    edgeInset: 11,
-                    alignment: .center
-                ) {
-                    leadingWing(compact: true)
-                } trailing: {
-                    trailingWing(compact: true)
+        ZStack(alignment: .bottom) {
+            Group {
+                if hasPhysicalNotch {
+                    NotchCutoutLayout(
+                        cutoutWidth: presenter.geometry.notchWidth,
+                        gutterWidth: presenter.collapsedGutterWidth,
+                        pillHeight: pillHeight,
+                        edgeInset: 11,
+                        alignment: .center
+                    ) {
+                        leadingWing(compact: true)
+                    } trailing: {
+                        trailingWing(compact: true)
+                    }
+                } else {
+                    HStack(alignment: .center, spacing: 10) {
+                        leadingWing(compact: false)
+                            .fixedSize(horizontal: true, vertical: false)
+                        trailingWing(compact: false)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(width: presenter.collapsedSurfaceWidth, height: pillHeight, alignment: .center)
                 }
-            } else {
-                HStack(alignment: .center, spacing: 10) {
-                    leadingWing(compact: false)
-                        .fixedSize(horizontal: true, vertical: false)
-                    trailingWing(compact: false)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                .padding(.horizontal, 12)
-                .frame(width: presenter.collapsedSurfaceWidth, height: pillHeight, alignment: .center)
+            }
+            .frame(height: pillHeight)
+
+            if isTurbo {
+                TurboThermalRimView(
+                    isActive: effectiveState.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil,
+                    reduceMotion: reduceMotion
+                )
+                .padding(.horizontal, hasPhysicalNotch ? 22 : 18)
+                .padding(.bottom, 0.5)
+                .allowsHitTesting(false)
+                .transition(.opacity)
             }
         }
         .frame(height: pillHeight)
@@ -111,6 +129,10 @@ public struct CollapsedNotchView: View {
                 NotchBars(thinkingWaveStyle)
                     .transition(signalTransition)
 
+            case .replying:
+                NotchBars(replyingWaveStyle)
+                    .transition(signalTransition)
+
             case let .inspecting(event):
                 TimelineView(.periodic(from: store.currentPhaseStartedAt, by: 1.0)) { context in
                     if context.date.timeIntervalSince(store.currentPhaseStartedAt) >= 5.0 {
@@ -137,10 +159,22 @@ public struct CollapsedNotchView: View {
 
             case .idle:
                 if !compact {
-                    Text("Grav")
-                        .font(.system(size: 11.5, weight: .medium))
-                        .tracking(-0.2)
-                        .foregroundStyle(Color.white.opacity(0.78))
+                    HStack(spacing: 4.5) {
+                        Text("Grav")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .tracking(-0.2)
+                            .foregroundStyle(Color.white.opacity(0.78))
+                        if isTurbo {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 8.5, weight: .semibold))
+                                .foregroundStyle(GravPalette.turboEmber)
+                        }
+                    }
+                    .transition(.opacity)
+                } else if isTurbo {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(GravPalette.turboEmber)
                         .transition(.opacity)
                 }
             }
@@ -175,6 +209,11 @@ public struct CollapsedNotchView: View {
                 case .thinking:
                     thinkingTrailingSignal(compact: compact)
                         .id("collapsed-thinking")
+                        .transition(signalTransition)
+
+                case .replying:
+                    replyingTrailingSignal(compact: compact)
+                        .id("collapsed-replying")
                         .transition(signalTransition)
 
                 case let .inspecting(event):
@@ -250,6 +289,7 @@ public struct CollapsedNotchView: View {
             baseOpacity: 0.46,
             peakOpacity: 0.96,
             period: 1.75,
+            turboMode: isTurbo,
             reduceMotion: reduceMotion
         )
         .monospacedDigit()
@@ -261,6 +301,7 @@ public struct CollapsedNotchView: View {
                 startDate: startedAt,
                 compact: compact,
                 font: .system(size: compact ? 11 : 11.5, weight: .medium),
+                turboMode: isTurbo,
                 reduceMotion: reduceMotion
             )
 
@@ -268,7 +309,7 @@ public struct CollapsedNotchView: View {
                 Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .monospacedDigit()
-                    .foregroundStyle(GravPalette.glacialCyan.opacity(0.84))
+                    .foregroundStyle((isTurbo ? GravPalette.turboEmber : GravPalette.glacialCyan).opacity(0.88))
                     .fixedSize(horizontal: true, vertical: false)
             }
         }
@@ -282,6 +323,7 @@ public struct CollapsedNotchView: View {
             baseOpacity: 0.46,
             peakOpacity: 0.96,
             period: 1.85,
+            turboMode: isTurbo,
             reduceMotion: reduceMotion
         )
     }
@@ -292,6 +334,7 @@ public struct CollapsedNotchView: View {
                 startDate: store.currentPhaseStartedAt,
                 compact: compact,
                 font: .system(size: compact ? 11 : 11.5, weight: .medium),
+                turboMode: isTurbo,
                 reduceMotion: reduceMotion
             )
 
@@ -299,10 +342,23 @@ public struct CollapsedNotchView: View {
                 Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .monospacedDigit()
-                    .foregroundStyle(GravPalette.glacialCyan.opacity(0.84))
+                    .foregroundStyle((isTurbo ? GravPalette.turboEmber : GravPalette.glacialCyan).opacity(0.88))
                     .fixedSize(horizontal: true, vertical: false)
             }
         }
+    }
+
+    private func replyingTrailingSignal(compact: Bool) -> some View {
+        NotchShimmerText(
+            text: "Replying",
+            font: .system(size: compact ? 11 : 11.5, weight: .medium),
+            tracking: -0.15,
+            baseOpacity: 0.50,
+            peakOpacity: 0.98,
+            period: 1.55,
+            turboMode: isTurbo,
+            reduceMotion: reduceMotion
+        )
     }
 
     private func inspectingTrailingSignal(for event: FileInspectionEvent, compact: Bool) -> some View {
@@ -440,25 +496,27 @@ public struct CollapsedNotchView: View {
     }
 
     private var workingWaveStyle: NotchBarsStyle {
+        let tint = isTurbo ? GravPalette.turboEmber : Color.white.opacity(0.72)
         if reduceMotion {
-            return .steady([0.38, 0.78, 0.50], barWidth: 1.5, spacing: 1.7, height: 9, tint: Color.white.opacity(0.72))
+            return .steady([0.38, 0.78, 0.50], barWidth: 1.5, spacing: 1.7, height: 9, tint: tint)
         }
         return .wave(
             count: 3,
             low: 0.24,
-            high: 0.92,
+            high: 0.96,
             barWidth: 1.5,
             spacing: 1.7,
             height: 9,
-            period: 0.86,
-            stagger: 0.14,
-            tint: Color.white.opacity(0.72)
+            period: isTurbo ? 0.52 : 0.86,
+            stagger: isTurbo ? 0.10 : 0.14,
+            tint: tint
         )
     }
 
     private var thinkingWaveStyle: NotchBarsStyle {
+        let tint = isTurbo ? GravPalette.turboEmber : GravPalette.thinking
         if reduceMotion {
-            return .steady([0.38, 0.85, 0.55, 0.92], barWidth: 1.6, spacing: 1.7, height: 10, tint: GravPalette.thinking)
+            return .steady([0.38, 0.85, 0.55, 0.92], barWidth: 1.6, spacing: 1.7, height: 10, tint: tint)
         }
         return .wave(
             count: 4,
@@ -467,15 +525,34 @@ public struct CollapsedNotchView: View {
             barWidth: 1.6,
             spacing: 1.7,
             height: 10,
-            period: 0.72,
-            stagger: 0.13,
-            tint: GravPalette.thinking
+            period: isTurbo ? 0.48 : 0.72,
+            stagger: isTurbo ? 0.09 : 0.13,
+            tint: tint
+        )
+    }
+
+    private var replyingWaveStyle: NotchBarsStyle {
+        let tint = isTurbo ? GravPalette.turboWhiteHot : GravPalette.emerald
+        if reduceMotion {
+            return .steady([0.52, 0.88, 0.64], barWidth: 1.6, spacing: 1.7, height: 9.5, tint: tint)
+        }
+        return .wave(
+            count: 3,
+            low: 0.28,
+            high: 1.0,
+            barWidth: 1.6,
+            spacing: 1.7,
+            height: 9.5,
+            period: isTurbo ? 0.44 : 0.62,
+            stagger: 0.11,
+            tint: tint
         )
     }
 
     private var commandWaveStyle: NotchBarsStyle {
+        let tint = isTurbo ? GravPalette.turboCrimson : Color.white.opacity(0.85)
         if reduceMotion {
-            return .steady([0.45, 0.9, 0.55], barWidth: 1.6, spacing: 1.7, height: 9.5, tint: Color.white.opacity(0.85))
+            return .steady([0.45, 0.9, 0.55], barWidth: 1.6, spacing: 1.7, height: 9.5, tint: tint)
         }
         return .wave(
             count: 3,
@@ -484,9 +561,9 @@ public struct CollapsedNotchView: View {
             barWidth: 1.6,
             spacing: 1.7,
             height: 9.5,
-            period: 0.56,
-            stagger: 0.12,
-            tint: Color.white.opacity(0.85)
+            period: isTurbo ? 0.42 : 0.56,
+            stagger: 0.10,
+            tint: tint
         )
     }
 
@@ -505,6 +582,8 @@ public struct CollapsedNotchView: View {
             return "Antigravity compacting context"
         case .thinking:
             return "Antigravity thinking"
+        case .replying:
+            return "Antigravity replying"
         case let .inspecting(event):
             return "Analyzing \(event.basename)"
         case let .editing(event):

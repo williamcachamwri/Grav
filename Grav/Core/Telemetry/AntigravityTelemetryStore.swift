@@ -33,6 +33,11 @@ public final class AntigravityTelemetryStore {
     public internal(set) var swarmSnapshot: SwarmSnapshot?
     public internal(set) var subagents: [SubagentRecord] = []
     public internal(set) var currentPhaseStartedAt: Date = Date()
+    public internal(set) var executionMode: AntigravityExecutionMode = .defaultMode
+
+    public var isTurboMode: Bool {
+        executionMode.isTurbo
+    }
 
     public internal(set) var isPaused: Bool = false
     public internal(set) var isMonitoring: Bool = false
@@ -51,6 +56,7 @@ public final class AntigravityTelemetryStore {
     private var activeTailer: TranscriptTailer?
     private var activeSwarmWatcher: SwarmSubagentWatcher?
     private var activeWALWatcher: ConversationWALWatcher?
+    private var activeAnnotationWatcher: ConversationAnnotationWatcher?
     private var classifier = EventClassifier()
 
     private var userPinnedSessionID: String?
@@ -114,6 +120,8 @@ public final class AntigravityTelemetryStore {
         activeSwarmWatcher = nil
         let currentWALWatcher = activeWALWatcher
         activeWALWatcher = nil
+        let currentAnnotationWatcher = activeAnnotationWatcher
+        activeAnnotationWatcher = nil
         truncatedHydrationTask?.cancel()
         truncatedHydrationTask = nil
         let logTailer = taskLogTailer
@@ -123,6 +131,7 @@ public final class AntigravityTelemetryStore {
             await currentTailer?.stopWatching()
             await currentSwarmWatcher?.stopWatching()
             await currentWALWatcher?.stopWatching()
+            await currentAnnotationWatcher?.stopWatching()
             await logTailer.stopAll()
         }
 
@@ -138,11 +147,13 @@ public final class AntigravityTelemetryStore {
             let currentTailer = activeTailer
             let currentSwarmWatcher = activeSwarmWatcher
             let currentWALWatcher = activeWALWatcher
+            let currentAnnotationWatcher = activeAnnotationWatcher
             let logTailer = taskLogTailer
             Task {
                 await currentTailer?.stopWatching()
                 await currentSwarmWatcher?.stopWatching()
                 await currentWALWatcher?.stopWatching()
+                await currentAnnotationWatcher?.stopWatching()
                 await logTailer.stopAll()
             }
         } else if isMonitoring {
@@ -251,8 +262,27 @@ public final class AntigravityTelemetryStore {
         appDetector.revealInFinder(path: path)
     }
 
-    /// Opens a file directly in Antigravity (falling back to default macOS handler).
-    public func openInAntigravity(path: String) {
+    /// Opens a file directly in Antigravity, jumping straight to `line` (`#L`) when provided
+    /// via Antigravity's `--goto` CLI handler (falling back cleanly to macOS `NSWorkspace.open`).
+    public func openInAntigravity(path: String, line: Int? = nil) {
+        if let line, line > 0 {
+            let cliCandidates = [
+                "/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity",
+                "/Applications/Antigravity.app/Contents/Resources/app/bin/agy",
+                "/usr/local/bin/agy",
+                "/opt/homebrew/bin/agy",
+            ]
+            if let cliPath = cliCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+                let target = "\(path):\(line)"
+                Task.detached(priority: .userInitiated) {
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: cliPath)
+                    process.arguments = ["--goto", target]
+                    try? process.run()
+                }
+                return
+            }
+        }
         appDetector.openInAntigravity(path: path)
     }
 
@@ -448,6 +478,8 @@ public final class AntigravityTelemetryStore {
         activeSwarmWatcher = nil
         let previousWALWatcher = activeWALWatcher
         activeWALWatcher = nil
+        let previousAnnotationWatcher = activeAnnotationWatcher
+        activeAnnotationWatcher = nil
         truncatedHydrationTask?.cancel()
         truncatedHydrationTask = nil
         let logTailer = taskLogTailer
@@ -458,7 +490,9 @@ public final class AntigravityTelemetryStore {
         pendingTruncatedHydrationSteps.removeAll()
         hydratedFileContents.removeAll()
         lastFinalIdleAt = .distantPast
+        isSpeculativeWALWorking = false
         currentPhaseStartedAt = Date()
+        executionMode = .defaultMode
         classifier.reset()
         state = .idle
         currentThinking = nil
@@ -479,6 +513,8 @@ public final class AntigravityTelemetryStore {
         activeSwarmWatcher = swarmWatcher
         let walWatcher = ConversationWALWatcher(session: session)
         activeWALWatcher = walWatcher
+        let annotationWatcher = ConversationAnnotationWatcher(session: session)
+        activeAnnotationWatcher = annotationWatcher
         isHydratingActiveSession = true
 
         guard isMonitoring, !isPaused else {
@@ -486,6 +522,7 @@ public final class AntigravityTelemetryStore {
                 await previousTailer?.stopWatching()
                 await previousSwarmWatcher?.stopWatching()
                 await previousWALWatcher?.stopWatching()
+                await previousAnnotationWatcher?.stopWatching()
                 await logTailer.stopAll()
             }
             return
@@ -495,7 +532,16 @@ public final class AntigravityTelemetryStore {
             await previousTailer?.stopWatching()
             await previousSwarmWatcher?.stopWatching()
             await previousWALWatcher?.stopWatching()
+            await previousAnnotationWatcher?.stopWatching()
             await logTailer.stopAll()
+
+            // Attach live annotation watcher (`permission_preset` Turbo mode + official title)
+            await annotationWatcher.startWatching { [weak self] annotation in
+                Task { @MainActor [weak self] in
+                    guard let self, self.sessionGeneration == generation else { return }
+                    self.applyConversationAnnotation(annotation)
+                }
+            }
 
             // Attach live Swarm & Subagent directory watcher
             await swarmWatcher.startWatching { [weak self] update in
@@ -513,12 +559,11 @@ public final class AntigravityTelemetryStore {
                 self.isHydratingActiveSession = false
             }
 
-            // Attach live WAL pulse watcher so `Working` -> `Thinking for Ns` activates at 0ms
-            // the instant the user submits a prompt in Antigravity (before transcript.jsonl flushes).
-            await walWatcher.startWatching { [weak self] deltaBytes in
+            // Attach live WAL pulse watcher so `Working` -> `Thinking for Ns` / `Replying` activates at 0ms
+            await walWatcher.startWatching { [weak self] pulse in
                 Task { @MainActor [weak self] in
                     guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
-                    self.handleLiveConversationWALActivity(deltaBytes: deltaBytes)
+                    self.handleLiveConversationWALActivity(pulse: pulse)
                 }
             }
 
@@ -558,17 +603,31 @@ public final class AntigravityTelemetryStore {
             activeWALWatcher = walWatcher
         }
 
+        let annotationWatcher: ConversationAnnotationWatcher
+        if let existingAnnotation = activeAnnotationWatcher {
+            annotationWatcher = existingAnnotation
+        } else {
+            annotationWatcher = ConversationAnnotationWatcher(session: session)
+            activeAnnotationWatcher = annotationWatcher
+        }
+
         Task { [weak self] in
+            await annotationWatcher.startWatching { [weak self] annotation in
+                Task { @MainActor [weak self] in
+                    guard let self, self.sessionGeneration == generation else { return }
+                    self.applyConversationAnnotation(annotation)
+                }
+            }
             await swarmWatcher.startWatching { [weak self] update in
                 Task { @MainActor [weak self] in
                     guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
                     self.applySwarmSubagentUpdate(update)
                 }
             }
-            await walWatcher.startWatching { [weak self] deltaBytes in
+            await walWatcher.startWatching { [weak self] pulse in
                 Task { @MainActor [weak self] in
                     guard let self, self.sessionGeneration == generation, !self.isPaused else { return }
-                    self.handleLiveConversationWALActivity(deltaBytes: deltaBytes)
+                    self.handleLiveConversationWALActivity(pulse: pulse)
                 }
             }
             await tailer.startWatching { [weak self] newSteps in
@@ -589,6 +648,8 @@ public final class AntigravityTelemetryStore {
         activeSwarmWatcher = nil
         let previousWALWatcher = activeWALWatcher
         activeWALWatcher = nil
+        let previousAnnotationWatcher = activeAnnotationWatcher
+        activeAnnotationWatcher = nil
         truncatedHydrationTask?.cancel()
         truncatedHydrationTask = nil
         let logTailer = taskLogTailer
@@ -597,6 +658,7 @@ public final class AntigravityTelemetryStore {
         hydratedTruncatedFileSteps.removeAll()
         pendingTruncatedHydrationSteps.removeAll()
         hydratedFileContents.removeAll()
+        executionMode = .defaultMode
         classifier.reset()
         state = .idle
         currentThinking = nil
@@ -615,20 +677,38 @@ public final class AntigravityTelemetryStore {
             await previousTailer?.stopWatching()
             await previousSwarmWatcher?.stopWatching()
             await previousWALWatcher?.stopWatching()
+            await previousAnnotationWatcher?.stopWatching()
             await logTailer.stopAll()
         }
     }
 
-    private func handleLiveConversationWALActivity(deltaBytes: Int64) {
-        guard !isHydratingActiveSession, !isPaused, deltaBytes >= 4096 else { return }
+    private func applyConversationAnnotation(_ annotation: ConversationAnnotation) {
+        if GravMotionPreferences.shared.reduceMotion {
+            executionMode = annotation.executionMode
+        } else {
+            withAnimation(.spring(duration: 0.42, bounce: 0.12)) {
+                executionMode = annotation.executionMode
+            }
+        }
+        if let officialTitle = annotation.title, !officialTitle.isEmpty, var session = activeSession {
+            session.title = officialTitle
+            activeSession = session
+            if let idx = sessions.firstIndex(where: { $0.id == session.id }) {
+                sessions[idx].title = officialTitle
+            }
+        }
+    }
+
+    private func handleLiveConversationWALActivity(pulse: WALActivityPulse) {
+        guard !isHydratingActiveSession, !isPaused, pulse.deltaBytes >= 4096 else { return }
         // Ignore post-completion SQLite housekeeping / diff-review writes right after a turn finishes
         if Date().timeIntervalSince(lastFinalIdleAt) < 5.0 {
             return
         }
 
+        let now = Date()
         switch state {
         case .idle:
-            let now = Date()
             currentPhaseStartedAt = now
             isSpeculativeWALWorking = true
             if GravMotionPreferences.shared.reduceMotion {
@@ -639,7 +719,21 @@ public final class AntigravityTelemetryStore {
                 }
             }
             scheduleIdleDecayIfNeeded()
-        case .working, .thinking, .inspecting, .editing, .compacting, .runningCommand:
+
+        case .working, .thinking:
+            // Rapid continuous WAL streaming bursts after >= 3s into a turn signal live token-by-token Reply streaming
+            if pulse.isRapidStreamingBurst && now.timeIntervalSince(currentPhaseStartedAt) >= 3.0 {
+                if GravMotionPreferences.shared.reduceMotion {
+                    state = .replying(latestResponse)
+                } else {
+                    withAnimation(GravMotionSpec.settle.animation) {
+                        state = .replying(latestResponse)
+                    }
+                }
+            }
+            scheduleIdleDecayIfNeeded()
+
+        case .replying, .inspecting, .editing, .compacting, .runningCommand:
             scheduleIdleDecayIfNeeded()
         }
     }
@@ -768,6 +862,8 @@ public final class AntigravityTelemetryStore {
                 currentPhaseStartedAt = suppressPeeks ? startedAt : Date()
             case .thinking:
                 currentPhaseStartedAt = suppressPeeks ? (output.thinkingSnapshot?.startedAt ?? Date()) : Date()
+            case .replying:
+                currentPhaseStartedAt = Date()
             case let .compacting(event):
                 currentPhaseStartedAt = suppressPeeks ? event.startedAt : Date()
             case let .inspecting(event):

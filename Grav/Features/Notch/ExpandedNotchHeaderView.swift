@@ -145,13 +145,43 @@ public struct ExpandedNotchHeaderView: View {
     }
 
     private var inlineStatusReadout: some View {
+        let isTurbo = store.isTurboMode && !store.isPaused
         let runningTasks = store.isPaused ? 0 : store.runningTaskCount
         let effectivePulsing = isActivelyStreaming || runningTasks > 0
-        let effectiveDotColor = (runningTasks > 0 && !isActivelyStreaming)
-            ? GravPalette.glacialCyan
-            : stateDotColor
+        let effectiveDotColor: Color = {
+            if isTurbo && (isActivelyStreaming || runningTasks > 0) {
+                return GravPalette.turboEmber
+            }
+            if runningTasks > 0 && !isActivelyStreaming {
+                return GravPalette.glacialCyan
+            }
+            return stateDotColor
+        }()
 
         return HStack(spacing: 4.5) {
+            if isTurbo {
+                HStack(spacing: 2.5) {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 7.5, weight: .bold))
+                    Text("TURBO")
+                        .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                        .tracking(0.5)
+                }
+                .foregroundStyle(GravPalette.turboEmber)
+                .padding(.horizontal, 5)
+                .frame(height: 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(GravPalette.turboEmber.opacity(0.12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .strokeBorder(GravPalette.turboEmber.opacity(0.36), lineWidth: 0.5)
+                        )
+                )
+                .help("Antigravity Turbo Mode — All commands execute without restrictions")
+                .padding(.trailing, 2)
+            }
+
             NotchSemanticDot(
                 color: effectiveDotColor,
                 size: 5,
@@ -164,6 +194,19 @@ public struct ExpandedNotchHeaderView: View {
                         startDate: store.currentPhaseStartedAt,
                         compact: true,
                         font: .system(size: 11, weight: .medium),
+                        turboMode: isTurbo,
+                        reduceMotion: reduceMotion
+                    )
+                    .fixedSize(horizontal: true, vertical: false)
+                case .replying:
+                    NotchShimmerText(
+                        text: "Replying",
+                        font: .system(size: 11, weight: .medium),
+                        tracking: -0.1,
+                        baseOpacity: 0.48,
+                        peakOpacity: 0.96,
+                        period: 1.55,
+                        turboMode: isTurbo,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -172,6 +215,7 @@ public struct ExpandedNotchHeaderView: View {
                         startDate: startedAt,
                         compact: true,
                         font: .system(size: 11, weight: .medium),
+                        turboMode: isTurbo,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -183,6 +227,7 @@ public struct ExpandedNotchHeaderView: View {
                         baseOpacity: 0.46,
                         peakOpacity: 0.94,
                         period: 1.8,
+                        turboMode: isTurbo,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -194,6 +239,7 @@ public struct ExpandedNotchHeaderView: View {
                         baseOpacity: 0.48,
                         peakOpacity: 0.96,
                         period: 1.75,
+                        turboMode: isTurbo,
                         reduceMotion: reduceMotion
                     )
                     .monospacedDigit()
@@ -211,7 +257,7 @@ public struct ExpandedNotchHeaderView: View {
                     Text("· \(runningTasks) task\(runningTasks == 1 ? "" : "s")")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .monospacedDigit()
-                        .foregroundStyle(GravPalette.glacialCyan.opacity(0.84))
+                        .foregroundStyle((isTurbo ? GravPalette.turboEmber : GravPalette.glacialCyan).opacity(0.88))
                         .fixedSize(horizontal: true, vertical: false)
                 }
             } else {
@@ -436,11 +482,87 @@ private struct SessionTelemetryInspectorPopover: View {
                     value: metrics.inputTokens.formatted()
                 )
                 ledgerRow(
-                    dotColor: GravPalette.glacialCyan,
+                    dotColor: store.isTurboMode ? GravPalette.turboEmber : GravPalette.glacialCyan,
                     label: "Output",
                     detail: nil,
                     value: metrics.outputTokens.formatted()
                 )
+            }
+
+            // 3b. Real Context Window Meter + Throughput (`tok/s`) & Execution Mode
+            if metrics.latestContextTokens > 0 || metrics.averageTokensPerSecond != nil {
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(height: 0.5)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    if metrics.latestContextTokens > 0 {
+                        let ctxPct = Int((metrics.contextFillRatio * 100.0).rounded())
+                        let barColor: Color = {
+                            if metrics.isContextNearCompaction { return GravPalette.fileEdit }
+                            return store.isTurboMode ? GravPalette.turboEmber : GravPalette.glacialCyan
+                        }()
+
+                        HStack(spacing: 6) {
+                            Text("Context")
+                                .font(.system(size: 10, weight: .regular))
+                                .foregroundStyle(Color.white.opacity(0.46))
+
+                            if metrics.isContextNearCompaction {
+                                Text("Near compaction")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundStyle(GravPalette.fileEdit)
+                            }
+
+                            Spacer()
+
+                            Text(
+                                verbatim: "\(TokenMetrics.formatCompact(metrics.latestContextTokens)) / \(TokenMetrics.formatCompact(metrics.contextWindowLimit)) (\(ctxPct)%)"
+                            )
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(metrics.isContextNearCompaction ? GravPalette.fileEdit : Color.white.opacity(0.76))
+                        }
+
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.08))
+                                Capsule(style: .continuous)
+                                    .fill(barColor.opacity(0.88))
+                                    .frame(width: max(4, geo.size.width * metrics.contextFillRatio * revealProgress))
+                            }
+                        }
+                        .frame(height: 3.5)
+                    }
+
+                    HStack(spacing: 8) {
+                        if let tps = metrics.lastTurnTokensPerSecond ?? metrics.averageTokensPerSecond {
+                            HStack(spacing: 4) {
+                                Text("Speed")
+                                    .foregroundStyle(Color.white.opacity(0.40))
+                                Text(verbatim: "\(Int(tps.rounded())) tok/s")
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                    .monospacedDigit()
+                                    .foregroundStyle(Color.white.opacity(0.84))
+                            }
+                            .font(.system(size: 10, weight: .regular))
+                        }
+
+                        Spacer()
+
+                        HStack(spacing: 3.5) {
+                            if store.isTurboMode {
+                                Image(systemName: "bolt.fill")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(GravPalette.turboEmber)
+                            }
+                            Text(store.executionMode.rawValue)
+                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                .foregroundStyle(store.isTurboMode ? GravPalette.turboEmber : Color.white.opacity(0.44))
+                        }
+                    }
+                }
             }
 
             Rectangle()

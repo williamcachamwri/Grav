@@ -229,6 +229,20 @@ public final class NotchHUDCoordinator {
         let now = Date()
         guard now.timeIntervalSince(lastTelemetryPeekAt) >= 1.2 else { return }
         lastTelemetryPeekAt = now
+
+        if preferences.playSounds {
+            switch event {
+            case .turnCompleted:
+                GravOnboardingWelcomeAudio.shared.playChallengeComplete()
+            case .commandFailed:
+                GravOnboardingWelcomeAudio.shared.playShutterSnap()
+            case .needsInput:
+                GravOnboardingWelcomeAudio.shared.playStepComplete()
+            default:
+                break
+            }
+        }
+
         presenter.peek()
     }
 

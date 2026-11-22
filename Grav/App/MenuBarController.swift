@@ -307,6 +307,8 @@ private struct MenuBarStatusSnapshot: Sendable {
             return "Compacting"
         case .thinking:
             return "Thinking"
+        case .replying:
+            return "Replying"
         case let .inspecting(event):
             if let range = event.lineRangeLabel {
                 return "Analyzed \(event.basename) \(range)"

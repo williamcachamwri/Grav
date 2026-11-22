@@ -231,6 +231,8 @@ enum NotchTelemetryHelpers {
             return GravPalette.prismViolet
         case .thinking, .inspecting:
             return GravPalette.thinking
+        case .replying:
+            return GravPalette.emerald
         case let .editing(event):
             return event.kind == .delete ? GravPalette.coral : GravPalette.fileEdit
         case .runningCommand:
@@ -249,36 +251,50 @@ struct NotchShimmerText: View {
     var baseOpacity: Double = 0.44
     var peakOpacity: Double = 0.96
     var period: Double = 1.75
+    var turboMode: Bool = false
     var reduceMotion: Bool = false
 
     var body: some View {
+        let baseColor = turboMode
+            ? GravPalette.turboWhiteHot.opacity(max(baseOpacity, 0.56))
+            : Color.white.opacity(baseOpacity)
+        let effectivePeriod = turboMode ? max(1.15, period * 0.72) : period
+
         if reduceMotion {
             Text(text)
                 .font(font)
                 .tracking(tracking)
-                .foregroundStyle(Color.white.opacity(0.78))
+                .foregroundStyle(turboMode ? GravPalette.turboWhiteHot.opacity(0.92) : Color.white.opacity(0.78))
                 .lineLimit(1)
         } else {
             TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
-                let rawPhase = (t.truncatingRemainder(dividingBy: period)) / period
+                let rawPhase = (t.truncatingRemainder(dividingBy: effectivePeriod)) / effectivePeriod
                 let phase = rawPhase < 0 ? rawPhase + 1.0 : rawPhase
                 // Sweep highlight smoothly from -0.35 to 1.35 across the glyph width
                 let center = -0.35 + phase * 1.70
-                let bandHalfWidth = 0.24
+                let bandHalfWidth = turboMode ? 0.28 : 0.24
 
                 Text(text)
                     .font(font)
                     .tracking(tracking)
-                    .foregroundStyle(Color.white.opacity(baseOpacity))
+                    .foregroundStyle(baseColor)
                     .lineLimit(1)
                     .overlay {
                         LinearGradient(
-                            stops: [
-                                .init(color: .clear, location: max(0, min(1, center - bandHalfWidth))),
-                                .init(color: Color.white.opacity(peakOpacity), location: max(0, min(1, center))),
-                                .init(color: .clear, location: max(0, min(1, center + bandHalfWidth))),
-                            ],
+                            stops: turboMode
+                                ? [
+                                    .init(color: .clear, location: max(0, min(1, center - bandHalfWidth))),
+                                    .init(color: GravPalette.turboEmber.opacity(0.92), location: max(0, min(1, center - bandHalfWidth * 0.45))),
+                                    .init(color: Color.white.opacity(0.98), location: max(0, min(1, center))),
+                                    .init(color: GravPalette.turboWhiteHot.opacity(0.94), location: max(0, min(1, center + bandHalfWidth * 0.45))),
+                                    .init(color: .clear, location: max(0, min(1, center + bandHalfWidth))),
+                                ]
+                                : [
+                                    .init(color: .clear, location: max(0, min(1, center - bandHalfWidth))),
+                                    .init(color: Color.white.opacity(peakOpacity), location: max(0, min(1, center))),
+                                    .init(color: .clear, location: max(0, min(1, center + bandHalfWidth))),
+                                ],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
@@ -299,6 +315,7 @@ struct NotchThinkingShimmerLabel: View {
     var startDate: Date
     var compact: Bool = false
     var font: Font = .system(size: 11.5, weight: .medium)
+    var turboMode: Bool = false
     var reduceMotion: Bool = false
 
     var body: some View {
@@ -320,6 +337,7 @@ struct NotchThinkingShimmerLabel: View {
                 baseOpacity: 0.46,
                 peakOpacity: 0.96,
                 period: 1.85,
+                turboMode: turboMode,
                 reduceMotion: reduceMotion
             )
             .monospacedDigit()
@@ -333,6 +351,7 @@ struct NotchWorkingThinkingShimmerLabel: View {
     var startDate: Date
     var compact: Bool = false
     var font: Font = .system(size: 11.5, weight: .medium)
+    var turboMode: Bool = false
     var reduceMotion: Bool = false
 
     var body: some View {
@@ -359,9 +378,71 @@ struct NotchWorkingThinkingShimmerLabel: View {
                 baseOpacity: 0.46,
                 peakOpacity: 0.96,
                 period: 1.80,
+                turboMode: turboMode,
                 reduceMotion: reduceMotion
             )
             .monospacedDigit()
+        }
+    }
+}
+
+/// Forged-Ember thermal filament rendered strictly while Antigravity is running in Turbo Mode.
+/// Zero fuzzy neon halo — pure surgical `1.2pt` traveling optical energy edge.
+struct TurboThermalRimView: View {
+    var isActive: Bool
+    var reduceMotion: Bool = false
+
+    var body: some View {
+        let baseOpacity = isActive ? 0.92 : 0.42
+
+        if reduceMotion {
+            Capsule(style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.clear,
+                            GravPalette.turboCrimson.opacity(0.65),
+                            GravPalette.turboEmber,
+                            GravPalette.turboWhiteHot,
+                            GravPalette.turboEmber,
+                            GravPalette.turboCrimson.opacity(0.65),
+                            Color.clear,
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 1.2)
+                .opacity(baseOpacity)
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                let period = isActive ? 1.85 : 3.6
+                let raw = (t.truncatingRemainder(dividingBy: period)) / period
+                let phase = raw < 0 ? raw + 1.0 : raw
+                // Ping-pong smooth sinusoidal travel across the filament
+                let center = 0.14 + 0.72 * (0.5 - 0.5 * cos(phase * .pi * 2.0))
+                let spread = isActive ? 0.28 : 0.22
+
+                Capsule(style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: max(0, center - spread * 1.4)),
+                                .init(color: GravPalette.turboCrimson.opacity(0.75), location: max(0, center - spread * 0.85)),
+                                .init(color: GravPalette.turboEmber, location: max(0, center - spread * 0.35)),
+                                .init(color: isActive ? Color.white.opacity(0.95) : GravPalette.turboWhiteHot, location: center),
+                                .init(color: GravPalette.turboEmber, location: min(1, center + spread * 0.35)),
+                                .init(color: GravPalette.turboCrimson.opacity(0.75), location: min(1, center + spread * 0.85)),
+                                .init(color: .clear, location: min(1, center + spread * 1.4)),
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(height: isActive ? 1.4 : 1.0)
+                    .opacity(baseOpacity)
+            }
         }
     }
 }

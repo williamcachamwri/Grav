@@ -12,6 +12,7 @@ public struct SegmentedModeRail: View {
     public var hasStreamingReply: Bool
     public var hasRunningCommand: Bool
     public var hasActiveSwarm: Bool
+    public var isTurboMode: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var railNamespace
@@ -26,7 +27,8 @@ public struct SegmentedModeRail: View {
         swarmCount: Int = 0,
         hasStreamingReply: Bool = false,
         hasRunningCommand: Bool = false,
-        hasActiveSwarm: Bool = false
+        hasActiveSwarm: Bool = false,
+        isTurboMode: Bool = false
     ) {
         self._selection = selection
         self.liveCount = liveCount
@@ -37,6 +39,7 @@ public struct SegmentedModeRail: View {
         self.hasStreamingReply = hasStreamingReply
         self.hasRunningCommand = hasRunningCommand
         self.hasActiveSwarm = hasActiveSwarm
+        self.isTurboMode = isTurboMode
     }
 
     public var body: some View {
@@ -72,11 +75,11 @@ public struct SegmentedModeRail: View {
                     .lineLimit(1)
 
                 if tab == .terminal && hasRunningCommand {
-                    NotchSemanticDot(color: GravPalette.glacialCyan, size: 4.5, isPulsing: true)
+                    NotchSemanticDot(color: isTurboMode ? GravPalette.turboEmber : GravPalette.glacialCyan, size: 4.5, isPulsing: true)
                 } else if tab == .reply && hasStreamingReply {
-                    NotchSemanticDot(color: GravPalette.thinking, size: 4.5, isPulsing: true)
+                    NotchSemanticDot(color: isTurboMode ? GravPalette.turboWhiteHot : GravPalette.thinking, size: 4.5, isPulsing: true)
                 } else if tab == .swarm && hasActiveSwarm {
-                    NotchSemanticDot(color: GravPalette.prismViolet, size: 4.5, isPulsing: true)
+                    NotchSemanticDot(color: isTurboMode ? GravPalette.turboCrimson : GravPalette.prismViolet, size: 4.5, isPulsing: true)
                 } else if count > 0 {
                     Text(formatBadgeCount(count))
                         .font(.system(size: 9.5, weight: .medium, design: .monospaced))
@@ -96,15 +99,20 @@ public struct SegmentedModeRail: View {
 
                     if isSelected {
                         RoundedRectangle(cornerRadius: 6.5, style: .continuous)
-                            .fill(Color.white.opacity(0.105))
+                            .fill(isTurboMode ? GravPalette.turboEmber.opacity(0.14) : Color.white.opacity(0.105))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6.5, style: .continuous)
                                     .strokeBorder(
                                         LinearGradient(
-                                            colors: [
-                                                Color.white.opacity(0.18),
-                                                Color.white.opacity(0.03),
-                                            ],
+                                            colors: isTurboMode
+                                                ? [
+                                                    GravPalette.turboWhiteHot.opacity(0.46),
+                                                    GravPalette.turboEmber.opacity(0.12),
+                                                ]
+                                                : [
+                                                    Color.white.opacity(0.18),
+                                                    Color.white.opacity(0.03),
+                                                ],
                                             startPoint: .top,
                                             endPoint: .bottom
                                         ),

@@ -343,6 +343,13 @@ public struct LiveTelemetryTabView: View {
                     switch store.state {
                     case let .working(startedAt):
                         liveWorkingThinkingStatusRow(startedAt: startedAt)
+                    case .replying:
+                        liveInlineStatusRow(
+                            symbol: "text.bubble",
+                            symbolColor: store.isTurboMode ? GravPalette.turboEmber : GravPalette.emerald,
+                            label: "Replying",
+                            startedAt: store.currentPhaseStartedAt
+                        )
                     case let .compacting(event) where !store.recentActivity.contains(where: { $0.id == event.id }):
                         liveInlineStatusRow(
                             symbol: "rectangle.compress.vertical",
@@ -412,6 +419,9 @@ public struct LiveTelemetryTabView: View {
             .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            activityContextMenu(for: item)
+        }
         .onHover { hovering in
             if reduceMotion {
                 hoveredActivityID = hovering ? item.id : (hoveredActivityID == item.id ? nil : hoveredActivityID)
@@ -707,11 +717,60 @@ public struct LiveTelemetryTabView: View {
         case .compaction:
             break
         case let .fileInspection(event):
-            store.openInAntigravity(path: event.path)
+            store.openInAntigravity(path: event.path, line: event.startLine)
         case let .fileChange(event):
             onInspectFile(event)
         case let .command(command):
             onInspectCommand(command)
+        }
+    }
+
+    @ViewBuilder
+    private func activityContextMenu(for item: TelemetryActivityItem) -> some View {
+        switch item {
+        case let .fileInspection(event):
+            Button(event.startLine != nil ? "Open in Antigravity at Line \(event.startLine!)" : "Open in Antigravity") {
+                store.openInAntigravity(path: event.path, line: event.startLine)
+            }
+            Button("Reveal in Finder") {
+                store.revealInFinder(path: event.path)
+            }
+            Button("Copy Path") {
+                NotchTelemetryHelpers.copyToPasteboard(event.path)
+            }
+
+        case let .fileChange(event):
+            Button("Open in Antigravity") {
+                store.openInAntigravity(path: event.path)
+            }
+            Button("Reveal in Finder") {
+                store.revealInFinder(path: event.path)
+            }
+            Divider()
+            Button("Copy Path") {
+                NotchTelemetryHelpers.copyToPasteboard(event.path)
+            }
+            Button("Copy Unified Diff") {
+                NotchTelemetryHelpers.copyToPasteboard(NotchTelemetryHelpers.formatUnifiedDiff(for: event))
+            }
+
+        case let .command(command):
+            Button("Copy Command") {
+                NotchTelemetryHelpers.copyToPasteboard(command.commandLine)
+            }
+            if !command.logOutput.isEmpty {
+                Button("Copy Output Log") {
+                    NotchTelemetryHelpers.copyToPasteboard(command.logOutput)
+                }
+            }
+
+        case let .thinking(snapshot):
+            Button("Copy Reasoning") {
+                NotchTelemetryHelpers.copyToPasteboard(snapshot.text)
+            }
+
+        case .compaction:
+            EmptyView()
         }
     }
 

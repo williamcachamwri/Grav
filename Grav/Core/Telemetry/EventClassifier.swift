@@ -69,6 +69,8 @@ public struct EventClassifier: Sendable {
     internal var lastUserPromptPreview: String?
     internal var isTurnActive: Bool = false
     internal var lastKnownFileContents: [String: String] = [:]
+    internal var previousStepTimestamp: Date?
+    internal var throughputSamples: [Double] = []
 
     public init() {}
 
@@ -88,6 +90,8 @@ public struct EventClassifier: Sendable {
         lastUserPromptPreview = nil
         isTurnActive = false
         lastKnownFileContents.removeAll()
+        previousStepTimestamp = nil
+        throughputSamples.removeAll()
     }
 
     /// Marks the telemetry state as `.idle` (for example after an idle decay timeout) and clears
@@ -146,9 +150,10 @@ public struct EventClassifier: Sendable {
         let previousState = state
         let stepDate = step.parsedDate
 
-        // 1. Update active model and cumulative token usage (deduplicated by step_index)
+        // 1. Update active model, cumulative token usage, live context window fill, and real tok/s throughput
         if let model = step.model, !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             activeModel = model
+            tokenMetrics.contextWindowLimit = TokenMetrics.inferredContextLimit(for: model)
         }
         if !processedTokenStepIndices.contains(step.stepIndex) {
             let input = step.inputTokens ?? 0
@@ -159,8 +164,29 @@ public struct EventClassifier: Sendable {
                 tokenMetrics.inputTokens += input
                 tokenMetrics.cacheReadTokens += cache
                 tokenMetrics.outputTokens += output
+
+                // Latest step's input + cacheRead represents current active context window occupancy
+                if input + cache > 0 {
+                    tokenMetrics.latestContextTokens = input + cache
+                }
+
+                // Real output throughput (`tok/s`) derived from step timestamps & generated output tokens
+                if output >= 16, let prevDate = previousStepTimestamp {
+                    let elapsed = stepDate.timeIntervalSince(prevDate)
+                    if elapsed >= 0.4 && elapsed <= 180.0 {
+                        let tps = min(600.0, max(1.0, Double(output) / elapsed))
+                        tokenMetrics.lastTurnTokensPerSecond = tps
+                        throughputSamples.append(tps)
+                        if throughputSamples.count > 12 {
+                            throughputSamples.removeFirst(throughputSamples.count - 12)
+                        }
+                        let avg = throughputSamples.reduce(0, +) / Double(throughputSamples.count)
+                        tokenMetrics.averageTokensPerSecond = avg
+                    }
+                }
             }
         }
+        previousStepTimestamp = stepDate
 
         var output = EventClassificationOutput(
             state: state,
@@ -319,6 +345,9 @@ public struct EventClassifier: Sendable {
                 output.completedThinkingStepIndex = prevActive
                 activeThinkingStepIndex = nil
             }
+            if output.responseSnapshot != nil && previousState != .idle {
+                output.peekEvents.append(.turnCompleted)
+            }
             state = .idle
             isTurnActive = false
             burstEditedPaths.removeAll()
@@ -331,6 +360,8 @@ public struct EventClassifier: Sendable {
             state = .editing(latestFile)
         } else if let latestInspection = output.fileInspections.last {
             state = .inspecting(latestInspection)
+        } else if let reply = output.responseSnapshot, reply.isStreaming {
+            state = .replying(reply)
         } else if !trimmedThinking.isEmpty && !isFinalPlannerResponse {
             state = .thinking
         } else if !toolCalls.isEmpty {
@@ -464,6 +495,9 @@ public struct EventClassifier: Sendable {
                     session: session,
                     into: &output
                 )
+
+            case "ask_question":
+                output.peekEvents.append(.needsInput("Antigravity needs your input"))
 
             default:
                 break

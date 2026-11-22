@@ -163,15 +163,93 @@ public struct ConversationSession: Sendable, Equatable, Identifiable {
     }
 }
 
+public enum AntigravityExecutionMode: String, Sendable, Equatable {
+    case requestReview = "Request Review"
+    case defaultMode = "Default"
+    case auto = "Auto"
+    case turbo = "Turbo"
+
+    public var isTurbo: Bool {
+        self == .turbo
+    }
+
+    public static func parse(fromAnnotationText text: String) -> AntigravityExecutionMode {
+        if text.contains("AGENT_PERMISSION_PRESET_TURBO") {
+            return .turbo
+        }
+        if text.contains("AGENT_PERMISSION_PRESET_AUTO") {
+            return .auto
+        }
+        if text.contains("AGENT_PERMISSION_PRESET_REQUEST_REVIEW")
+            || text.contains("AGENT_PERMISSION_PRESET_STRICT")
+        {
+            return .requestReview
+        }
+        return .defaultMode
+    }
+}
+
+public struct ConversationAnnotation: Sendable, Equatable {
+    public var title: String?
+    public var executionMode: AntigravityExecutionMode
+
+    public init(title: String? = nil, executionMode: AntigravityExecutionMode = .defaultMode) {
+        self.title = title
+        self.executionMode = executionMode
+    }
+
+    /// Parses `~/.gemini/antigravity/annotations/<session-id>.pbtxt` cleanly.
+    public static func parse(pbtxt: String) -> ConversationAnnotation {
+        let mode = AntigravityExecutionMode.parse(fromAnnotationText: pbtxt)
+        var parsedTitle: String?
+        if let titleRange = pbtxt.range(of: #"title:"([^"\\]*(?:\\.[^"\\]*)*)""#, options: .regularExpression) {
+            let matched = String(pbtxt[titleRange])
+            if let firstQuote = matched.firstIndex(of: "\""),
+               let lastQuote = matched.lastIndex(of: "\""),
+               firstQuote < lastQuote
+            {
+                let inner = String(matched[matched.index(after: firstQuote)..<lastQuote])
+                    .replacingOccurrences(of: "\\\"", with: "\"")
+                    .replacingOccurrences(of: "\\\\", with: "\\")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !inner.isEmpty {
+                    parsedTitle = inner
+                }
+            }
+        }
+        return ConversationAnnotation(title: parsedTitle, executionMode: mode)
+    }
+}
+
 public struct TokenMetrics: Sendable, Equatable {
     public var inputTokens: Int
     public var cacheReadTokens: Int
     public var outputTokens: Int
+    /// Live context window fill from the most recent `PLANNER_RESPONSE` (`input + cacheRead`).
+    public var latestContextTokens: Int
+    /// Model context window capacity (1M tokens for Gemini 4 / Pro / Flash series).
+    public var contextWindowLimit: Int
+    /// Most recent measured output generation throughput in tokens/second.
+    public var lastTurnTokensPerSecond: Double?
+    /// Session rolling average output throughput in tokens/second.
+    public var averageTokensPerSecond: Double?
 
-    public init(inputTokens: Int = 0, cacheReadTokens: Int = 0, outputTokens: Int = 0) {
+    public init(
+        inputTokens: Int = 0,
+        cacheReadTokens: Int = 0,
+        outputTokens: Int = 0,
+        latestContextTokens: Int = 0,
+        contextWindowLimit: Int = 1_000_000,
+        lastTurnTokensPerSecond: Double? = nil,
+        averageTokensPerSecond: Double? = nil
+    ) {
         self.inputTokens = inputTokens
         self.cacheReadTokens = cacheReadTokens
         self.outputTokens = outputTokens
+        self.latestContextTokens = latestContextTokens
+        self.contextWindowLimit = max(1, contextWindowLimit)
+        self.lastTurnTokensPerSecond = lastTurnTokensPerSecond
+        self.averageTokensPerSecond = averageTokensPerSecond
     }
 
     public var totalTokens: Int {
@@ -182,6 +260,23 @@ public struct TokenMetrics: Sendable, Equatable {
         let totalIn = inputTokens + cacheReadTokens
         guard totalIn > 0 else { return 0 }
         return Double(cacheReadTokens) / Double(totalIn)
+    }
+
+    public var contextFillRatio: Double {
+        guard contextWindowLimit > 0 else { return 0 }
+        return min(1.0, max(0.0, Double(latestContextTokens) / Double(contextWindowLimit)))
+    }
+
+    /// True when the active context window is nearing Antigravity's automatic compaction threshold.
+    public var isContextNearCompaction: Bool {
+        contextFillRatio >= 0.78
+    }
+
+    public static func inferredContextLimit(for model: String?) -> Int {
+        guard let lower = model?.lowercased() else { return 1_000_000 }
+        if lower.contains("claude") { return 200_000 }
+        if lower.contains("gpt-4o") || lower.contains("o1") || lower.contains("o3") { return 200_000 }
+        return 1_000_000
     }
 
     public static func formatCompact(_ count: Int) -> String {
@@ -517,6 +612,7 @@ public enum TelemetryState: Sendable, Equatable {
     case working(startedAt: Date)
     case compacting(CompactionEvent)
     case thinking
+    case replying(AssistantResponseSnapshot?)
     case inspecting(FileInspectionEvent)
     case editing(FileChangeEvent)
     case runningCommand(CommandExecutionEvent)
@@ -532,6 +628,7 @@ public enum TelemetryState: Sendable, Equatable {
         case .working: return "Working"
         case .compacting: return "Compacting"
         case .thinking: return "Thinking"
+        case .replying: return "Replying"
         case .inspecting: return "Analyzing"
         case let .editing(event):
             return event.kind == .delete ? "Deleting" : "Editing"
@@ -546,6 +643,8 @@ public enum NotchPeekEvent: Sendable, Equatable {
     case multiFileEdit(Int)
     case commandCompleted(String, Int)
     case commandFailed(String, Int)
+    case turnCompleted
+    case needsInput(String)
     case welcome
 }
 

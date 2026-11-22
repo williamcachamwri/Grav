@@ -40,6 +40,17 @@ public enum GravPalette {
     /// Context Compaction — Soft Prism Violet (`#C084FC`, harmonized with logo magenta-violet edge).
     public static let prismViolet = Color(red: 0xC0 / 255.0, green: 0x84 / 255.0, blue: 0xFC / 255.0)
 
+    // MARK: - Forged-Ember Turbo Palette (Strictly Active in Antigravity Turbo Mode)
+
+    /// Molten Solar Ember (`#FF5E1A`) — primary Turbo hardware rim & indicator tone.
+    public static let turboEmber = Color(red: 0xFF / 255.0, green: 0x5E / 255.0, blue: 0x1A / 255.0)
+
+    /// Afterburner Crimson (`#FF2E54`) — deep thermal contrast edge for Turbo mode.
+    public static let turboCrimson = Color(red: 0xFF / 255.0, green: 0x2E / 255.0, blue: 0x54 / 255.0)
+
+    /// White-Hot Tungsten Amber (`#FFB347`) — peak specular highlight in Turbo shimmers.
+    public static let turboWhiteHot = Color(red: 0xFF / 255.0, green: 0xB3 / 255.0, blue: 0x47 / 255.0)
+
     /// File Edit / Create — Warm Solar Amber (`#F59E0B`, harmonized with logo crest).
     public static let fileEdit = Color(red: 0xF5 / 255.0, green: 0x9E / 255.0, blue: 0x0B / 255.0)
 

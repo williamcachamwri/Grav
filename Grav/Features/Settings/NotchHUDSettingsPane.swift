@@ -85,7 +85,7 @@ struct NotchHUDSettingsPane: View {
             return .primary
         case .compacting:
             return .purple
-        case .thinking, .inspecting:
+        case .thinking, .replying, .inspecting:
             return .cyan
         case .editing:
             return .orange

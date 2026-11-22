@@ -189,6 +189,21 @@ public struct FilesTelemetryTabView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 7.5, style: .continuous))
             }
             .buttonStyle(.plain)
+            .contextMenu {
+                Button("Open in Antigravity") {
+                    store.openInAntigravity(path: event.path)
+                }
+                Button("Reveal in Finder") {
+                    store.revealInFinder(path: event.path)
+                }
+                Divider()
+                Button("Copy Path") {
+                    NotchTelemetryHelpers.copyToPasteboard(event.path)
+                }
+                Button("Copy Unified Diff") {
+                    NotchTelemetryHelpers.copyToPasteboard(NotchTelemetryHelpers.formatUnifiedDiff(for: event))
+                }
+            }
             .onHover { hovering in
                 if reduceMotion {
                     hoveredFileID = hovering ? event.id : (hoveredFileID == event.id ? nil : hoveredFileID)

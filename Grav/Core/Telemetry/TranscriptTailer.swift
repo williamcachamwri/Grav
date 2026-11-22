@@ -361,22 +361,30 @@ public actor TranscriptTailer {
     }
 }
 
+/// Streaming write signal from Antigravity's live conversation WAL.
+public struct WALActivityPulse: Sendable, Equatable {
+    public let deltaBytes: Int64
+    /// True when multiple consecutive WAL growth frames arrive in rapid succession
+    /// (the signature of active token-by-token reply streaming).
+    public let isRapidStreamingBurst: Bool
+
+    public init(deltaBytes: Int64, isRapidStreamingBurst: Bool) {
+        self.deltaBytes = deltaBytes
+        self.isRapidStreamingBurst = isRapidStreamingBurst
+    }
+}
+
 /// Event-driven `O_EVTONLY` kernel watcher on Antigravity's live conversation WAL file
 /// (`~/.gemini/antigravity/conversations/<session-id>.db-wal`).
-///
-/// Antigravity streams user prompts, thinking deltas, and compaction writes into the WAL
-/// immediately (0ms), whereas `transcript.jsonl` flushes only after each step completes.
-/// Watching vnode write events (without opening or locking SQLite) lets Grav surface
-/// `Working` -> `Thinking for Ns` the exact millisecond the user submits a prompt or while
-/// deep reasoning is actively streaming, at 0% idle CPU.
 public actor ConversationWALWatcher {
     public let walURL: URL
 
     private let watcherQueue: DispatchQueue
     private var fileSource: DispatchSourceFileSystemObject?
     private var dirSource: DispatchSourceFileSystemObject?
-    private var onGrowth: (@Sendable (Int64) -> Void)?
+    private var onPulse: (@Sendable (WALActivityPulse) -> Void)?
     private var lastWALSize: UInt64 = 0
+    private var recentGrowthTimes: [Date] = []
     private var isWatching: Bool = false
 
     public init(session: ConversationSession) {
@@ -392,19 +400,21 @@ public actor ConversationWALWatcher {
         )
     }
 
-    public func startWatching(onGrowth: @escaping @Sendable (Int64) -> Void) {
+    public func startWatching(onPulse: @escaping @Sendable (WALActivityPulse) -> Void) {
         stopWatching()
-        self.onGrowth = onGrowth
+        self.onPulse = onPulse
         self.isWatching = true
         self.lastWALSize = currentWALFileSize()
+        self.recentGrowthTimes.removeAll()
         attachFileSource()
         attachDirectorySource()
     }
 
     public func stopWatching() {
         isWatching = false
-        onGrowth = nil
+        onPulse = nil
         lastWALSize = 0
+        recentGrowthTimes.removeAll()
         fileSource?.cancel()
         fileSource = nil
         dirSource?.cancel()
@@ -496,11 +506,143 @@ public actor ConversationWALWatcher {
             lastWALSize = newSize
             // Only signal meaningful streaming payload writes (ignore tiny SQLite checkpoint/metadata touches)
             if delta >= 4096 {
-                onGrowth?(delta)
+                let now = Date()
+                recentGrowthTimes.append(now)
+                recentGrowthTimes.removeAll { now.timeIntervalSince($0) > 2.4 }
+                let isBurst = recentGrowthTimes.count >= 3
+                onPulse?(WALActivityPulse(deltaBytes: delta, isRapidStreamingBurst: isBurst))
             }
         } else {
-            // WAL shrunk/checkpointed back to 0 — update baseline without emitting false activity
             lastWALSize = newSize
         }
+    }
+}
+
+/// Event-driven `kqueue` watcher on `~/.gemini/antigravity/annotations/<session-id>.pbtxt`
+/// reading the live per-conversation `permission_preset` (`Turbo` / `Auto` / `Default` / `Request Review`)
+/// and official conversation title with 0% idle CPU.
+public actor ConversationAnnotationWatcher {
+    public let annotationURL: URL
+
+    private let watcherQueue: DispatchQueue
+    private var fileSource: DispatchSourceFileSystemObject?
+    private var dirSource: DispatchSourceFileSystemObject?
+    private var onAnnotation: (@Sendable (ConversationAnnotation) -> Void)?
+    private var lastEmitted: ConversationAnnotation?
+    private var isWatching: Bool = false
+
+    public init(session: ConversationSession) {
+        let antigravityRoot = session.directoryURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        self.annotationURL = antigravityRoot
+            .appendingPathComponent("annotations", isDirectory: true)
+            .appendingPathComponent("\(session.id).pbtxt")
+        self.watcherQueue = DispatchQueue(
+            label: "com.grav.telemetry.annotation.\(UUID().uuidString)",
+            qos: .utility
+        )
+    }
+
+    public static func readAnnotation(at url: URL) -> ConversationAnnotation? {
+        guard let text = try? String(contentsOf: url, encoding: .utf8), !text.isEmpty else {
+            return nil
+        }
+        return ConversationAnnotation.parse(pbtxt: text)
+    }
+
+    public func startWatching(onAnnotation: @escaping @Sendable (ConversationAnnotation) -> Void) {
+        stopWatching()
+        self.onAnnotation = onAnnotation
+        self.isWatching = true
+        refreshAndNotify(force: true)
+        attachFileSource()
+        attachDirectorySource()
+    }
+
+    public func stopWatching() {
+        isWatching = false
+        onAnnotation = nil
+        lastEmitted = nil
+        fileSource?.cancel()
+        fileSource = nil
+        dirSource?.cancel()
+        dirSource = nil
+    }
+
+    private func attachFileSource() {
+        fileSource?.cancel()
+        fileSource = nil
+        guard isWatching else { return }
+
+        let fd = open(annotationURL.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend, .rename, .delete, .attrib],
+            queue: watcherQueue
+        )
+        source.setEventHandler { [weak self] in
+            let flags = source.data
+            let replaced = flags.contains(.rename) || flags.contains(.delete)
+            Task { [weak self] in
+                await self?.handleFileEvent(replaced: replaced)
+            }
+        }
+        source.setCancelHandler {
+            close(fd)
+        }
+        fileSource = source
+        source.resume()
+    }
+
+    private func attachDirectorySource() {
+        dirSource?.cancel()
+        dirSource = nil
+        guard isWatching else { return }
+
+        let parentPath = annotationURL.deletingLastPathComponent().path
+        let fd = open(parentPath, O_EVTONLY)
+        guard fd >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename],
+            queue: watcherQueue
+        )
+        source.setEventHandler { [weak self] in
+            Task { [weak self] in
+                await self?.handleDirectoryEvent()
+            }
+        }
+        source.setCancelHandler {
+            close(fd)
+        }
+        dirSource = source
+        source.resume()
+    }
+
+    private func handleDirectoryEvent() {
+        guard isWatching else { return }
+        if fileSource == nil, FileManager.default.fileExists(atPath: annotationURL.path) {
+            attachFileSource()
+        }
+        refreshAndNotify(force: false)
+    }
+
+    private func handleFileEvent(replaced: Bool) {
+        guard isWatching else { return }
+        if replaced {
+            attachFileSource()
+        }
+        refreshAndNotify(force: false)
+    }
+
+    private func refreshAndNotify(force: Bool) {
+        guard isWatching, let parsed = Self.readAnnotation(at: annotationURL) else { return }
+        if !force, parsed == lastEmitted { return }
+        lastEmitted = parsed
+        onAnnotation?(parsed)
     }
 }

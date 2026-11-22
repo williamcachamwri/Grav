@@ -32,7 +32,35 @@ public struct ExpandedNotchView: View {
     }
 
     public var body: some View {
+        let isTurbo = store.isTurboMode && !store.isPaused
+
         ZStack(alignment: .bottom) {
+            if isTurbo {
+                VStack(spacing: 0) {
+                    TurboThermalRimView(
+                        isActive: store.state.isActive || store.runningTaskCount > 0,
+                        reduceMotion: reduceMotion
+                    )
+                    .padding(.horizontal, 26)
+
+                    RadialGradient(
+                        colors: [
+                            GravPalette.turboEmber.opacity(store.state.isActive ? 0.085 : 0.042),
+                            GravPalette.turboCrimson.opacity(store.state.isActive ? 0.03 : 0.012),
+                            Color.clear,
+                        ],
+                        center: .top,
+                        startRadius: 2,
+                        endRadius: 140
+                    )
+                    .frame(height: 110)
+
+                    Spacer(minLength: 0)
+                }
+                .allowsHitTesting(false)
+                .transition(.opacity)
+            }
+
             VStack(spacing: 8) {
                 ExpandedNotchHeaderView(
                     store: store,
@@ -49,7 +77,8 @@ public struct ExpandedNotchView: View {
                     swarmCount: store.totalAgentsBadgeCount,
                     hasStreamingReply: store.latestResponse?.isStreaming == true && !store.isPaused,
                     hasRunningCommand: store.activeCommand != nil && !store.isPaused,
-                    hasActiveSwarm: (store.activeSwarmSnapshot != nil || store.runningSubagentCount > 0) && !store.isPaused
+                    hasActiveSwarm: (store.activeSwarmSnapshot != nil || store.runningSubagentCount > 0) && !store.isPaused,
+                    isTurboMode: isTurbo
                 )
 
                 tabViewport

@@ -18,7 +18,7 @@ public enum SemanticDotTone: Sendable, Equatable {
             self = .custom(Color.white.opacity(0.84))
         case .compacting:
             self = .custom(GravPalette.prismViolet)
-        case .thinking, .inspecting:
+        case .thinking, .replying, .inspecting:
             self = .thinking
         case let .editing(event):
             self = event.kind == .delete ? .error : .fileEdit

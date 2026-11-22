@@ -580,4 +580,60 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(overwriteOut.fileChanges.first?.addedLines, 3)
         XCTAssertEqual(overwriteOut.fileChanges.first?.removedLines, 1)
     }
+
+    func testAnnotationTurboParsingContextMeterSpeedAndReplyingState() {
+        // 1. Real `.pbtxt` annotation parsing (Turbo preset + official title)
+        let pbtxt = #"title:"Grav Telemetry Companion App" last_user_view_time:{seconds:1795380715 nanos:222000000} permission_preset:AGENT_PERMISSION_PRESET_TURBO"#
+        let parsed = ConversationAnnotation.parse(pbtxt: pbtxt)
+        XCTAssertEqual(parsed.title, "Grav Telemetry Companion App")
+        XCTAssertEqual(parsed.executionMode, .turbo)
+        XCTAssertTrue(parsed.executionMode.isTurbo)
+
+        // 2. Context window occupancy, tok/s throughput, streaming .replying, and .turnCompleted peek
+        var classifier = EventClassifier()
+        let userStep = TranscriptStep(
+            stepIndex: 1,
+            source: "USER_EXPLICIT",
+            type: "USER_INPUT",
+            status: "DONE",
+            createdAt: "2026-11-23T03:50:00Z",
+            content: "<USER_REQUEST>\nRecommend top features\n</USER_REQUEST>"
+        )
+        _ = classifier.process(step: userStep)
+
+        let streamingReply = TranscriptStep(
+            stepIndex: 2,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "RUNNING",
+            createdAt: "2026-11-23T03:50:05Z",
+            model: "gemini-4-neon-high",
+            inputTokens: 12_000,
+            cacheReadTokens: 810_000,
+            outputTokens: 300,
+            content: "Here are the top 6 features..."
+        )
+        let streamOut = classifier.process(step: streamingReply)
+        if case .replying = streamOut.state {
+            // expected
+        } else {
+            XCTFail("Expected .replying during streaming response, got \(streamOut.state)")
+        }
+        XCTAssertEqual(streamOut.tokenMetrics.latestContextTokens, 822_000)
+        XCTAssertTrue(streamOut.tokenMetrics.isContextNearCompaction)
+        XCTAssertEqual(Int((streamOut.tokenMetrics.lastTurnTokensPerSecond ?? 0).rounded()), 60)
+
+        let finalReply = TranscriptStep(
+            stepIndex: 3,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T03:50:08Z",
+            model: "gemini-4-neon-high",
+            content: "Here are the top 6 features — complete."
+        )
+        let finalOut = classifier.process(step: finalReply)
+        XCTAssertEqual(finalOut.state, .idle)
+        XCTAssertTrue(finalOut.peekEvents.contains(.turnCompleted))
+    }
 }
