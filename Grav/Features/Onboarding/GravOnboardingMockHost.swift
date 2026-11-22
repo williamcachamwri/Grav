@@ -100,7 +100,15 @@ struct GravOnboardingMockHost: View {
                 )
                 .allowsHitTesting(false)
 
-                // Interactive miniature MacBook Notch HUD rendered flush at y = 0 above the menu bar
+                // Authentic macOS Dark Glass Dock anchored cleanly at the bottom of the MacBook desktop
+                VStack {
+                    Spacer()
+                    GravMockMacOSDock()
+                        .padding(.bottom, 8)
+                }
+                .allowsHitTesting(false)
+
+                // Interactive 1:1 MacBook Notch HUD rendered flush at y = 0 above the menu bar
                 // and synchronized with Space 1's 3D glide.
                 GravMockNotchOverlay(state: state)
                     .environment(

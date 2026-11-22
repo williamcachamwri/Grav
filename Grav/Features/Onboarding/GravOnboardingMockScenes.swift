@@ -8,6 +8,7 @@
 //  - Space 2: Mock macOS System Settings window bound live to `PreferencesStore`
 //
 
+import NotchKit
 import SwiftUI
 
 // MARK: - Space 0: Connect to Antigravity (Live Telemetry Handshake)
@@ -394,14 +395,21 @@ struct GravMockNotchScene: View {
     }
 }
 
-/// Interactive miniature MacBook Notch HUD rendered flush at `y = 0` directly above the frosted
-/// menu bar on Step 2 so the pure obsidian hardware bezel stays razor-sharp and interactive.
+/// Interactive 1:1 MacBook Notch HUD rendered flush at `y = 0` directly above the macOS menu bar
+/// on Step 2 — mirroring Grav's real Collapsed Dynamic Island Pill and 4-Tab Expanded Notch HUD
+/// pixel-for-pixel (pure `#000000` bezel ink, zero outer stroke, real `NotchBars`, real Devicon SVGs).
 struct GravMockNotchOverlay: View {
     @ObservedObject var state: GravOnboardingState
     @Environment(\.gravMockSceneIsLive) private var isLive
+    @Environment(\.accessibilityReduceMotion) private var envReduceMotion
+    @Namespace private var mockRailNamespace
 
     @State private var isNotchHovered = false
     @State private var pulsePhase = false
+
+    private var reduceMotion: Bool {
+        GravMotionPreferences.shared.reduceMotion || envReduceMotion
+    }
 
     private var isExpanded: Bool {
         state.isMockNotchExpanded
@@ -453,318 +461,487 @@ struct GravMockNotchOverlay: View {
         }
     }
 
-    // MARK: - Interactive Miniature MacBook Notch
+    // MARK: - 1:1 Interactive MacBook Notch (Collapsed Pill ↔ Expanded 4-Tab HUD)
 
     private var interactiveNotch: some View {
         let shape = MacBookNotchShape(
-            shoulderRadius: isExpanded ? 12 : 7,
-            bottomRadius: isExpanded ? 18 : 10
+            shoulderRadius: isExpanded ? 14 : 6,
+            bottomRadius: isExpanded ? 22 : 12
         )
 
-        return VStack(spacing: 0) {
-            // Top Bezel Strip (always visible; flanks hardware camera dot)
-            HStack(spacing: 0) {
-                // Left telemetry status
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(GravPalette.thinking)
-                        .frame(width: 6.5, height: 6.5)
-                        .scaleEffect(pulsePhase && isLive ? 1.18 : 0.90)
-                        .animation(
-                            isLive && !GravMotionPreferences.shared.reduceMotion
-                                ? .easeInOut(duration: 1.1).repeatForever(autoreverses: true)
-                                : nil,
-                            value: pulsePhase
-                        )
+        return ZStack(alignment: .top) {
+            if !isExpanded {
+                collapsedMockContent
+                    .transition(.opacity)
+            } else {
+                expandedMockContent
+                    .transition(.opacity)
+            }
+        }
+        .frame(width: isExpanded ? 492 : 276)
+        .background(shape.fill(Color.black))
+        .clipShape(shape)
+        .shadow(
+            color: Color.black.opacity(isExpanded ? 0.52 : 0.0),
+            radius: isExpanded ? 28 : 0,
+            y: isExpanded ? 14 : 0
+        )
+        .shadow(
+            color: Color.black.opacity(isExpanded ? 0.24 : 0.0),
+            radius: isExpanded ? 6 : 0,
+            y: isExpanded ? 3 : 0
+        )
+        .animation(
+            reduceMotion
+                ? nil
+                : (isExpanded
+                    ? .spring(response: 0.34, dampingFraction: 0.84)
+                    : .timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.24)),
+            value: isExpanded
+        )
+        .animation(reduceMotion ? nil : GravMotion.railSpring, value: state.selectedMockNotchTab)
+    }
 
-                    if isExpanded {
-                        GravOrbitalMark(size: 12, tint: .white)
-                        Text("Grav")
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(Color.white)
-                        Text("gemini-2.5-pro")
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color.white.opacity(0.50))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.white.opacity(0.08))
-                            )
-                    } else {
-                        Text("Thinking")
-                            .font(.system(size: 10, weight: .semibold))
+    // MARK: - 1:1 Collapsed Pill (Matches `CollapsedNotchView`)
+
+    private var collapsedMockContent: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 7) {
+                GravAppIconTile(size: 19)
+                NotchBars(mockCommandWaveStyle)
+            }
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 6) {
+                NotchPingPongMarqueeText(
+                    text: "Run full 20-test XCTest suite",
+                    font: .system(size: 11.5, weight: .medium),
+                    color: Color.white.opacity(0.88),
+                    alignment: .trailing,
+                    reduceMotion: reduceMotion || !isLive
+                )
+
+                Text("23s")
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.48))
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 32)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            GravOnboardingWelcomeAudio.shared.playTabSwitch()
+            state.toggleMockNotchExpanded()
+        }
+    }
+
+    private var mockCommandWaveStyle: NotchBarsStyle {
+        if reduceMotion || !isLive {
+            return .steady([0.45, 0.9, 0.55], barWidth: 1.6, spacing: 1.7, height: 9.5, tint: Color.white.opacity(0.85))
+        }
+        return .wave(
+            count: 3,
+            low: 0.26,
+            high: 1.0,
+            barWidth: 1.6,
+            spacing: 1.7,
+            height: 9.5,
+            period: 0.56,
+            stagger: 0.12,
+            tint: Color.white.opacity(0.85)
+        )
+    }
+
+    // MARK: - 1:1 Expanded 4-Tab HUD (Matches `ExpandedNotchView`)
+
+    private var expandedMockContent: some View {
+        VStack(spacing: 8) {
+            // 1:1 Header Bar
+            HStack(spacing: 7) {
+                HStack(spacing: 6) {
+                    GravAppIconTile(size: 19)
+
+                    HStack(spacing: 3.5) {
+                        Text("Build a native macOS 14+ SwiftUI...")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .tracking(-0.18)
                             .foregroundStyle(Color.white.opacity(0.92))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: 156, alignment: .leading)
+
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 7.5, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.36))
+                    }
+
+                    HStack(spacing: 4) {
+                        NotchSemanticDot(color: GravPalette.thinking, size: 4.5, isPulsing: isLive)
+                        Text("Thinking")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.72))
                     }
                 }
-                .padding(.leading, isExpanded ? 18 : 14)
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 4)
 
-                // Hardware Camera Lens Dot (center anchor)
-                Circle()
-                    .fill(Color(white: 0.14))
-                    .frame(width: 6, height: 6)
-                    .overlay(
-                        Circle()
-                            .fill(Color(red: 0.04, green: 0.08, blue: 0.14))
-                            .frame(width: 3, height: 3)
-                    )
+                HStack(spacing: 5) {
+                    HStack(spacing: 6) {
+                        Text("↓2.1M")
+                            .foregroundStyle(Color.white.opacity(0.52))
+                        Text("↑342k")
+                            .foregroundStyle(GravPalette.glacialCyan.opacity(0.92))
+                    }
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
 
-                Spacer(minLength: 8)
+                    Rectangle()
+                        .fill(Color.white.opacity(0.10))
+                        .frame(width: 0.5, height: 10)
 
-                // Right cluster: collapse button when expanded, or compact token indicator when collapsed
-                if isExpanded {
                     Button {
+                        GravOnboardingWelcomeAudio.shared.playButtonTap()
                         state.setMockNotchExpanded(false)
                     } label: {
                         Image(systemName: "chevron.up")
-                            .font(.system(size: 9.5, weight: .bold))
-                            .foregroundStyle(Color.white.opacity(0.65))
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.52))
                             .frame(width: 20, height: 20)
-                            .background(
-                                Circle()
-                                    .fill(Color.white.opacity(0.10))
-                            )
                     }
-                    .buttonStyle(.plain)
-                    .padding(.trailing, 18)
-                } else {
-                    HStack(spacing: 4) {
-                        Text("18.4k")
-                            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color.white.opacity(0.68))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(GravPalette.glacialTeal)
-                    }
-                    .padding(.trailing, 14)
+                    .buttonStyle(NotchChromeButtonStyle(cornerRadius: 5.5))
+                    .help("Collapse Preview")
                 }
             }
-            .frame(height: 30)
+            .frame(height: 24)
             .contentShape(Rectangle())
             .onTapGesture {
-                state.toggleMockNotchExpanded()
+                GravOnboardingWelcomeAudio.shared.playTabSwitch()
+                state.setMockNotchExpanded(false)
             }
 
-            // Expanded 3-Tab Telemetry Content
-            if isExpanded {
-                VStack(spacing: 10) {
-                    // Segmented 3-Tab Switcher
-                    HStack(spacing: 4) {
-                        ForEach(GravMockNotchTab.allCases) { tab in
-                            let selected = state.selectedMockNotchTab == tab
-                            Button {
-                                state.selectMockNotchTab(tab)
-                            } label: {
-                                HStack(spacing: 5) {
-                                    Image(systemName: tab.symbol)
-                                        .font(.system(size: 10, weight: .semibold))
-                                    Text(tab.title)
-                                        .font(.system(size: 10.5, weight: selected ? .semibold : .medium))
-                                    Text(tab.keyLabel)
-                                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(Color.white.opacity(selected ? 0.78 : 0.42))
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 1)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                                .fill(Color.white.opacity(selected ? 0.16 : 0.06))
-                                        )
-                                }
-                                .foregroundStyle(selected ? Color.white : Color.white.opacity(0.60))
-                                .padding(.horizontal, 10)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 26)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(selected ? GravPalette.glacialTeal.opacity(0.28) : Color.clear)
-                                        .overlay(
-                                            Capsule(style: .continuous)
-                                                .strokeBorder(
-                                                    selected ? GravPalette.glacialTeal.opacity(0.55) : Color.clear,
-                                                    lineWidth: 0.6
-                                                )
-                                        )
-                                )
-                            }
-                            .buttonStyle(.plain)
+            // 1:1 4-Tab Monochrome Segmented Rail (`Live | Reply | Files | Terminal`)
+            HStack(spacing: 2) {
+                ForEach(GravMockNotchTab.allCases) { tab in
+                    let selected = state.selectedMockNotchTab == tab
+                    Button {
+                        GravOnboardingWelcomeAudio.shared.playTabSwitch()
+                        state.selectMockNotchTab(tab)
+                    } label: {
+                        HStack(spacing: 4.5) {
+                            Image(systemName: tab.symbol)
+                                .font(.system(size: 9.5, weight: selected ? .medium : .regular))
+                                .foregroundStyle(selected ? Color.white : Color.white.opacity(0.46))
+
+                            Text(tab.title)
+                                .font(.system(size: 10.5, weight: selected ? .medium : .regular))
+                                .tracking(-0.12)
+                                .foregroundStyle(selected ? Color.white : Color.white.opacity(0.56))
+
+                            Text(tab.badgeCount)
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .monospacedDigit()
+                                .foregroundStyle(selected ? Color.white.opacity(0.56) : Color.white.opacity(0.28))
                         }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 22)
+                        .background {
+                            if selected {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(Color.white.opacity(0.105))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .strokeBorder(
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color.white.opacity(0.18),
+                                                        Color.white.opacity(0.03),
+                                                    ],
+                                                    startPoint: .top,
+                                                    endPoint: .bottom
+                                                ),
+                                                lineWidth: 0.5
+                                            )
+                                    )
+                                    .matchedGeometryEffect(id: "mock-notch-rail-thumb", in: mockRailNamespace)
+                            }
+                        }
+                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
-                    .padding(3)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.white.opacity(0.06))
-                    )
-
-                    // Active Tab Telemetry Preview
-                    notchTabBody
-                        .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
-                        .id(state.selectedMockNotchTab)
-                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 4)
-                .padding(.bottom, 16)
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-        }
-        .frame(width: isExpanded ? 446 : 244)
-        .background(
-            shape.fill(GravPalette.notchBlack)
-        )
-        .overlay(
-            shape.stroke(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(isNotchHovered ? 0.24 : 0.14),
-                        Color.white.opacity(0.04),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: 1.2
+            .padding(2.5)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.042))
             )
-            .allowsHitTesting(false)
-        )
-        .clipShape(shape)
-        .shadow(color: Color.black.opacity(isExpanded ? 0.45 : 0.24), radius: isExpanded ? 26 : 10, y: isExpanded ? 12 : 4)
-        .animation(GravMotionPreferences.shared.spec(.morph).animation, value: isExpanded)
-        .animation(GravMotionPreferences.shared.spec(.settle).animation, value: state.selectedMockNotchTab)
+
+            // 1:1 Active Tab Viewport
+            notchTabBody
+                .frame(maxWidth: .infinity, minHeight: 162, maxHeight: 162, alignment: .topLeading)
+                .id(state.selectedMockNotchTab)
+                .transition(.opacity)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
+        .padding(.bottom, 13)
     }
 
     @ViewBuilder
     private var notchTabBody: some View {
         switch state.selectedMockNotchTab {
-        case .thinking:
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("STEP 14 · REASONING")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(GravPalette.thinking)
-                    Spacer()
-                    Text("18.4k in · 412 out")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.48))
+        case .live:
+            VStack(spacing: 6) {
+                // 1:1 Editorial Thinking Sheet
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 5.5) {
+                        NotchSemanticDot(color: GravPalette.thinking, size: 4.5, isPulsing: isLive)
+                        Text("Thinking")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.94))
+                        Text("gemini-4-neon-high")
+                            .font(.system(size: 9.5, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.36))
+                        Spacer()
+                        Text("18s")
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(GravPalette.thinking.opacity(0.90))
+                    }
+
+                    Rectangle()
+                        .fill(Color.white.opacity(0.06))
+                        .frame(height: 0.5)
+
+                    Text("Correlating edit_file line diffs from GENERIC result summaries so the Files tab matches Antigravity's exact +29 -29 counts in real time.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.82))
+                        .lineSpacing(2.5)
+                        .lineLimit(2)
                 }
-
-                Text("Evaluating 5×5 fold-free MeshGradient vertex bounds so Coons patches remain diffeomorphic at 120Hz. Next, binding Step 3 System Settings toggles directly to PreferencesStore…")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.white.opacity(0.86))
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(GravPalette.emerald)
-                    Text("Zero background polling · kqueue active")
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(Color.white.opacity(0.52))
-                }
-                .padding(.top, 2)
-            }
-            .padding(12)
-            .background(
-                Radius.rect(Radius.controlM)
-                    .fill(Color.white.opacity(0.055))
-                    .overlay(
-                        Radius.rect(Radius.controlM)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
-                    )
-            )
-
-        case .diffs:
-            VStack(spacing: 7) {
-                mockDiffRow(file: "GravOnboardingWelcome.swift", path: "Grav/Features/Onboarding", added: 148, removed: 12)
-                mockDiffRow(file: "GravOnboardingMockHost.swift", path: "Grav/Features/Onboarding", added: 86, removed: 4)
-                mockDiffRow(file: "OnboardingWindowController.swift", path: "Grav/Features/Onboarding", added: 64, removed: 29)
-            }
-
-        case .logs:
-            VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    Text("$ swift build --target Grav")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.92))
-                    Spacer()
-                    Text("EXIT 0 · 1.4s")
-                        .font(.system(size: 8.5, weight: .bold, design: .monospaced))
-                        .foregroundStyle(GravPalette.emerald)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(GravPalette.emerald.opacity(0.16))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.white.opacity(0.042))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
                         )
+                )
+
+                // Clean Activity Rows with Real Official Devicon Language SVGs
+                VStack(spacing: 2) {
+                    mockActivityRow(path: "Grav/Features/Onboarding/GravOnboardingWelcome.swift", added: 29, removed: 29)
+                    mockActivityRow(path: "Grav/Features/Notch/NotchHUDCoordinator.swift", added: 16, removed: 6)
+                }
+            }
+
+        case .reply:
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4.5) {
+                    Image(systemName: "arrow.turn.down.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.32))
+                    Text("Fix diff counts and stream AI replies in the notch")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.white.opacity(0.44))
+                        .lineLimit(1)
+                    Spacer()
+                    Text("1/8")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.36))
                 }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Compiling GravOnboardingWelcome.swift…")
-                    Text("Compiling GravOnboardingMockHost.swift…")
-                    Text("Build complete! (0 warnings, Swift 6 strict)")
-                        .foregroundStyle(GravPalette.emerald.opacity(0.92))
+                Rectangle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(height: 0.5)
+
+                Text("Real-time Reply Streaming")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.95))
+
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Circle().fill(GravPalette.glacialCyan.opacity(0.8)).frame(width: 3.5, height: 3.5)
+                    Text("Streams Markdown responses & code blocks at 120Hz with optical focus reveal.")
+                        .font(.system(size: 10.8))
+                        .foregroundStyle(Color.white.opacity(0.82))
+                        .lineSpacing(2)
                 }
-                .font(.system(size: 9.5, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.66))
+
+                HStack {
+                    Text("swift test --parallel  // 20/20 passed")
+                        .font(.system(size: 9.5, design: .monospaced))
+                        .foregroundStyle(GravPalette.emerald.opacity(0.92))
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.black.opacity(0.45))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                        )
+                )
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(9)
             .background(
-                Radius.rect(Radius.controlM)
-                    .fill(Color.white.opacity(0.055))
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color.white.opacity(0.038))
                     .overlay(
-                        Radius.rect(Radius.controlM)
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
                     )
             )
+
+        case .files:
+            VStack(spacing: 4) {
+                HStack(spacing: 10) {
+                    Text("All 12").font(.system(size: 10, weight: .medium)).foregroundStyle(Color.white.opacity(0.90))
+                    Text("Edited 9").font(.system(size: 10)).foregroundStyle(Color.white.opacity(0.36))
+                    Text("Created 3").font(.system(size: 10)).foregroundStyle(Color.white.opacity(0.36))
+                    Spacer()
+                }
+                .padding(.horizontal, 6)
+
+                mockDiffRow(path: "Grav/Core/Telemetry/TelemetryModels.swift", added: 3, removed: 3)
+                mockDiffRow(path: "Grav/Features/Notch/ResponseTelemetryTabView.swift", added: 63, removed: 0)
+                mockDiffRow(path: "web/src/components/NotchPreview.tsx", added: 49, removed: 4)
+            }
+
+        case .terminal:
+            HStack(spacing: 7) {
+                VStack(spacing: 3) {
+                    mockCommandRailRow(title: "Run 20 unit tests", status: "Exit 0", time: "2.6s", selected: true, running: false)
+                    mockCommandRailRow(title: "Build Release app", status: "Running", time: "14s", selected: false, running: true)
+                }
+                .frame(width: 146, alignment: .top)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text("$ xcodebuild test -scheme Grav")
+                            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.74))
+                            .lineLimit(1)
+                        Spacer()
+                        Text("20L")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.30))
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 5)
+
+                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5)
+
+                    VStack(alignment: .leading, spacing: 2.5) {
+                        Text("Test Suite 'TelemetryStateMachineTests' passed")
+                        Text("Executed 20 tests, with 0 failures (0.046s)")
+                        Text("** TEST SUCCEEDED **")
+                            .foregroundStyle(GravPalette.emerald.opacity(0.92))
+                    }
+                    .font(.system(size: 9.5, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .padding(7)
+
+                    Spacer(minLength: 0)
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(0.035))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.075), lineWidth: 0.5)
+                        )
+                )
+            }
         }
     }
 
-    private func mockDiffRow(file: String, path: String, added: Int, removed: Int) -> some View {
-        let total = max(1, added + removed)
-        let addedRatio = CGFloat(added) / CGFloat(total)
+    private func mockActivityRow(path: String, added: Int, removed: Int) -> some View {
+        let url = URL(fileURLWithPath: path)
+        return HStack(spacing: 7) {
+            LanguageIconView(path: path, changeKind: .edit, size: 14)
+            Text(url.lastPathComponent)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.92))
+                .lineLimit(1)
+            Text("…/" + url.deletingLastPathComponent().lastPathComponent)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.white.opacity(0.34))
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            HStack(spacing: 4) {
+                Text("+\(added)").foregroundStyle(GravPalette.emerald)
+                if removed > 0 {
+                    Text("-\(removed)").foregroundStyle(GravPalette.coral)
+                }
+            }
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+    }
 
+    private func mockDiffRow(path: String, added: Int, removed: Int) -> some View {
+        let url = URL(fileURLWithPath: path)
         return HStack(spacing: 8) {
-            Image(systemName: "doc.text")
-                .font(.system(size: 10.5))
-                .foregroundStyle(GravPalette.fileEdit)
+            LanguageIconView(path: path, changeKind: removed == 0 ? .create : .edit, size: 15)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(file)
-                    .font(.system(size: 10.5, weight: .semibold))
+                Text(url.lastPathComponent)
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.92))
                     .lineLimit(1)
-                Text(path)
-                    .font(.system(size: 8.5, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.45))
+                Text("…/" + url.deletingLastPathComponent().lastPathComponent)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(Color.white.opacity(0.36))
                     .lineLimit(1)
             }
 
             Spacer(minLength: 6)
 
-            HStack(spacing: 4) {
-                Text("+\(added)")
-                    .foregroundStyle(GravPalette.emerald)
-                Text("-\(removed)")
-                    .foregroundStyle(GravPalette.coral)
-            }
-            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
-
-            HStack(spacing: 1) {
-                Capsule().fill(GravPalette.emerald).frame(width: max(6, 34 * addedRatio), height: 4)
-                Capsule().fill(GravPalette.coral).frame(width: max(4, 34 * (1 - addedRatio)), height: 4)
-            }
+            NotchProportionalDiffMicroBar(
+                added: added,
+                removed: removed,
+                isDeleted: false,
+                showBar: true,
+                barWidth: 26,
+                barHeight: 2.5
+            )
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5.5)
+    }
+
+    private func mockCommandRailRow(title: String, status: String, time: String, selected: Bool, running: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                NotchSemanticDot(color: running ? GravPalette.glacialCyan : GravPalette.emerald, size: 4.5, isPulsing: running && isLive)
+                Text(title)
+                    .font(.system(size: 10, weight: selected ? .semibold : .medium))
+                    .foregroundStyle(selected ? Color.white : Color.white.opacity(0.76))
+                    .lineLimit(1)
+            }
+            HStack {
+                Text(status)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(running ? GravPalette.glacialCyan : Color.white.opacity(0.38))
+                Spacer()
+                Text(time)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.36))
+            }
+            .padding(.leading, 13)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 5)
         .background(
-            Radius.rect(Radius.controlS)
-                .fill(Color.white.opacity(0.055))
-                .overlay(
-                    Radius.rect(Radius.controlS)
-                        .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
-                )
+            RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                .fill(selected ? Color.white.opacity(0.085) : Color.clear)
         )
     }
 }

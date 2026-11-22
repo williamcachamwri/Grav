@@ -132,41 +132,48 @@ enum GravOnboardingChallenge: String, CaseIterable, Identifiable, Hashable, Send
 }
 
 enum GravMockNotchTab: String, CaseIterable, Identifiable, Hashable, Sendable {
-    case thinking
-    case diffs
-    case logs
+    case live
+    case reply
+    case files
+    case terminal
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .thinking: return "Thinking"
-        case .diffs: return "File Diffs"
-        case .logs: return "Terminal Logs"
+        case .live: return "Live"
+        case .reply: return "Reply"
+        case .files: return "Files"
+        case .terminal: return "Terminal"
         }
     }
 
-    var shortTitle: String {
-        switch self {
-        case .thinking: return "Thinking"
-        case .diffs: return "Diffs"
-        case .logs: return "Logs"
-        }
-    }
+    var shortTitle: String { title }
 
     var symbol: String {
         switch self {
-        case .thinking: return "brain"
-        case .diffs: return "doc.badge.gearshape"
-        case .logs: return "terminal"
+        case .live: return "waveform.path.ecg"
+        case .reply: return "text.bubble"
+        case .files: return "doc.text"
+        case .terminal: return "terminal"
+        }
+    }
+
+    var badgeCount: String {
+        switch self {
+        case .live: return "24"
+        case .reply: return "8"
+        case .files: return "12"
+        case .terminal: return "6"
         }
     }
 
     var keyLabel: String {
         switch self {
-        case .thinking: return "1"
-        case .diffs: return "2"
-        case .logs: return "3"
+        case .live: return "1"
+        case .reply: return "2"
+        case .files: return "3"
+        case .terminal: return "4"
         }
     }
 }
@@ -187,9 +194,9 @@ final class GravOnboardingState: ObservableObject {
     // Step 1: Connect feedback state
     @Published var lastRefreshTimestamp: Date?
 
-    // Step 2: Interactive Miniature MacBook Notch state
+    // Step 2: Interactive 1:1 MacBook Notch state
     @Published var isMockNotchExpanded: Bool = false
-    @Published var selectedMockNotchTab: GravMockNotchTab = .thinking
+    @Published var selectedMockNotchTab: GravMockNotchTab = .live
     @Published var visitedMockTabs: Set<GravMockNotchTab> = []
 
     // Step 3: Preferences feedback state
@@ -217,7 +224,7 @@ final class GravOnboardingState: ObservableObject {
         isStageInFlight = false
         lastRefreshTimestamp = nil
         isMockNotchExpanded = false
-        selectedMockNotchTab = .thinking
+        selectedMockNotchTab = .live
         visitedMockTabs = []
         hasReviewedPreferences = false
     }
@@ -297,7 +304,7 @@ final class GravOnboardingState: ObservableObject {
             break
         case .notchHud:
             isMockNotchExpanded = false
-            selectedMockNotchTab = .thinking
+            selectedMockNotchTab = .live
         case .preferences:
             break
         }

@@ -266,22 +266,27 @@ struct GravMockMenuBar: View, Equatable {
     var app: GravMockApp = .antigravity
     var showsCameraNotch: Bool = true
 
-    static let barHeight: CGFloat = 28
+    static let barHeight: CGFloat = 25
+
+    private static let clockFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE MMM d  h:mm a"
+        return f
+    }()
 
     var body: some View {
         GeometryReader { proxy in
             let visibleWidth = proxy.size.width
-            // The right-column stage is a cropped frame onto a full-width Mac screen, so the camera
-            // notch sits shifted toward the virtual display center and right status icons crop naturally.
             let notchShift = max(100, visibleWidth * 0.21)
             let notchCenterX = (visibleWidth / 2) + notchShift
             let notchWidth: CGFloat = 96
             let notchRightEdge = notchCenterX + (notchWidth / 2)
 
             ZStack(alignment: .topLeading) {
-                // Authentic macOS Dark Mode smoked translucent menu bar
+                // Authentic macOS Dark Mode frosted translucent menu bar
                 Rectangle()
-                    .fill(Color(red: 0.055, green: 0.060, blue: 0.075).opacity(0.76))
+                    .fill(.ultraThinMaterial)
+                    .overlay(Color(red: 0.04, green: 0.045, blue: 0.06).opacity(0.45))
                     .frame(height: Self.barHeight)
                     .overlay(
                         Rectangle()
@@ -350,7 +355,7 @@ struct GravMockMenuBar: View, Equatable {
 
             MacOSControlCenterGlyph()
 
-            Text("Sun Nov 22  9:41")
+            Text(Self.clockFormatter.string(from: Date()))
                 .font(.system(size: 10.5, weight: .medium))
                 .tracking(-0.1)
                 .monospacedDigit()
@@ -420,6 +425,91 @@ private struct MacOSControlCenterGlyph: View {
                     .padding(.leading, 1.0)
             }
         }
+    }
+}
+
+// MARK: - Authentic macOS Translucent Glass Dock (Real System App Icons)
+
+@MainActor
+private enum GravMacOSDockIcons {
+    struct Item: Identifiable {
+        let id: String
+        let icon: NSImage?
+        let isGrav: Bool
+        let isRunning: Bool
+    }
+
+    static let items: [Item] = {
+        let specs: [(id: String, path: String, running: Bool)] = [
+            ("finder", "/System/Library/CoreServices/Finder.app", true),
+            ("safari", "/Applications/Safari.app", false),
+            ("terminal", "/System/Applications/Utilities/Terminal.app", true),
+            ("antigravity", "/Applications/Antigravity.app", true),
+            ("settings", "/System/Applications/System Settings.app", false),
+        ]
+        var list: [Item] = []
+        for spec in specs {
+            if FileManager.default.fileExists(atPath: spec.path) {
+                let img = NSWorkspace.shared.icon(forFile: spec.path)
+                list.append(Item(id: spec.id, icon: img, isGrav: false, isRunning: spec.running))
+            }
+            if spec.id == "antigravity" {
+                list.append(Item(id: "grav", icon: nil, isGrav: true, isRunning: true))
+            }
+        }
+        return list
+    }()
+}
+
+struct GravMockMacOSDock: View {
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 15, style: .continuous)
+        HStack(spacing: 8) {
+            ForEach(GravMacOSDockIcons.items) { item in
+                VStack(spacing: 2.5) {
+                    if item.isGrav {
+                        GravAppIconTile(size: 30)
+                            .shadow(color: Color.black.opacity(0.32), radius: 3, y: 1.5)
+                    } else if let nsImage = item.icon {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 34, height: 34)
+                            .shadow(color: Color.black.opacity(0.30), radius: 3, y: 1.5)
+                    }
+
+                    Circle()
+                        .fill(Color.white.opacity(item.isRunning ? 0.72 : 0.0))
+                        .frame(width: 3, height: 3)
+                }
+                .frame(width: 34)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 5)
+        .padding(.bottom, 3)
+        .background {
+            ZStack {
+                shape.fill(.ultraThinMaterial)
+                shape.fill(Color.black.opacity(0.26))
+            }
+        }
+        .overlay(
+            shape.strokeBorder(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.24),
+                        Color.white.opacity(0.08),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 0.5
+            )
+        )
+        .shadow(color: Color.black.opacity(0.45), radius: 18, y: 8)
+        .accessibilityHidden(true)
     }
 }
 
