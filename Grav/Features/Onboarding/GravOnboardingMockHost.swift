@@ -216,7 +216,7 @@ private struct MacOSSpacesParallaxModifier: ViewModifier, Animatable {
     let stageWidth: CGFloat
     let reduceMotion: Bool
 
-    var animatableData: CGFloat {
+    nonisolated var animatableData: CGFloat {
         get { activeIndex }
         set { activeIndex = newValue }
     }

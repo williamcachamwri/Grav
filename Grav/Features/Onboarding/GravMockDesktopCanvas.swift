@@ -355,24 +355,31 @@ private struct MacOSControlCenterGlyph: View {
 
 // MARK: - Shared Scene Vocabulary & Environment
 
+@MainActor
 enum GravMockScene {
     static let windowInset: CGFloat = 22
     static let windowTopInset: CGFloat = 40
 
-    static let windowTransition: AnyTransition = .asymmetric(
-        insertion: .scale(scale: 0.96, anchor: .top).combined(with: .opacity),
-        removal: .scale(scale: 0.97, anchor: .top).combined(with: .opacity)
-    )
+    static var windowTransition: AnyTransition {
+        .asymmetric(
+            insertion: .scale(scale: 0.96, anchor: .top).combined(with: .opacity),
+            removal: .scale(scale: 0.97, anchor: .top).combined(with: .opacity)
+        )
+    }
 
-    static let cardTransition: AnyTransition = .asymmetric(
-        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.94)),
-        removal: .move(edge: .bottom).combined(with: .opacity)
-    )
+    static var cardTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.94)),
+            removal: .move(edge: .bottom).combined(with: .opacity)
+        )
+    }
 
-    static let hudTransition: AnyTransition = .asymmetric(
-        insertion: .scale(scale: 0.94).combined(with: .opacity),
-        removal: .opacity
-    )
+    static var hudTransition: AnyTransition {
+        .asymmetric(
+            insertion: .scale(scale: 0.94).combined(with: .opacity),
+            removal: .opacity
+        )
+    }
 }
 
 private struct GravMockSceneIsLiveKey: EnvironmentKey {

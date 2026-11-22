@@ -646,7 +646,7 @@ struct GravMockNotchOverlay: View {
             shape.fill(GravPalette.notchBlack)
         )
         .overlay(
-            shape.strokeBorder(
+            shape.stroke(
                 LinearGradient(
                     colors: [
                         Color.white.opacity(isNotchHovered ? 0.24 : 0.14),
@@ -655,7 +655,7 @@ struct GravMockNotchOverlay: View {
                     startPoint: .top,
                     endPoint: .bottom
                 ),
-                lineWidth: 0.6
+                lineWidth: 1.2
             )
             .allowsHitTesting(false)
         )

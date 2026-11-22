@@ -481,7 +481,7 @@ private struct WelcomeHeroMarkFlightModifier: ViewModifier, Animatable {
     let targetLogoFrame: CGRect
     let reduceMotion: Bool
 
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+    nonisolated var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(elevation, dockProgress) }
         set {
             elevation = newValue.first
@@ -602,7 +602,7 @@ private struct WelcomeLiquidPortalModifier: ViewModifier, Animatable {
     let isFullyOpen: Bool
     let drifts: Bool
 
-    var animatableData: CGFloat {
+    nonisolated var animatableData: CGFloat {
         get { progress }
         set { progress = newValue }
     }
@@ -720,7 +720,7 @@ private struct WelcomeOrbAmbientAura: View, Animatable {
     var progress: CGFloat
     let drifts: Bool
 
-    var animatableData: CGFloat {
+    nonisolated var animatableData: CGFloat {
         get { progress }
         set { progress = newValue }
     }
@@ -812,7 +812,7 @@ private struct WelcomeOrbSwirlCore: View, Animatable {
     var progress: CGFloat
     let drifts: Bool
 
-    var animatableData: CGFloat {
+    nonisolated var animatableData: CGFloat {
         get { progress }
         set { progress = newValue }
     }
