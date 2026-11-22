@@ -243,5 +243,7 @@ final class TelemetryStateMachineTests: XCTestCase {
         let finalOut = classifier.process(step: finalReply)
         XCTAssertEqual(finalOut.state, .idle)
         XCTAssertTrue(classifier.pendingCommands.isEmpty)
+        XCTAssertEqual(finalOut.responseSnapshot?.text, "All done!")
+        XCTAssertEqual(finalOut.responseSnapshot?.isStreaming, false)
     }
 }

@@ -11,6 +11,7 @@ public struct ExpandedNotchHeaderView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHoveringLogo = false
     @State private var isHoveringSession = false
+    @State private var isShowingMetricsPopover = false
 
     public init(
         store: AntigravityTelemetryStore,
@@ -184,6 +185,7 @@ public struct ExpandedNotchHeaderView: View {
 
     private var pauseTelemetryButton: some View {
         Button {
+            GravOnboardingWelcomeAudio.shared.playButtonTap()
             let nextPaused = !store.isPaused
             preferences.isTelemetryPaused = nextPaused
             store.setPaused(nextPaused)
@@ -197,7 +199,7 @@ public struct ExpandedNotchHeaderView: View {
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
         }
         .buttonStyle(NotchChromeButtonStyle(isActive: store.isPaused, cornerRadius: 6))
-        .help(store.isPaused ? "Resume Telemetry" : "Pause Telemetry")
+        .help(store.isPaused ? "Resume Telemetry (⌘P)" : "Pause Telemetry (⌘P)")
         .accessibilityLabel(store.isPaused ? "Resume Telemetry" : "Pause Telemetry")
     }
 
@@ -207,19 +209,107 @@ public struct ExpandedNotchHeaderView: View {
         let cacheText = TokenMetrics.formatCompact(metrics.cacheReadTokens)
         let outputText = TokenMetrics.formatCompact(metrics.outputTokens)
 
-        return HStack(spacing: 7) {
-            tokenPair(prefix: "↓", value: inputText, color: Color.white.opacity(0.54))
-            tokenPair(prefix: "↑", value: outputText, color: GravPalette.glacialCyan.opacity(0.92))
+        return Button {
+            GravOnboardingWelcomeAudio.shared.playButtonTap()
+            isShowingMetricsPopover.toggle()
+        } label: {
+            HStack(spacing: 7) {
+                tokenPair(prefix: "↓", value: inputText, color: Color.white.opacity(0.54))
+                tokenPair(prefix: "↑", value: outputText, color: GravPalette.glacialCyan.opacity(0.92))
+            }
+            .padding(.horizontal, 6)
+            .frame(height: 22)
         }
-        .padding(.horizontal, 4)
+        .buttonStyle(NotchChromeButtonStyle(isActive: isShowingMetricsPopover, cornerRadius: 6))
         .fixedSize(horizontal: true, vertical: false)
+        .popover(isPresented: $isShowingMetricsPopover, arrowEdge: .bottom) {
+            sessionTelemetryPopover
+        }
         .help(
-            "Tokens — In: \(metrics.inputTokens.formatted()) · Cache: \(metrics.cacheReadTokens.formatted()) · Out: \(metrics.outputTokens.formatted())"
+            "Click for session telemetry breakdown — In: \(metrics.inputTokens.formatted()) · Cache: \(metrics.cacheReadTokens.formatted()) · Out: \(metrics.outputTokens.formatted())"
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "Tokens: \(inputText) input, \(cacheText) cached, \(outputText) output"
         )
+    }
+
+    private var sessionTelemetryPopover: some View {
+        let metrics = store.tokenMetrics
+        let cachePercent = Int((metrics.cacheHitRate * 100.0).rounded())
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Session Telemetry")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.94))
+                Spacer()
+                if let model = store.activeModel, !model.isEmpty {
+                    Text(model)
+                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                        .lineLimit(1)
+                }
+            }
+
+            VStack(spacing: 6) {
+                metricRow("Input Tokens", metrics.inputTokens.formatted(), tint: Color.white.opacity(0.84))
+                metricRow("Cache Read", "\(metrics.cacheReadTokens.formatted()) (\(cachePercent)%)", tint: GravPalette.emerald)
+                metricRow("Output Tokens", metrics.outputTokens.formatted(), tint: GravPalette.glacialCyan)
+            }
+
+            // Whisper-thin cache efficiency bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                    Capsule(style: .continuous)
+                        .fill(GravPalette.emerald.opacity(0.85))
+                        .frame(width: max(4, geo.size.width * metrics.cacheHitRate))
+                }
+            }
+            .frame(height: 3)
+
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 0.5)
+
+            HStack(spacing: 14) {
+                compactCounter("Replies", store.responses.count)
+                compactCounter("Files", store.fileChanges.count)
+                compactCounter("Commands", store.commands.count)
+                Spacer()
+            }
+        }
+        .padding(12)
+        .frame(width: 244)
+        .background(Color(red: 0.08, green: 0.09, blue: 0.11))
+        .environment(\.colorScheme, .dark)
+    }
+
+    private func metricRow(_ label: String, _ value: String, tint: Color) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 10.5, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.50))
+            Spacer()
+            Text(value)
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+        }
+    }
+
+    private func compactCounter(_ label: String, _ count: Int) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("\(count)")
+                .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(Color.white.opacity(0.90))
+            Text(label)
+                .font(.system(size: 9.5, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.42))
+        }
     }
 
     private func tokenPair(prefix: String, value: String, color: Color) -> some View {
@@ -238,6 +328,7 @@ public struct ExpandedNotchHeaderView: View {
 
     private var pinNotchButton: some View {
         Button {
+            GravOnboardingWelcomeAudio.shared.playButtonTap()
             preferences.isNotchPinned.toggle()
         } label: {
             Image(systemName: preferences.isNotchPinned ? "pin.fill" : "pin")
@@ -249,12 +340,13 @@ public struct ExpandedNotchHeaderView: View {
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
         }
         .buttonStyle(NotchChromeButtonStyle(isActive: preferences.isNotchPinned, cornerRadius: 6))
-        .help(preferences.isNotchPinned ? "Unpin Notch HUD" : "Pin Notch HUD Open")
+        .help(preferences.isNotchPinned ? "Unpin Notch HUD (⌘L)" : "Pin Notch HUD Open (⌘L)")
         .accessibilityLabel(preferences.isNotchPinned ? "Unpin Notch" : "Pin Notch Open")
     }
 
     private var settingsButton: some View {
         Button {
+            GravOnboardingWelcomeAudio.shared.playButtonTap()
             onOpenSettings()
         } label: {
             Image(systemName: "gearshape")

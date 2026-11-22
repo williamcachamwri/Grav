@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Primary telemetry inspection tabs inside Grav's expanded Notch HUD.
+/// Primary telemetry inspection tabs inside Grav's expanded Notch HUD (`Live | Reply | Files | Terminal`).
 public enum NotchTab: Int, CaseIterable, Identifiable, Sendable, Hashable {
     case live = 0
-    case files = 1
-    case terminal = 2
+    case reply = 1
+    case files = 2
+    case terminal = 3
 
     public var id: Int { rawValue }
 
@@ -13,6 +14,8 @@ public enum NotchTab: Int, CaseIterable, Identifiable, Sendable, Hashable {
         switch self {
         case .live:
             return "Live"
+        case .reply:
+            return "Reply"
         case .files:
             return "Files"
         case .terminal:
@@ -25,6 +28,8 @@ public enum NotchTab: Int, CaseIterable, Identifiable, Sendable, Hashable {
         switch self {
         case .live:
             return "waveform.path.ecg"
+        case .reply:
+            return "text.bubble"
         case .files:
             return "doc.text"
         case .terminal:
@@ -32,12 +37,12 @@ public enum NotchTab: Int, CaseIterable, Identifiable, Sendable, Hashable {
         }
     }
 
-    /// 1-based numeric keyboard shortcut index (`1`, `2`, `3`).
+    /// 1-based numeric keyboard shortcut index (`1`, `2`, `3`, `4`).
     public var shortcutIndex: Int {
         rawValue + 1
     }
 
-    /// Display string for the numeric keycap indicator.
+    /// Display string for tooltips and shortcuts.
     public var shortcutLabel: String {
         "\(shortcutIndex)"
     }
@@ -47,10 +52,12 @@ public enum NotchTab: Int, CaseIterable, Identifiable, Sendable, Hashable {
         switch self {
         case .live:
             return "1"
-        case .files:
+        case .reply:
             return "2"
-        case .terminal:
+        case .files:
             return "3"
+        case .terminal:
+            return "4"
         }
     }
 }

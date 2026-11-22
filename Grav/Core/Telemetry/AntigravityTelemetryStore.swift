@@ -23,6 +23,8 @@ public final class AntigravityTelemetryStore {
 
     public internal(set) var currentThinking: ThinkingSnapshot?
     public internal(set) var thinkingHistory: [ThinkingSnapshot] = []
+    public internal(set) var latestResponse: AssistantResponseSnapshot?
+    public internal(set) var responses: [AssistantResponseSnapshot] = []
     public internal(set) var fileChanges: [FileChangeEvent] = []
     public internal(set) var commands: [CommandExecutionEvent] = []
     public internal(set) var recentActivity: [TelemetryActivityItem] = []
@@ -186,6 +188,23 @@ public final class AntigravityTelemetryStore {
                 thinkingHistory[idx].isTruncated = false
                 thinkingHistory[idx].isFullTextLoaded = true
                 upsertActivity(.thinking(thinkingHistory[idx]))
+            }
+        }
+
+        // Hydrate full assistant response text into observable state if present
+        if let fullContent = fullStep.content?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !fullContent.isEmpty
+        {
+            if var latest = latestResponse, latest.stepIndex == stepIndex {
+                latest.text = fullContent
+                latest.isTruncated = false
+                latest.isFullTextLoaded = true
+                latestResponse = latest
+            }
+            if let idx = responses.firstIndex(where: { $0.stepIndex == stepIndex }) {
+                responses[idx].text = fullContent
+                responses[idx].isTruncated = false
+                responses[idx].isFullTextLoaded = true
             }
         }
 
@@ -359,6 +378,8 @@ public final class AntigravityTelemetryStore {
         state = .idle
         currentThinking = nil
         thinkingHistory = []
+        latestResponse = nil
+        responses = []
         fileChanges = []
         commands = []
         recentActivity = []
@@ -431,6 +452,8 @@ public final class AntigravityTelemetryStore {
         state = .idle
         currentThinking = nil
         thinkingHistory = []
+        latestResponse = nil
+        responses = []
         fileChanges = []
         commands = []
         recentActivity = []
@@ -480,6 +503,18 @@ public final class AntigravityTelemetryStore {
                 }
             }
             upsertActivity(.thinking(snapshot))
+        }
+
+        if let response = output.responseSnapshot {
+            latestResponse = response
+            if let existingIdx = responses.firstIndex(where: { $0.stepIndex == response.stepIndex }) {
+                responses[existingIdx] = response
+            } else {
+                responses.insert(response, at: 0)
+                if responses.count > maxRetainedEvents {
+                    responses.removeLast(responses.count - maxRetainedEvents)
+                }
+            }
         }
 
         if !output.fileChanges.isEmpty {

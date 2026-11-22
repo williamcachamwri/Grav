@@ -6,6 +6,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
     public var activeModel: String?
     public var tokenMetrics: TokenMetrics
     public var thinkingSnapshot: ThinkingSnapshot?
+    public var responseSnapshot: AssistantResponseSnapshot?
     public var completedThinkingStepIndex: Int?
     public var fileChanges: [FileChangeEvent]
     public var startedCommands: [CommandExecutionEvent]
@@ -17,6 +18,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
         activeModel: String? = nil,
         tokenMetrics: TokenMetrics = TokenMetrics(),
         thinkingSnapshot: ThinkingSnapshot? = nil,
+        responseSnapshot: AssistantResponseSnapshot? = nil,
         completedThinkingStepIndex: Int? = nil,
         fileChanges: [FileChangeEvent] = [],
         startedCommands: [CommandExecutionEvent] = [],
@@ -27,6 +29,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
         self.activeModel = activeModel
         self.tokenMetrics = tokenMetrics
         self.thinkingSnapshot = thinkingSnapshot
+        self.responseSnapshot = responseSnapshot
         self.completedThinkingStepIndex = completedThinkingStepIndex
         self.fileChanges = fileChanges
         self.startedCommands = startedCommands
@@ -49,6 +52,7 @@ public struct EventClassifier: Sendable {
     internal var burstEditedPaths: Set<String> = []
     internal var hasPeekedMultiFileBurst: Bool = false
     internal var lastBackgroundNoticeStepIndex: Int?
+    internal var lastUserPromptPreview: String?
 
     public init() {}
 
@@ -63,6 +67,7 @@ public struct EventClassifier: Sendable {
         burstEditedPaths.removeAll()
         hasPeekedMultiFileBurst = false
         lastBackgroundNoticeStepIndex = nil
+        lastUserPromptPreview = nil
     }
 
     /// Marks the telemetry state as `.idle` (for example after an idle decay timeout) and clears
@@ -171,6 +176,13 @@ public struct EventClassifier: Sendable {
                 output.peekEvents.append(.thinkingStarted)
             }
         } else if step.type == "USER_INPUT" {
+            // Capture clean user prompt preview for pairing with the assistant's reply
+            if let rawContent = step.content {
+                let cleaned = Self.extractCleanUserPrompt(from: rawContent)
+                if !cleaned.isEmpty {
+                    lastUserPromptPreview = cleaned
+                }
+            }
             // A fresh user prompt resets multi-file burst tracking and clears any orphaned commands from prior turns
             burstEditedPaths.removeAll()
             hasPeekedMultiFileBurst = false
@@ -182,6 +194,24 @@ public struct EventClassifier: Sendable {
                 let orphaned = forceIdle(at: stepDate)
                 output.updatedCommands.append(contentsOf: orphaned)
             }
+        }
+
+        // 2b. Capture real-time AI Assistant responses (`PLANNER_RESPONSE` with visible content)
+        if step.type == "PLANNER_RESPONSE",
+           let rawReply = step.content?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rawReply.isEmpty
+        {
+            let isTruncated = step.isFieldTruncated("content")
+            output.responseSnapshot = AssistantResponseSnapshot(
+                stepIndex: step.stepIndex,
+                promptPreview: lastUserPromptPreview,
+                text: rawReply,
+                isTruncated: isTruncated,
+                isFullTextLoaded: !isTruncated,
+                model: step.model ?? activeModel,
+                timestamp: stepDate,
+                isStreaming: step.status != "DONE"
+            )
         }
 
         // 3. Classify tool calls (file edits, creates, overwrites, deletes, and shell commands)
@@ -755,6 +785,20 @@ public struct EventClassifier: Sendable {
             return true
         }
         return filtered.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public static func extractCleanUserPrompt(from raw: String) -> String {
+        var text = raw
+        if let start = text.range(of: "<USER_REQUEST>"),
+           let end = text.range(of: "</USER_REQUEST>", range: start.upperBound..<text.endIndex)
+        {
+            text = String(text[start.upperBound..<end.lowerBound])
+        } else if let meta = text.range(of: "<ADDITIONAL_METADATA>") {
+            text = String(text[..<meta.lowerBound])
+        }
+        return text
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func looksLikeRunningCommandNotice(_ content: String) -> Bool {

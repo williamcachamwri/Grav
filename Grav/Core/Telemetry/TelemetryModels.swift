@@ -165,6 +165,12 @@ public struct TokenMetrics: Sendable, Equatable {
         inputTokens + cacheReadTokens + outputTokens
     }
 
+    public var cacheHitRate: Double {
+        let totalIn = inputTokens + cacheReadTokens
+        guard totalIn > 0 else { return 0 }
+        return Double(cacheReadTokens) / Double(totalIn)
+    }
+
     public static func formatCompact(_ count: Int) -> String {
         if count >= 1_000_000 {
             return String(format: "%.1fM", Double(count) / 1_000_000.0)
@@ -211,6 +217,40 @@ public struct ThinkingSnapshot: Sendable, Equatable, Identifiable {
     public var elapsedSeconds: TimeInterval {
         let end = completedAt ?? Date()
         return max(0, end.timeIntervalSince(startedAt))
+    }
+}
+
+// MARK: - AI Assistant Response Stream
+
+public struct AssistantResponseSnapshot: Sendable, Equatable, Identifiable {
+    public var id: Int { stepIndex }
+    public let stepIndex: Int
+    public var promptPreview: String?
+    public var text: String
+    public var isTruncated: Bool
+    public var isFullTextLoaded: Bool
+    public var model: String?
+    public let timestamp: Date
+    public var isStreaming: Bool
+
+    public init(
+        stepIndex: Int,
+        promptPreview: String? = nil,
+        text: String,
+        isTruncated: Bool = false,
+        isFullTextLoaded: Bool = false,
+        model: String? = nil,
+        timestamp: Date = Date(),
+        isStreaming: Bool = false
+    ) {
+        self.stepIndex = stepIndex
+        self.promptPreview = promptPreview
+        self.text = text
+        self.isTruncated = isTruncated
+        self.isFullTextLoaded = isFullTextLoaded
+        self.model = model
+        self.timestamp = timestamp
+        self.isStreaming = isStreaming
     }
 }
 

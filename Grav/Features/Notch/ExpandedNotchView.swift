@@ -43,8 +43,10 @@ public struct ExpandedNotchView: View {
                 SegmentedModeRail(
                     selection: tabBinding,
                     liveCount: store.recentActivity.count,
+                    replyCount: store.responses.count,
                     filesCount: store.fileChanges.count,
                     terminalCount: store.commands.count,
+                    hasStreamingReply: store.latestResponse?.isStreaming == true && !store.isPaused,
                     hasRunningCommand: store.activeCommand != nil && !store.isPaused
                 )
 
@@ -87,7 +89,7 @@ public struct ExpandedNotchView: View {
         .background {
             hiddenShortcutControls
         }
-        .onKeyPress(keys: [.escape, "1", "2", "3"]) { keyPress in
+        .onKeyPress(keys: [.escape, "1", "2", "3", "4"]) { keyPress in
             handleKeyPress(keyPress)
         }
         .onDisappear {
@@ -121,6 +123,11 @@ public struct ExpandedNotchView: View {
                 )
                 .id(NotchTab.live)
                 .transition(tabTransition)
+
+            case .reply:
+                ResponseTelemetryTabView(store: store)
+                    .id(NotchTab.reply)
+                    .transition(tabTransition)
 
             case .files:
                 FilesTelemetryTabView(
@@ -170,6 +177,22 @@ public struct ExpandedNotchView: View {
                 }
                 .keyboardShortcut("c", modifiers: [.command])
 
+                Button("") {
+                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                    let next = !store.isPaused
+                    preferences.isTelemetryPaused = next
+                    store.setPaused(next)
+                    showBanner(next ? "Telemetry paused" : "Telemetry resumed")
+                }
+                .keyboardShortcut("p", modifiers: [.command])
+
+                Button("") {
+                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                    preferences.isNotchPinned.toggle()
+                    showBanner(preferences.isNotchPinned ? "Notch pinned open" : "Notch unpinned")
+                }
+                .keyboardShortcut("l", modifiers: [.command])
+
                 ForEach(NotchTab.allCases) { tab in
                     Button("") {
                         switchTab(to: tab)
@@ -197,9 +220,12 @@ public struct ExpandedNotchView: View {
             switchTab(to: .live)
             return .handled
         case "2":
-            switchTab(to: .files)
+            switchTab(to: .reply)
             return .handled
         case "3":
+            switchTab(to: .files)
+            return .handled
+        case "4":
             switchTab(to: .terminal)
             return .handled
         default:
@@ -221,6 +247,14 @@ public struct ExpandedNotchView: View {
 
     private func copyActiveContext() {
         switch selectedTab {
+        case .reply:
+            guard let reply = store.latestResponse ?? store.responses.first, !reply.text.isEmpty else {
+                return
+            }
+            GravOnboardingWelcomeAudio.shared.playButtonTap()
+            NotchTelemetryHelpers.copyToPasteboard(reply.text)
+            showBanner("Copied assistant reply")
+
         case .files:
             let file = store.fileChanges.first(where: { $0.id == selectedFileID }) ?? store.fileChanges.first
             guard let file else { return }

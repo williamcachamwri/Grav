@@ -5,8 +5,10 @@ import SwiftUI
 public struct SegmentedModeRail: View {
     @Binding public var selection: NotchTab
     public var liveCount: Int
+    public var replyCount: Int
     public var filesCount: Int
     public var terminalCount: Int
+    public var hasStreamingReply: Bool
     public var hasRunningCommand: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -16,14 +18,18 @@ public struct SegmentedModeRail: View {
     public init(
         selection: Binding<NotchTab>,
         liveCount: Int = 0,
+        replyCount: Int = 0,
         filesCount: Int = 0,
         terminalCount: Int = 0,
+        hasStreamingReply: Bool = false,
         hasRunningCommand: Bool = false
     ) {
         self._selection = selection
         self.liveCount = liveCount
+        self.replyCount = replyCount
         self.filesCount = filesCount
         self.terminalCount = terminalCount
+        self.hasStreamingReply = hasStreamingReply
         self.hasRunningCommand = hasRunningCommand
     }
 
@@ -60,6 +66,8 @@ public struct SegmentedModeRail: View {
 
                 if tab == .terminal && hasRunningCommand {
                     NotchSemanticDot(color: GravPalette.glacialCyan, size: 4.5, isPulsing: true)
+                } else if tab == .reply && hasStreamingReply {
+                    NotchSemanticDot(color: GravPalette.thinking, size: 4.5, isPulsing: true)
                 } else if count > 0 {
                     Text(formatBadgeCount(count))
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -119,6 +127,7 @@ public struct SegmentedModeRail: View {
 
     private func select(_ tab: NotchTab) {
         guard selection != tab else { return }
+        GravOnboardingWelcomeAudio.shared.playTabSwitch()
         if reduceMotion {
             selection = tab
         } else {
@@ -132,6 +141,8 @@ public struct SegmentedModeRail: View {
         switch tab {
         case .live:
             return liveCount
+        case .reply:
+            return replyCount
         case .files:
             return filesCount
         case .terminal:
