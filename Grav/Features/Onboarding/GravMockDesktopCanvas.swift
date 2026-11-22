@@ -93,7 +93,7 @@ enum GravMockPalette {
     static let trafficGreen = Color(red: 0.157, green: 0.784, blue: 0.251)
     /// Native macOS & Grav accents inside simulated desktop windows.
     static let macBlue = Color(red: 0.00, green: 0.478, blue: 1.00)
-    static let gravTeal = Color(red: 0.065, green: 0.565, blue: 0.610)
+    static let gravTeal = Color(red: 0.102, green: 0.557, blue: 0.992)
     static let gravEmerald = Color(red: 0.12, green: 0.68, blue: 0.48)
     static let gravAmber = Color(red: 0.88, green: 0.58, blue: 0.08)
     static let gravCoral = Color(red: 0.88, green: 0.32, blue: 0.30)

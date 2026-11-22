@@ -1,8 +1,8 @@
 import AppKit
 
-/// Programmatic monochrome template icon renderer for Grav's macOS menu bar `NSStatusItem`.
-/// Mirrors `GravOrbitalMark`'s Apple-style interlocking 3-beam Delta-Arc silhouette using
-/// `isTemplate = true` so macOS renders crisp vibrancy across Light and Dark menu bars.
+/// Template icon renderer for Grav's macOS menu bar `NSStatusItem`.
+/// Uses the exact sweeping G/A silhouette extracted from Grav's app logo (`GravMarkTemplate`)
+/// with `isTemplate = true` so macOS renders crisp native vibrancy across Light & Dark menu bars.
 public enum MenuBarIconRenderer {
     public enum VisualState: Sendable, Equatable {
         case idle
@@ -15,6 +15,8 @@ public enum MenuBarIconRenderer {
         pointSize: CGFloat = 18
     ) -> NSImage {
         let size = NSSize(width: pointSize, height: pointSize)
+        let templateAsset = NSImage(named: "GravMarkTemplate")
+
         let image = NSImage(size: size, flipped: false) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else {
                 return false
@@ -23,50 +25,57 @@ public enum MenuBarIconRenderer {
             context.saveGState()
             defer { context.restoreGState() }
 
-            let cx = rect.midX
-            let cy = rect.midY
-            let unit = min(rect.width, rect.height)
-            let alphaScale: CGFloat = state == .paused ? 0.48 : 1.0
-            let beamWidth = max(1.4, unit * 0.13)
+            let alphaScale: CGFloat = state == .paused ? 0.45 : 1.0
+            let inset = rect.width * 0.08
+            let glyphRect = rect.insetBy(dx: inset, dy: inset)
 
-            let primaryInk = NSColor.black.withAlphaComponent(alphaScale).cgColor
-            let secondaryInk = NSColor.black.withAlphaComponent(0.76 * alphaScale).cgColor
+            if let templateAsset {
+                templateAsset.draw(
+                    in: glyphRect,
+                    from: .zero,
+                    operation: .sourceOver,
+                    fraction: alphaScale,
+                    respectFlipped: true,
+                    hints: [.interpolation: NSImageInterpolation.high]
+                )
+            } else {
+                // Clean vector fallback for unit-test environments without asset catalog
+                let s = glyphRect.width
+                let ox = glyphRect.minX
+                let oy = glyphRect.minY
+                context.setStrokeColor(NSColor.black.withAlphaComponent(alphaScale).cgColor)
+                context.setLineWidth(max(1.8, s * 0.16))
+                context.setLineCap(.round)
+                context.setLineJoin(.round)
 
-            context.setLineCap(.round)
-            context.setLineJoin(.round)
+                context.beginPath()
+                context.move(to: CGPoint(x: ox + s * 0.14, y: oy + s * 0.18))
+                context.addQuadCurve(
+                    to: CGPoint(x: ox + s * 0.80, y: oy + s * 0.64),
+                    control: CGPoint(x: ox + s * 0.42, y: oy + s * 0.92)
+                )
+                context.strokePath()
 
-            // 1. Horizontal crossbar beam
-            context.setStrokeColor(secondaryInk)
-            context.setLineWidth(beamWidth * 0.92)
-            context.beginPath()
-            context.move(to: CGPoint(x: cx - unit * 0.30, y: cy - unit * 0.12))
-            context.addLine(to: CGPoint(x: cx + unit * 0.30, y: cy - unit * 0.12))
-            context.strokePath()
+                context.beginPath()
+                context.move(to: CGPoint(x: ox + s * 0.50, y: oy + s * 0.44))
+                context.addLine(to: CGPoint(x: ox + s * 0.82, y: oy + s * 0.44))
+                context.addQuadCurve(
+                    to: CGPoint(x: ox + s * 0.68, y: oy + s * 0.18),
+                    control: CGPoint(x: ox + s * 0.84, y: oy + s * 0.28)
+                )
+                context.strokePath()
+            }
 
-            // 2. Left ascending Delta beam
-            context.setStrokeColor(primaryInk)
-            context.setLineWidth(beamWidth)
-            context.beginPath()
-            context.move(to: CGPoint(x: cx - unit * 0.24, y: cy - unit * 0.30))
-            context.addLine(to: CGPoint(x: cx + unit * 0.05, y: cy + unit * 0.32))
-            context.strokePath()
-
-            // 3. Right ascending Delta beam
-            context.beginPath()
-            context.move(to: CGPoint(x: cx - unit * 0.05, y: cy + unit * 0.32))
-            context.addLine(to: CGPoint(x: cx + unit * 0.24, y: cy - unit * 0.30))
-            context.strokePath()
-
-            // 4. Active telemetry beacon dot at top-right when streaming
+            // Quiet active telemetry dot at top-right corner strictly when active
             if state == .active {
-                let dotR = max(1.5, unit * 0.11)
-                context.setFillColor(primaryInk)
+                let dotSize = max(2.8, rect.width * 0.18)
+                context.setFillColor(NSColor.black.withAlphaComponent(alphaScale).cgColor)
                 context.fillEllipse(
                     in: CGRect(
-                        x: cx + unit * 0.24,
-                        y: cy + unit * 0.22,
-                        width: dotR * 2,
-                        height: dotR * 2
+                        x: rect.maxX - dotSize - 0.5,
+                        y: rect.maxY - dotSize - 0.5,
+                        width: dotSize,
+                        height: dotSize
                     )
                 )
             }

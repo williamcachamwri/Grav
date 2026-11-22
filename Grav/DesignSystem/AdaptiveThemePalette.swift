@@ -99,7 +99,7 @@ public struct GravAdaptivePalette: Sendable {
     public var accentTeal: Color {
         isDark
             ? GravPalette.glacialTeal
-            : Color(red: 0x0D / 255.0, green: 0x94 / 255.0, blue: 0x88 / 255.0)
+            : Color(red: 0x0A / 255.0, green: 0x7A / 255.0, blue: 0xEB / 255.0)
     }
 
     public var emeraldText: Color {

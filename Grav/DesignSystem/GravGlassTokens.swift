@@ -99,8 +99,8 @@ public enum GravOnboardingType {
     public static let keycap: CGFloat = 10
 }
 
-/// Caches `NSApp.applicationIconImage` once on `@MainActor` for 120Hz `Animatable` flights.
+/// Caches Grav's full-bleed Retina app logo once on `@MainActor` for 120Hz `Animatable` flights.
 @MainActor
 public enum GravOnboardingIconCache {
-    public static let appIcon: NSImage = NSApp.applicationIconImage
+    public static let appIcon: NSImage = NSImage(named: "GravLogo") ?? NSApp.applicationIconImage
 }

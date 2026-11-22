@@ -33,13 +33,9 @@ struct AboutSettingsPane: View {
 
     private var heroSection: some View {
         VStack(spacing: 10) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 96, height: 96)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .shadow(color: Color.black.opacity(0.18), radius: 14, x: 0, y: 6)
-                .shadow(color: Color.black.opacity(0.06), radius: 3, x: 0, y: 1)
+            GravAppIconTile(size: 96)
+                .shadow(color: Color.black.opacity(0.22), radius: 14, x: 0, y: 6)
+                .shadow(color: Color.black.opacity(0.08), radius: 3, x: 0, y: 1)
 
             VStack(spacing: 3) {
                 Text(verbatim: "Grav")

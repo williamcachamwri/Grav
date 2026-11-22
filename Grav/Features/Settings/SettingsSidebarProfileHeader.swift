@@ -1,15 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// Renders the running application icon at a given square size.
+/// Renders the crisp full-bleed Grav app logo at a given square size.
 struct PreferencesAppIconImage: View {
     var size: CGFloat
 
     var body: some View {
-        Image(nsImage: NSApp.applicationIconImage)
-            .resizable()
-            .scaledToFit()
-            .frame(width: size, height: size)
+        GravAppIconTile(size: size)
     }
 }
 
