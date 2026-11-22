@@ -114,13 +114,13 @@ final class TelemetryStateMachineTests: XCTestCase {
         let detector = AntigravityAppDetector(brainDirectoryURL: rootDir)
         let store = AntigravityTelemetryStore(appDetector: detector, idleDecaySeconds: 30)
 
-        let discovered = ConversationDiscovery.scanSessions(in: rootDir)
+        let discovered = await ConversationDiscovery(brainDirectoryURL: rootDir).scanConversations()
         XCTAssertEqual(discovered.count, 1)
         XCTAssertEqual(discovered[0].id, "52834bd5-test-conv")
 
         store.selectSession(discovered[0])
         let steps = await TranscriptTailer(transcriptURL: transcriptURL).readNewSteps()
-        store.ingestSteps(steps, emitPeeks: false)
+        store.ingestSteps(steps, isInitialHydration: true)
 
         XCTAssertEqual(store.activeModel, "gemini-4-neon-high")
         XCTAssertEqual(store.tokenMetrics.inputTokens, 500)

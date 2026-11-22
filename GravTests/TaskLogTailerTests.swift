@@ -24,7 +24,7 @@ final class TaskLogTailerTests: XCTestCase {
         try "\u{1B}[32mStep 1\u{1B}[0m\n".write(to: logURL, atomically: true, encoding: .utf8)
 
         let tailer = TaskLogTailer()
-        let updates = LockedBox<[String]>([])
+        let updates = LockedBox<String>([])
 
         await tailer.startTailing(commandID: "cmd-56", taskLogURL: logURL) { _, text in
             updates.append(text)
