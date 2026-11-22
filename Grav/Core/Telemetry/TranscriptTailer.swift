@@ -109,6 +109,74 @@ public actor TranscriptTailer {
         persistOffset()
     }
 
+    /// Scans `transcript_full.jsonl` on demand for a specific `step_index` without loading
+    /// the entire full transcript into memory at once.
+    public func readFullStep(stepIndex: Int, from fullTranscriptURL: URL? = nil) -> TranscriptStep? {
+        let targetURL = fullTranscriptURL ?? transcriptURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("transcript_full.jsonl")
+        return Self.readFullStep(stepIndex: stepIndex, from: targetURL)
+    }
+
+    /// Streaming lookup of a specific `step_index` in `transcript_full.jsonl`.
+    public static func readFullStep(stepIndex: Int, from fullTranscriptURL: URL) -> TranscriptStep? {
+        guard let handle = try? FileHandle(forReadingFrom: fullTranscriptURL) else {
+            return nil
+        }
+        defer {
+            try? handle.close()
+        }
+
+        let decoder = JSONDecoder()
+        let chunkSize = 65_536
+        let newline: UInt8 = 0x0A
+        let indexNeedleCompact = Data("\"step_index\":\(stepIndex)".utf8)
+        let indexNeedleSpaced = Data("\"step_index\": \(stepIndex)".utf8)
+
+        var pending = Data()
+
+        func decodeIfMatching(_ lineData: Data) -> TranscriptStep? {
+            guard !lineData.isEmpty else { return nil }
+            // Fast pre-filter before full JSON decoding of potentially large full-transcript lines
+            guard lineData.range(of: indexNeedleCompact) != nil ||
+                  lineData.range(of: indexNeedleSpaced) != nil
+            else {
+                return nil
+            }
+            guard let step = try? decoder.decode(TranscriptStep.self, from: lineData),
+                  step.stepIndex == stepIndex
+            else {
+                return nil
+            }
+            return step
+        }
+
+        while true {
+            guard let chunk = try? handle.read(upToCount: chunkSize), !chunk.isEmpty else {
+                break
+            }
+            pending.append(chunk)
+
+            var searchStart = pending.startIndex
+            while let newlineIdx = pending[searchStart..<pending.endIndex].firstIndex(of: newline) {
+                let lineData = Data(pending[searchStart..<newlineIdx])
+                if let matched = decodeIfMatching(lineData) {
+                    return matched
+                }
+                searchStart = pending.index(after: newlineIdx)
+            }
+
+            if searchStart > pending.startIndex {
+                pending.removeSubrange(pending.startIndex..<searchStart)
+            }
+        }
+
+        if !pending.isEmpty {
+            return decodeIfMatching(pending)
+        }
+        return nil
+    }
+
     // MARK: - Line Parsing
 
     private func parseSteps(from data: Data) -> [TranscriptStep] {
