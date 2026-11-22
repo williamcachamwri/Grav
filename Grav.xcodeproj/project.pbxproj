@@ -11,11 +11,14 @@
 		02FE7E1616846E92273B0631 /* AntigravityTelemetryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E730098AEB351C1ED95E3C /* AntigravityTelemetryStore.swift */; };
 		08DEEEBD0C42948184983258 /* ANSIStripper.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB8704214D5B8BD94C2F70D /* ANSIStripper.swift */; };
 		0BE5AA7A5521E678F4B05B0D /* GravApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5F5B9A0520058DBE81E4F2 /* GravApp.swift */; };
+		0CAB6C16880ACA681403C4C6 /* DestructiveCommandParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5FEA16D62BA28D6673FF57A /* DestructiveCommandParserTests.swift */; };
 		0EA0053BE0125B75F89FED9D /* TaskLogTailer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AA30702A27E78DEF0415086 /* TaskLogTailer.swift */; };
+		122173E28EEA07FBD5603B93 /* TranscriptTailerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B6E5791B3ECCE0F3282AC33 /* TranscriptTailerTests.swift */; };
 		15A515F19FE62EC328A910A5 /* AntigravityAppDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7374544BF8CD44B6A91F576D /* AntigravityAppDetector.swift */; };
 		2296303BDAE924F5CE36F00D /* DiffComputer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EAA8B09A6284B1B6BE9DC71 /* DiffComputer.swift */; };
 		22A3279FBBE55A4BEA886A3C /* NotchKit in Frameworks */ = {isa = PBXBuildFile; productRef = A2A348B0E7334E8657975F89 /* NotchKit */; };
 		26182CD68B70E55949AEBF7E /* ExpandedNotchHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C6FC432DEB452FF3AABBC2 /* ExpandedNotchHeaderView.swift */; };
+		26FD7FC6AE8A7B5490B65371 /* TelemetryStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0358A05600CF6B26370D0C1 /* TelemetryStateMachineTests.swift */; };
 		2D31239101E9F9DC9B4BD2F7 /* GravBrandMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F8A085700195064961A25A /* GravBrandMark.swift */; };
 		35A99B4C75C934A207622157 /* FilesTelemetryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A189B95D103E3C1285184C3F /* FilesTelemetryTabView.swift */; };
 		3BB9FFAFC1669FEB1FA2B771 /* OnboardingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A98C6410980250835F954E2 /* OnboardingWindowController.swift */; };
@@ -47,13 +50,15 @@
 		972B3E54C543DF9CD0DCA16F /* AntigravityTelemetrySettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17891E03BE49DF94382DDA2D /* AntigravityTelemetrySettingsSection.swift */; };
 		A308F5FE2738E1576F19DC3F /* GravKeycapBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAE3AC855B91A25DE4BFBA52 /* GravKeycapBadge.swift */; };
 		A8348B77222EB7F1CC64241C /* TelemetryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40E846C8A8D0F975578DC4A3 /* TelemetryModels.swift */; };
+		B6364C0B87177A4045319E2C /* TaskLogTailerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27BA097A7AA63BB6924CA2C9 /* TaskLogTailerTests.swift */; };
+		C1C789EB92CD9CEDDBE8EC9E /* JSONValueAndDiffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0479E0BF3714DBC2D52D16F9 /* JSONValueAndDiffTests.swift */; };
 		C60B4FF002FCE3CD9A28546B /* OnboardingStepNotchPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 596C3B3A31198730028D7E02 /* OnboardingStepNotchPreviewView.swift */; };
 		C890187EDA513327457EFE31 /* PreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6C215E35EBA9F7D3735BF6 /* PreferencesStore.swift */; };
 		D349EE9BABF922ED9F60B2B9 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2701B799B195D18555809F2 /* MenuBarController.swift */; };
 		D5BC543BAE973137B730FC0A /* GravTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED4B2A0D94552FAB23AB341 /* GravTokens.swift */; };
 		DD268DF32CD8F6632534C956 /* LiveTelemetryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FCDFDB2CAD4122B82BB0F56 /* LiveTelemetryTabView.swift */; };
+		E37B1CE4EB53B218A266DE6B /* EventClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E08A338BAAE53631D2537EE /* EventClassifierTests.swift */; };
 		E90AC76B57FA6BF57DCE826C /* OrganicLiquidPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7040474889C189513F59F95D /* OrganicLiquidPortal.swift */; };
-		EA2B3A3250ED1702F87B8ED5 /* GravTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37DA580982DE272E3EAD3937 /* GravTests.swift */; };
 		F050502B2AE697B0E8640A73 /* CollapsedNotchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505B023BBFB8599A956A2BD2 /* CollapsedNotchView.swift */; };
 		F0CA558E222110D05A0873EB /* ConversationDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3415985EECA17346AAFB0089 /* ConversationDiscovery.swift */; };
 		F500474F3FB13A751605CEF5 /* NotchSurfacePrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 943F323D0FFF409F539D13E7 /* NotchSurfacePrimitives.swift */; };
@@ -76,6 +81,7 @@
 
 /* Begin PBXFileReference section */
 		00CE747898E2A29CEF0F64EB /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		0479E0BF3714DBC2D52D16F9 /* JSONValueAndDiffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValueAndDiffTests.swift; sourceTree = "<group>"; };
 		04DEDCB56482C0CE5A5823AD /* OnboardingShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingShellView.swift; sourceTree = "<group>"; };
 		0EAA8B09A6284B1B6BE9DC71 /* DiffComputer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffComputer.swift; sourceTree = "<group>"; };
 		0FD5F3E6BA127C24EE841B5D /* OnboardingStepPreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStepPreferencesView.swift; sourceTree = "<group>"; };
@@ -83,9 +89,9 @@
 		0FF0E8D781C8AC864E07BE3D /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		17891E03BE49DF94382DDA2D /* AntigravityTelemetrySettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityTelemetrySettingsSection.swift; sourceTree = "<group>"; };
 		22590453C2A9A359AB8A9419 /* GravOnboardingWelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingWelcomeView.swift; sourceTree = "<group>"; };
+		27BA097A7AA63BB6924CA2C9 /* TaskLogTailerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskLogTailerTests.swift; sourceTree = "<group>"; };
 		33E3A022801BA5E9D7B462BA /* GravTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GravTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3415985EECA17346AAFB0089 /* ConversationDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationDiscovery.swift; sourceTree = "<group>"; };
-		37DA580982DE272E3EAD3937 /* GravTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravTests.swift; sourceTree = "<group>"; };
 		3AA30702A27E78DEF0415086 /* TaskLogTailer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskLogTailer.swift; sourceTree = "<group>"; };
 		3EF35177A0C3A7445A791C94 /* OnboardingLiquidGlassPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingLiquidGlassPrimitives.swift; sourceTree = "<group>"; };
 		3FCDFDB2CAD4122B82BB0F56 /* LiveTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTelemetryTabView.swift; sourceTree = "<group>"; };
@@ -98,6 +104,7 @@
 		5E5F5B9A0520058DBE81E4F2 /* GravApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravApp.swift; sourceTree = "<group>"; };
 		618357C061B15C3E8E80913D /* Grav.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Grav.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		680E5CAA331FE60B756716D2 /* TranscriptTailer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptTailer.swift; sourceTree = "<group>"; };
+		6E08A338BAAE53631D2537EE /* EventClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventClassifierTests.swift; sourceTree = "<group>"; };
 		6FC148A4927C7357583D93F4 /* SemanticDot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticDot.swift; sourceTree = "<group>"; };
 		7040474889C189513F59F95D /* OrganicLiquidPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganicLiquidPortal.swift; sourceTree = "<group>"; };
 		7374544BF8CD44B6A91F576D /* AntigravityAppDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityAppDetector.swift; sourceTree = "<group>"; };
@@ -108,6 +115,7 @@
 		852BD2EC804A1743843856FE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		8A98C6410980250835F954E2 /* OnboardingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingWindowController.swift; sourceTree = "<group>"; };
 		8AD2BFC0EB482A7BD92E7778 /* NotchTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchTab.swift; sourceTree = "<group>"; };
+		8B6E5791B3ECCE0F3282AC33 /* TranscriptTailerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptTailerTests.swift; sourceTree = "<group>"; };
 		8F6C215E35EBA9F7D3735BF6 /* PreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesStore.swift; sourceTree = "<group>"; };
 		8F6D0C56A09AC458AF195BB2 /* GravButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravButtonStyles.swift; sourceTree = "<group>"; };
 		943F323D0FFF409F539D13E7 /* NotchSurfacePrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchSurfacePrimitives.swift; sourceTree = "<group>"; };
@@ -117,6 +125,7 @@
 		B0C0F3062C170F4F485AC076 /* TerminalTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalTelemetryTabView.swift; sourceTree = "<group>"; };
 		B8212969EB91066FDF724464 /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
 		C2E730098AEB351C1ED95E3C /* AntigravityTelemetryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityTelemetryStore.swift; sourceTree = "<group>"; };
+		C5FEA16D62BA28D6673FF57A /* DestructiveCommandParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructiveCommandParserTests.swift; sourceTree = "<group>"; };
 		CAE3AC855B91A25DE4BFBA52 /* GravKeycapBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravKeycapBadge.swift; sourceTree = "<group>"; };
 		CCF7798C42F0CFD0241053D9 /* DestructiveCommandParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructiveCommandParser.swift; sourceTree = "<group>"; };
 		D80414C1DE01980C28A80A7E /* ExpandedNotchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpandedNotchView.swift; sourceTree = "<group>"; };
@@ -129,6 +138,7 @@
 		E86B5D07D686AF6E542B5102 /* OnboardingRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingRootView.swift; sourceTree = "<group>"; };
 		E91C7B92DA5124892C2D41AD /* SettingsSectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSectionCard.swift; sourceTree = "<group>"; };
 		EEB8704214D5B8BD94C2F70D /* ANSIStripper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ANSIStripper.swift; sourceTree = "<group>"; };
+		F0358A05600CF6B26370D0C1 /* TelemetryStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryStateMachineTests.swift; sourceTree = "<group>"; };
 		F4F8A085700195064961A25A /* GravBrandMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravBrandMark.swift; sourceTree = "<group>"; };
 		F9433096BC00883BE7C831CD /* LiquidGlassSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassSurface.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -248,7 +258,12 @@
 		ABF3C73822A61CEDBAB11739 /* GravTests */ = {
 			isa = PBXGroup;
 			children = (
-				37DA580982DE272E3EAD3937 /* GravTests.swift */,
+				C5FEA16D62BA28D6673FF57A /* DestructiveCommandParserTests.swift */,
+				6E08A338BAAE53631D2537EE /* EventClassifierTests.swift */,
+				0479E0BF3714DBC2D52D16F9 /* JSONValueAndDiffTests.swift */,
+				27BA097A7AA63BB6924CA2C9 /* TaskLogTailerTests.swift */,
+				F0358A05600CF6B26370D0C1 /* TelemetryStateMachineTests.swift */,
+				8B6E5791B3ECCE0F3282AC33 /* TranscriptTailerTests.swift */,
 			);
 			path = GravTests;
 			sourceTree = "<group>";
@@ -402,7 +417,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EA2B3A3250ED1702F87B8ED5 /* GravTests.swift in Sources */,
+				0CAB6C16880ACA681403C4C6 /* DestructiveCommandParserTests.swift in Sources */,
+				E37B1CE4EB53B218A266DE6B /* EventClassifierTests.swift in Sources */,
+				C1C789EB92CD9CEDDBE8EC9E /* JSONValueAndDiffTests.swift in Sources */,
+				B6364C0B87177A4045319E2C /* TaskLogTailerTests.swift in Sources */,
+				26FD7FC6AE8A7B5490B65371 /* TelemetryStateMachineTests.swift in Sources */,
+				122173E28EEA07FBD5603B93 /* TranscriptTailerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
