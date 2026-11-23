@@ -12,6 +12,8 @@ struct SettingsSidebarView: View {
     /// Result last opened from the list so keyboard arrow movement continues from it.
     @State private var activeResultID: String?
     @FocusState private var isSearchFocused: Bool
+    @Namespace private var sidebarSelectionNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let searchEngine = SettingsSearchEngine.standard()
 
@@ -155,18 +157,44 @@ struct SettingsSidebarView: View {
                 navigationState.select(.about)
             }
 
-            ForEach(Array(SettingsTab.groups.enumerated()), id: \.offset) { _, group in
+            ForEach(Array(SettingsTab.groups.enumerated()), id: \.offset) { groupIdx, group in
                 VStack(spacing: 2) {
+                    if groupIdx > 0 {
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.06))
+                            .frame(height: 0.5)
+                            .padding(.horizontal, 8)
+                            .padding(.bottom, 6)
+                    }
                     ForEach(group) { tab in
                         row(for: tab)
                     }
                 }
             }
         }
+        .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.14), value: navigationState.selectedTab)
     }
 
     private func row(for tab: SettingsTab) -> some View {
-        SettingsSidebarRow(tab: tab, isSelected: navigationState.selectedTab == tab) {
+        let badgeText: String? = {
+            switch tab {
+            case .miniPet:
+                let count = CodexPetsStore.shared.installedPets.count
+                return count > 0 ? "\(count)" : nil
+            case .telemetry:
+                return store.state.isActive && !store.isPaused ? "LIVE" : nil
+            default:
+                return nil
+            }
+        }()
+
+        return SettingsSidebarRow(
+            tab: tab,
+            isSelected: navigationState.selectedTab == tab,
+            badgeText: badgeText,
+            isLiveBadge: tab == .telemetry && store.state.isActive && !store.isPaused,
+            selectionNamespace: sidebarSelectionNamespace
+        ) {
             navigationState.select(tab)
         }
     }
@@ -261,32 +289,91 @@ private struct SettingsSidebarSearchResultRow: View {
 private struct SettingsSidebarRow: View {
     let tab: SettingsTab
     let isSelected: Bool
+    var badgeText: String? = nil
+    var isLiveBadge: Bool = false
+    var selectionNamespace: Namespace.ID? = nil
     let action: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
-    private static let height: CGFloat = 32
+    private static let height: CGFloat = 33
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 9) {
                 PreferencesSidebarIcon(tab: tab, size: 22, duotone: true)
+                    .scaleEffect(!reduceMotion && isHovering && !isSelected ? 1.05 : 1.0)
+                    .animation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.24), value: isHovering)
+
                 Text(tab.title)
-                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                    .foregroundStyle(Color.primary)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.84))
                     .lineLimit(1)
-                Spacer(minLength: 0)
+
+                Spacer(minLength: 4)
+
+                if let badgeText {
+                    HStack(spacing: 4) {
+                        if isLiveBadge {
+                            Circle()
+                                .fill(GravPalette.emerald)
+                                .frame(width: 5, height: 5)
+                        }
+                        Text(badgeText)
+                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(isLiveBadge ? GravPalette.emerald : Color.secondary)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(isLiveBadge ? GravPalette.emerald.opacity(0.14) : Color.primary.opacity(0.06))
+                    )
+                }
             }
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 8)
             .frame(height: Self.height)
             .background {
-                Radius.controlRect(forHeight: Self.height)
-                    .fill(Color.primary.opacity(isSelected ? 0.08 : (isHovering ? 0.045 : 0)))
+                ZStack(alignment: .leading) {
+                    if isSelected {
+                        Group {
+                            if let ns = selectionNamespace {
+                                Radius.controlRect(forHeight: Self.height)
+                                    .fill(Color.primary.opacity(0.095))
+                                    .overlay(
+                                        Radius.controlRect(forHeight: Self.height)
+                                            .strokeBorder(Color.primary.opacity(0.09), lineWidth: 0.6)
+                                    )
+                                    .matchedGeometryEffect(id: "sidebarActivePill", in: ns)
+                            } else {
+                                Radius.controlRect(forHeight: Self.height)
+                                    .fill(Color.primary.opacity(0.095))
+                            }
+                        }
+
+                        if let ns = selectionNamespace {
+                            Capsule(style: .continuous)
+                                .fill(Color.primary.opacity(0.75))
+                                .frame(width: 2.5, height: 14)
+                                .padding(.leading, 1.5)
+                                .matchedGeometryEffect(id: "sidebarActiveRail", in: ns)
+                        }
+                    } else if isHovering {
+                        Radius.controlRect(forHeight: Self.height)
+                            .fill(Color.primary.opacity(0.045))
+                    }
+                }
             }
             .contentShape(Radius.controlRect(forHeight: Self.height))
         }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
+        .buttonStyle(PrecisionPressButtonStyle())
+        .onHover { hovering in
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.14)) {
+                isHovering = hovering
+            }
+        }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

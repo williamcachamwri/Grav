@@ -38,21 +38,42 @@ struct MiniPetSettingsPane: View {
     }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 20) {
-                headerBar
-
-                if let pet = activePet {
-                    liveStageCard(for: pet)
+        SettingsPageCanvas(
+            tab: .miniPet,
+            title: "Pets",
+            subtitle: "Floating desktop companion synced live with Antigravity."
+        ) {
+            HStack(spacing: 6) {
+                SettingsActionPill(title: "Import Sheet", systemImage: "square.and.arrow.down") {
+                    if let imported = petsStore.presentImportSpritesheetPanel() {
+                        preferences.activeMiniPetID = imported.id
+                        preferences.miniPetEnabled = true
+                    }
                 }
 
-                librarySection
+                SettingsActionPill(title: "Refresh", systemImage: "arrow.clockwise") {
+                    petsStore.reloadInstalledPets()
+                    Task { await petsStore.searchGallery(query: searchQuery, sort: sortOrder) }
+                }
 
-                tuningSection
+                SettingsActionPill(
+                    title: preferences.miniPetEnabled ? "Tuck Away Pet" : "Show Pet",
+                    systemImage: preferences.miniPetEnabled ? "eye.slash" : "eye",
+                    prominent: !preferences.miniPetEnabled
+                ) {
+                    withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.14)) {
+                        preferences.miniPetEnabled.toggle()
+                    }
+                }
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+        } content: {
+            if let pet = activePet {
+                liveStageCard(for: pet)
+            }
+
+            librarySection
+
+            tuningSection
         }
         .task {
             if petsStore.galleryPets.isEmpty {
@@ -70,53 +91,6 @@ struct MiniPetSettingsPane: View {
         }
         .onDisappear {
             debounceTask?.cancel()
-        }
-    }
-
-    // MARK: - 1. Codex-Style Minimal Header Bar
-
-    private var headerBar: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Pets")
-                    .font(.system(size: 18, weight: .semibold))
-                    .tracking(-0.3)
-
-                Text("Floating desktop companion synced live with Antigravity.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .layoutPriority(0)
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 6) {
-                subtleActionButton(title: "Import Sheet", systemImage: "square.and.arrow.down") {
-                    if let imported = petsStore.presentImportSpritesheetPanel() {
-                        preferences.activeMiniPetID = imported.id
-                        preferences.miniPetEnabled = true
-                    }
-                }
-
-                subtleActionButton(title: "Refresh", systemImage: "arrow.clockwise") {
-                    petsStore.reloadInstalledPets()
-                    Task { await petsStore.searchGallery(query: searchQuery, sort: sortOrder) }
-                }
-
-                subtleActionButton(
-                    title: preferences.miniPetEnabled ? "Tuck Away Pet" : "Show Pet",
-                    systemImage: preferences.miniPetEnabled ? "eye.slash" : "eye",
-                    isEmphasized: !preferences.miniPetEnabled
-                ) {
-                    withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.14)) {
-                        preferences.miniPetEnabled.toggle()
-                    }
-                }
-            }
-            .fixedSize(horizontal: true, vertical: false)
-            .layoutPriority(1)
         }
     }
 

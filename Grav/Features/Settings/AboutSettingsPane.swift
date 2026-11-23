@@ -1,189 +1,174 @@
 import AppKit
 import SwiftUI
 
-/// Clean, card-based About page ported 1:1 from Snapzy's `PreferencesAboutSettingsView` (Hand Mirror aesthetic).
+/// Precision editorial About pane with subtle interactive app icon elevation, live diagnostics strip,
+/// architecture ledger, and quick folder/onboarding actions.
 struct AboutSettingsPane: View {
     let store: AntigravityTelemetryStore
     var onReplayWelcome: (() -> Void)?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHoveringIcon = false
+
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-        return "Grav \(version) (\(build))"
+        return "v\(version) (\(build))"
+    }
+
+    private var petsFolderURL: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
+        return appSupport.appendingPathComponent("Grav/Pets", isDirectory: true)
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(spacing: 20) {
-                    heroSection
-                    architectureCard
-                    actionsCard
-                    Spacer(minLength: 24)
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(spacing: 20) {
+                heroSection
+
+                // Live Diagnostic Strip
+                HStack(spacing: 10) {
+                    SettingsMetricTile(
+                        label: "Notch Engine",
+                        value: "NotchKit",
+                        detail: "v1.3.0 · 120Hz"
+                    )
+                    SettingsMetricTile(
+                        label: "Installed Pets",
+                        value: "\(CodexPetsStore.shared.installedPets.count)",
+                        detail: "codex-pets.net"
+                    )
+                    SettingsMetricTile(
+                        label: "Bridge",
+                        value: store.connectionStatus.isBrainAccessible ? "Ready" : "Standby",
+                        detail: "kqueue · 0% idle",
+                        accentDot: store.connectionStatus.isBrainAccessible ? GravPalette.emerald : .orange
+                    )
                 }
-                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
-                .padding(.horizontal, 28)
-                .padding(.top, 28)
-                .padding(.bottom, 28)
+                .frame(maxWidth: 520)
+
+                SettingsCardGroup(title: "Architecture", staggerIndex: 1) {
+                    infoRow(label: "Platform", value: "macOS 14+ Native SwiftUI / AppKit")
+                    SettingsRowDivider()
+                    infoRow(label: "Telemetry Source", value: "Local kqueue + SQLite WAL")
+                    SettingsRowDivider()
+                    infoRow(label: "Interface", value: "Liquid Glass & Precision Craft")
+                    SettingsRowDivider()
+                    infoRow(label: "Global Hotkeys", value: "Carbon RegisterEventHotKey")
+                }
+                .frame(maxWidth: 520)
+
+                SettingsCardGroup(title: "Resources & Walkthrough", staggerIndex: 2) {
+                    SettingRow(
+                        title: "Welcome Experience",
+                        description: "Revisit the animated aurora welcome, Notch HUD demo, and Mini Pet setup."
+                    ) {
+                        SettingsActionPill(title: "Replay Welcome", systemImage: "arrow.counterclockwise") {
+                            onReplayWelcome?()
+                        }
+                    }
+
+                    SettingsRowDivider()
+
+                    SettingRow(
+                        title: "Antigravity Brain Directory",
+                        description: "~/.gemini/antigravity/brain"
+                    ) {
+                        SettingsActionPill(title: "Reveal", systemImage: "folder") {
+                            revealFolder(store.connectionStatus.brainDirectoryURL)
+                        }
+                    }
+
+                    SettingsRowDivider()
+
+                    SettingRow(
+                        title: "Installed Pets Folder",
+                        description: "~/Library/Application Support/Grav/Pets"
+                    ) {
+                        SettingsActionPill(title: "Reveal", systemImage: "pawprint") {
+                            revealFolder(petsFolderURL)
+                        }
+                    }
+                }
+                .frame(maxWidth: 520)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 26)
+            .padding(.vertical, 26)
         }
     }
 
-    // MARK: - Hero Section
-
     private var heroSection: some View {
-        VStack(spacing: 10) {
-            GravAppIconTile(size: 96)
-                .shadow(color: Color.black.opacity(0.22), radius: 14, x: 0, y: 6)
-                .shadow(color: Color.black.opacity(0.08), radius: 3, x: 0, y: 1)
+        VStack(spacing: 11) {
+            GravAppIconTile(size: 86)
+                .scaleEffect(!reduceMotion && isHoveringIcon ? 1.05 : 1.0)
+                .rotation3DEffect(
+                    .degrees(!reduceMotion && isHoveringIcon ? 5 : 0),
+                    axis: (x: -1, y: 1, z: 0),
+                    perspective: 0.55
+                )
+                .shadow(color: Color.black.opacity(0.28), radius: 16, y: 8)
+                .animation(reduceMotion ? nil : .spring(duration: 0.30, bounce: 0.28), value: isHoveringIcon)
+                .onHover { isHoveringIcon = $0 }
 
             VStack(spacing: 3) {
                 Text(verbatim: "Grav")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.primary)
+                    .font(.system(size: 23, weight: .bold, design: .rounded))
+                    .tracking(-0.4)
 
-                Text("Live flight-deck telemetry for Google Antigravity")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondary)
+                Text("Live flight-deck telemetry & desktop companion for Google Antigravity")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
                     .frame(maxWidth: 420)
             }
 
-            versionStatusLabel
-                .padding(.top, 6)
+            HStack(spacing: 6) {
+                Text(appVersion)
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                Text(store.connectionStatus.isBrainAccessible ? "Local Telemetry Ready" : "Standby")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.primary.opacity(0.05))
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.6)
+                    )
+            )
         }
         .padding(.bottom, 4)
     }
 
-    private var versionStatusLabel: some View {
-        HStack(spacing: 6) {
-            Text(appVersion)
-                .font(.system(size: 11, weight: .regular))
-                .foregroundStyle(Color.secondary)
-
-            Text("•")
-                .font(.system(size: 10))
-                .foregroundStyle(Color.secondary.opacity(0.5))
-
-            Text(store.connectionStatus.isBrainAccessible ? "Local Telemetry Ready" : "Standby")
-                .font(.system(size: 11, weight: .regular))
-                .foregroundStyle(Color.secondary)
-        }
-    }
-
-    // MARK: - Card 1: Architecture & Runtime
-
-    private var architectureCard: some View {
-        VStack(spacing: 0) {
-            infoRow(label: "Notch Engine", value: "NotchKit 1.3.0")
-            divider
-            infoRow(label: "Platform", value: "macOS 14+ Native SwiftUI / AppKit")
-            divider
-            infoRow(label: "Telemetry", value: "Event-Driven Local kqueue")
-            divider
-            infoRow(label: "Interface", value: "Liquid Glass & Adaptive Chrome")
-        }
-        .aboutCardContainer(maxWidth: 480)
-    }
-
-    // MARK: - Card 2: Onboarding & Local Runtime
-
-    private var actionsCard: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center) {
-                Text("Welcome Experience")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Color.primary)
-
-                Spacer()
-
-                Button("Replay Welcome Screen") {
-                    onReplayWelcome?()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-
-            divider
-
-            HStack(alignment: .center) {
-                Text("Antigravity Brain")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Color.primary)
-
-                Spacer()
-
-                Button {
-                    revealBrainFolder(store.connectionStatus.brainDirectoryURL)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("Reveal in Finder")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Color.accentColor)
-
-                        Image(systemName: "arrow.up.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Color.accentColor.opacity(0.8))
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-        }
-        .aboutCardContainer(maxWidth: 480)
-    }
-
-    // MARK: - Helpers
-
     private func infoRow(label: String, value: String) -> some View {
         HStack(alignment: .center) {
             Text(label)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(Color.primary)
-
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.primary)
             Spacer(minLength: 20)
-
             Text(value)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.secondary)
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10.5)
     }
 
-    private var divider: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.08))
-            .frame(height: 0.5)
-            .padding(.horizontal, 12)
-    }
-
-    private func revealBrainFolder(_ url: URL) {
+    private func revealFolder(_ url: URL) {
         if FileManager.default.fileExists(atPath: url.path) {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } else {
             let parent = url.deletingLastPathComponent()
-            if FileManager.default.fileExists(atPath: parent.path) {
-                NSWorkspace.shared.activateFileViewerSelecting([parent])
-            } else {
-                NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser)
-            }
+            NSWorkspace.shared.open(FileManager.default.fileExists(atPath: parent.path) ? parent : FileManager.default.homeDirectoryForCurrentUser)
         }
-    }
-}
-
-private extension View {
-    func aboutCardContainer(maxWidth: CGFloat) -> some View {
-        background {
-            Radius.rect(Radius.card)
-                .fill(Color.primary.opacity(0.04))
-        }
-        .clipShape(Radius.rect(Radius.card))
-        .frame(maxWidth: maxWidth)
     }
 }

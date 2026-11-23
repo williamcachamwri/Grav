@@ -11,8 +11,12 @@ public struct SettingsView: View {
     public var onReplayWelcome: (() -> Void)?
     public var onToggleNotch: (() -> Void)?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var lastTabOrderIndex: Int = 0
+    @State private var tabSlideSign: CGFloat = 1
+
     /// Fixed sidebar width prevents divider dragging and accidental collapsing.
-    private static let fixedSidebarWidth: CGFloat = 220
+    private static let fixedSidebarWidth: CGFloat = 224
 
     public init(
         preferences: PreferencesStore,
@@ -176,8 +180,22 @@ public struct SettingsView: View {
             }
         }
         .id(navigationState.selectedTab)
-        .transition(.opacity)
-        .animation(.easeOut(duration: 0.12), value: navigationState.selectedTab)
+        .transition(
+            reduceMotion
+                ? .opacity
+                : .asymmetric(
+                    insertion: .opacity.combined(with: .offset(y: tabSlideSign * 10)),
+                    removal: .opacity.combined(with: .offset(y: -tabSlideSign * 6))
+                )
+        )
+        .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.06), value: navigationState.selectedTab)
+        .onChange(of: navigationState.selectedTab) { oldTab, newTab in
+            let order = SettingsTab.sidebarOrder
+            let oldIdx = order.firstIndex(of: oldTab) ?? 0
+            let newIdx = order.firstIndex(of: newTab) ?? 0
+            tabSlideSign = newIdx >= oldIdx ? 1 : -1
+            lastTabOrderIndex = newIdx
+        }
     }
 }
 

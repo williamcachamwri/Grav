@@ -12,17 +12,24 @@ struct MenuBarSettingsPane: View {
     var petsStore: CodexPetsStore = .shared
 
     var body: some View {
-        Form {
-            Section("Preview") {
+        SettingsPageCanvas(
+            tab: .menuBar,
+            subtitle: "Customize Grav's macOS status bar presence, Liquid Glass dropdown, and quick controls."
+        ) {
+            SettingsCardGroup(
+                title: "Live 1:1 macOS Preview",
+                badge: "LIQUID GLASS",
+                staggerIndex: 0,
+                contentPadding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)
+            ) {
                 GravMenuBarPreviewCard(
                     preferences: preferences,
                     store: store,
                     petsStore: petsStore
                 )
-                .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
             }
 
-            Section("Menu Bar") {
+            SettingsCardGroup(title: "Status Item", staggerIndex: 1) {
                 SettingRow(
                     title: "Show Menu Bar Icon",
                     description: "Display Grav's orbital telemetry icon and quick controls in the macOS menu bar."
@@ -32,7 +39,7 @@ struct MenuBarSettingsPane: View {
                 }
             }
 
-            Section("Menu Content") {
+            SettingsCardGroup(title: "Menu Content", staggerIndex: 2) {
                 SettingRow(
                     title: "Show Mini Pet in Header",
                     description: "Display your equipped Codex Mini Pet inside the top status header of the menu bar dropdown."
@@ -40,7 +47,8 @@ struct MenuBarSettingsPane: View {
                     Toggle("", isOn: $preferences.menuBarShowPetInHeader)
                         .labelsHidden()
                 }
-                .disabled(!preferences.showMenuBarIcon)
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Show Token & Context Metrics",
@@ -49,7 +57,8 @@ struct MenuBarSettingsPane: View {
                     Toggle("", isOn: $preferences.menuBarShowLiveMetrics)
                         .labelsHidden()
                 }
-                .disabled(!preferences.showMenuBarIcon)
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Show Quick HUD Toggles",
@@ -58,7 +67,8 @@ struct MenuBarSettingsPane: View {
                     Toggle("", isOn: $preferences.menuBarShowQuickToggles)
                         .labelsHidden()
                 }
-                .disabled(!preferences.showMenuBarIcon)
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Show Mini Pet Submenu",
@@ -67,7 +77,8 @@ struct MenuBarSettingsPane: View {
                     Toggle("", isOn: $preferences.menuBarShowMiniPetSubmenu)
                         .labelsHidden()
                 }
-                .disabled(!preferences.showMenuBarIcon)
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Show Active Sessions Submenu",
@@ -76,10 +87,10 @@ struct MenuBarSettingsPane: View {
                     Toggle("", isOn: $preferences.menuBarShowSessionsSubmenu)
                         .labelsHidden()
                 }
-                .disabled(!preferences.showMenuBarIcon)
             }
+            .disabled(!preferences.showMenuBarIcon)
+            .opacity(preferences.showMenuBarIcon ? 1.0 : 0.45)
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -361,21 +372,35 @@ private struct GravMenuBarPreviewCard: View {
 
 // MARK: - Shortcuts Settings Pane
 
-/// Native grouped-form Shortcuts pane with live system-wide Global Hotkey recorders (Carbon)
+/// Precision macOS Craft Shortcuts pane with live system-wide Global Hotkey recorders (Carbon)
 /// plus Notch HUD and Settings Window shortcut reference tables.
 struct ShortcutsSettingsPane: View {
     @Bindable var preferences: PreferencesStore
 
     var body: some View {
-        Form {
-            Section("Global Hotkeys (System-Wide)") {
+        SettingsPageCanvas(
+            tab: .shortcuts,
+            subtitle: "System-wide Carbon hotkeys, Notch HUD navigation, and Settings shortcuts.",
+            trailing: {
+                SettingsActionPill(title: "Reset Defaults", systemImage: "arrow.counterclockwise") {
+                    preferences.resetGlobalHotkeysToDefaults()
+                }
+                .disabled(!preferences.globalHotkeysEnabled)
+                .opacity(preferences.globalHotkeysEnabled ? 1 : 0.45)
+            }
+        ) {
+            SettingsCardGroup(title: "Global Hotkeys", badge: "SYSTEM-WIDE", staggerIndex: 0) {
                 SettingRow(
                     title: "Enable Global Hotkeys",
                     description: "Trigger Grav actions from any app on macOS without requiring Accessibility permission."
                 ) {
                     Toggle("", isOn: $preferences.globalHotkeysEnabled)
                         .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
                 }
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Toggle Notch HUD",
@@ -384,6 +409,9 @@ struct ShortcutsSettingsPane: View {
                     HotkeyRecorderControl(shortcut: $preferences.hotkeyToggleNotch)
                 }
                 .disabled(!preferences.globalHotkeysEnabled)
+                .opacity(preferences.globalHotkeysEnabled ? 1 : 0.45)
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Toggle Desktop Mini Pet",
@@ -392,6 +420,9 @@ struct ShortcutsSettingsPane: View {
                     HotkeyRecorderControl(shortcut: $preferences.hotkeyToggleMiniPet)
                 }
                 .disabled(!preferences.globalHotkeysEnabled)
+                .opacity(preferences.globalHotkeysEnabled ? 1 : 0.45)
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Focus Antigravity",
@@ -400,48 +431,30 @@ struct ShortcutsSettingsPane: View {
                     HotkeyRecorderControl(shortcut: $preferences.hotkeyFocusAntigravity)
                 }
                 .disabled(!preferences.globalHotkeysEnabled)
-
-                SettingRow(
-                    title: "Reset Global Hotkeys",
-                    description: "Restore default global shortcuts (⌥Space, ⌥⇧P, ⌥⇧A)."
-                ) {
-                    Button("Reset Defaults") {
-                        preferences.resetGlobalHotkeysToDefaults()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-                .disabled(!preferences.globalHotkeysEnabled)
+                .opacity(preferences.globalHotkeysEnabled ? 1 : 0.45)
             }
 
-            Section("Notch HUD") {
+            SettingsCardGroup(title: "Notch HUD", badge: "EXPANDED", staggerIndex: 1) {
                 SettingRow(
-                    title: "Live Tab",
-                    description: "Jump to the live thinking and activity stream while the Notch HUD is focused."
+                    title: "Switch Tabs (Live / Reply / Files / Terminal / Specs)",
+                    description: "Jump straight to any inspector tab while the Notch HUD is focused."
                 ) {
-                    SettingsKeycapPlate(keys: ["1"])
+                    SettingsKeycapPlate(keys: ["1", "–", "5"])
                 }
 
-                SettingRow(
-                    title: "Files Tab",
-                    description: "Jump to modified files and inline diff previews in the Notch HUD."
-                ) {
-                    SettingsKeycapPlate(keys: ["2"])
-                }
+                SettingsRowDivider()
 
                 SettingRow(
-                    title: "Terminal Tab",
-                    description: "Jump to running commands and streaming task logs in the Notch HUD."
+                    title: "Switch Parallel Session",
+                    description: "Cycle across active Antigravity agent sessions directly inside the Notch."
                 ) {
-                    SettingsKeycapPlate(keys: ["3"])
+                    HStack(spacing: 6) {
+                        SettingsKeycapPlate(keys: ["⌘", "["])
+                        SettingsKeycapPlate(keys: ["⌘", "]"])
+                    }
                 }
 
-                SettingRow(
-                    title: "Collapse Notch",
-                    description: "Dismiss the expanded Notch HUD back to its compact pill."
-                ) {
-                    SettingsKeycapPlate(keys: ["Esc"])
-                }
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Copy Log or Diff",
@@ -449,9 +462,21 @@ struct ShortcutsSettingsPane: View {
                 ) {
                     SettingsKeycapPlate(keys: ["⌘", "C"])
                 }
+
+                SettingsRowDivider()
+
+                SettingRow(
+                    title: "Pin / Collapse Notch",
+                    description: "Pin the Notch HUD open (`⌘P`) or dismiss it back to its compact pill (`Esc`)."
+                ) {
+                    HStack(spacing: 6) {
+                        SettingsKeycapPlate(keys: ["⌘", "P"])
+                        SettingsKeycapPlate(keys: ["Esc"])
+                    }
+                }
             }
 
-            Section("Settings Window") {
+            SettingsCardGroup(title: "Settings Window", staggerIndex: 2) {
                 SettingRow(
                     title: "Search Settings",
                     description: "Focus the sidebar search field from anywhere inside Settings."
@@ -459,22 +484,19 @@ struct ShortcutsSettingsPane: View {
                     SettingsKeycapPlate(keys: ["⌘", "F"])
                 }
 
-                SettingRow(
-                    title: "Navigate Back",
-                    description: "Return to the previous Settings pane in navigation history."
-                ) {
-                    SettingsKeycapPlate(keys: ["⌘", "["])
-                }
+                SettingsRowDivider()
 
                 SettingRow(
-                    title: "Navigate Forward",
-                    description: "Move forward to the next Settings pane in navigation history."
+                    title: "Navigate Back & Forward",
+                    description: "Move through your Settings pane navigation history."
                 ) {
-                    SettingsKeycapPlate(keys: ["⌘", "]"])
+                    HStack(spacing: 6) {
+                        SettingsKeycapPlate(keys: ["⌘", "["])
+                        SettingsKeycapPlate(keys: ["⌘", "]"])
+                    }
                 }
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -596,7 +618,7 @@ private struct HotkeyRecorderControl: View {
 
 // MARK: - Permissions Settings Pane
 
-/// Native grouped-form Permissions pane inspecting real brain directory readability and `SMAppService` status.
+/// Precision macOS Craft Permissions pane inspecting real brain directory readability and `SMAppService` status.
 struct PermissionsSettingsPane: View {
     @Bindable var preferences: PreferencesStore
     let store: AntigravityTelemetryStore
@@ -612,12 +634,20 @@ struct PermissionsSettingsPane: View {
         let status = store.connectionStatus
         let brainReadable = status.isBrainAccessible && !status.needsFolderAccess
 
-        Form {
-            Section("Permissions") {
-                Text("Grav observes local Antigravity transcript logs directly on disk with zero network traffic or background idle polling.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
+        SettingsPageCanvas(
+            tab: .permissions,
+            subtitle: "Grav reads local Antigravity transcripts directly on disk — zero cloud relays or Accessibility hooks.",
+            trailing: {
+                SettingsActionPill(title: "Refresh Status", systemImage: "arrow.clockwise") {
+                    refreshPermissions()
+                }
+            }
+        ) {
+            SettingsCardGroup(
+                title: "Access & Privacy",
+                badge: brainReadable ? "ALL READY" : "ACTION NEEDED",
+                staggerIndex: 0
+            ) {
                 permissionRow(
                     anchorTitle: "Antigravity Brain Directory",
                     icon: "folder.fill",
@@ -628,7 +658,8 @@ struct PermissionsSettingsPane: View {
                     statusLabel: brainReadable ? "Granted" : "Access Needed",
                     statusDotColor: brainReadable ? .green : .orange,
                     isRequired: true,
-                    actionTitle: brainReadable ? "Reveal" : "Grant Folder Access"
+                    actionTitle: brainReadable ? "Reveal" : "Grant Access",
+                    actionProminent: !brainReadable
                 ) {
                     if brainReadable {
                         revealBrainFolder(status.brainDirectoryURL)
@@ -636,6 +667,8 @@ struct PermissionsSettingsPane: View {
                         store.requestBrainFolderAccess()
                     }
                 }
+
+                SettingsRowDivider()
 
                 permissionRow(
                     anchorTitle: "Launch at Login",
@@ -645,28 +678,37 @@ struct PermissionsSettingsPane: View {
                     statusLabel: loginItemStatusLabel,
                     statusDotColor: loginItemDotColor,
                     isRequired: false,
-                    actionTitle: "Open Login Items"
+                    actionTitle: "Login Items",
+                    actionProminent: false
                 ) {
                     openLoginItemsSettings()
                 }
+            }
 
-                HStack {
-                    Spacer()
-                    Button {
-                        refreshPermissions()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.clockwise")
-                            Text("Refresh Status")
-                        }
+            SettingsCardGroup(title: "Security Posture", badge: "LOCAL-ONLY", staggerIndex: 1) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "lock.shield")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color.primary.opacity(0.055))
+                        )
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Zero Accessibility or Screen Recording permissions required")
+                            .font(.system(size: 12.5, weight: .medium))
+                        Text("Global hotkeys use Carbon RegisterEventHotKey, and telemetry streams purely from local Antigravity JSONL files via FSEvents.")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
                 }
-                .padding(.top, 4)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
             }
         }
-        .formStyle(.grouped)
         .onAppear {
             hasAppeared = true
             refreshPermissions()
@@ -689,26 +731,42 @@ struct PermissionsSettingsPane: View {
         statusDotColor: Color,
         isRequired: Bool,
         actionTitle: String,
+        actionProminent: Bool,
         action: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.title2)
+                .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 28)
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                        .fill(Color.primary.opacity(0.055))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        )
+                )
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 2.5) {
                 HStack(spacing: 6) {
                     Text(name)
-                        .fontWeight(.medium)
+                        .font(.system(size: 13, weight: .medium))
                     if isRequired {
-                        Text("Required")
-                            .font(.caption)
+                        Text("REQUIRED")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .tracking(0.5)
                             .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5.5)
+                            .padding(.vertical, 1.5)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.primary.opacity(0.06))
+                            )
                     }
                 }
                 Text(description)
-                    .font(.caption)
+                    .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -720,21 +778,22 @@ struct PermissionsSettingsPane: View {
                     .fill(statusDotColor)
                     .frame(width: 6, height: 6)
                 Text(statusLabel)
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
             }
             .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
 
-            Button(actionTitle, action: action)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            SettingsActionPill(title: actionTitle, prominent: actionProminent, action: action)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
         .id(anchorTitle)
         .background {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.accentColor.opacity(highlightedSetting == anchorTitle ? 0.16 : 0))
-                .padding(.horizontal, -6)
-                .padding(.vertical, -4)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.accentColor.opacity(highlightedSetting == anchorTitle ? 0.14 : 0))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
                 .animation(.easeInOut(duration: 0.35), value: highlightedSetting == anchorTitle)
         }
     }

@@ -5,21 +5,74 @@ import SwiftUI
 /// mockup (embedding the real `ExpandedNotchView` + live collapsed pill), Interaction,
 /// Smart Attention Rules, Display & Feedback, and Quick Actions.
 struct NotchHUDSettingsPane: View {
+    private struct DurationOption: Identifiable, Hashable {
+        let value: Double
+        let label: String
+        var id: Double { value }
+    }
+
+    private static let durationOptions: [DurationOption] = [
+        .init(value: 0.0, label: "Always"),
+        .init(value: 10.0, label: "> 10s"),
+        .init(value: 30.0, label: "> 30s"),
+        .init(value: 60.0, label: "> 60s"),
+    ]
+
     @Bindable var preferences: PreferencesStore
     let store: AntigravityTelemetryStore
     var onToggleNotch: (() -> Void)?
 
+    private var selectedDurationOption: Binding<DurationOption> {
+        Binding(
+            get: {
+                Self.durationOptions.first(where: { abs($0.value - preferences.smartAlertMinDurationSeconds) < 0.5 })
+                    ?? Self.durationOptions[0]
+            },
+            set: { preferences.smartAlertMinDurationSeconds = $0.value }
+        )
+    }
+
     var body: some View {
-        Form {
-            Section("Preview") {
+        SettingsPageCanvas(
+            tab: .notchHUD,
+            subtitle: "120Hz hardware notch telemetry, hover physics, Smart Attention rules, and display density."
+        ) {
+            HStack(spacing: 8) {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(statusDotColor)
+                        .frame(width: 6, height: 6)
+                    Text(statusLabel)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                )
+
+                if let onToggleNotch {
+                    SettingsActionPill(title: "Toggle Notch", systemImage: "rectangle.topthird.inset.filled") {
+                        onToggleNotch()
+                    }
+                }
+            }
+        } content: {
+            SettingsCardGroup(
+                title: "Live 1:1 Preview",
+                badge: "MACOS NOTCH",
+                staggerIndex: 0,
+                contentPadding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)
+            ) {
                 GravNotchHUDLivePreviewCard(
                     preferences: preferences,
                     store: store
                 )
-                .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
             }
 
-            Section("Interaction") {
+            SettingsCardGroup(title: "Interaction & Trigger", staggerIndex: 1) {
                 SettingRow(
                     title: "Hover to Expand",
                     description: "Resting the pointer over the notch smoothly expands live telemetry."
@@ -27,6 +80,8 @@ struct NotchHUDSettingsPane: View {
                     Toggle("", isOn: $preferences.hoverToExpand)
                         .labelsHidden()
                 }
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Pin Notch Open",
@@ -36,6 +91,8 @@ struct NotchHUDSettingsPane: View {
                         .labelsHidden()
                 }
 
+                SettingsRowDivider()
+
                 SettingRow(
                     title: "Auto-Peek on Events",
                     description: "Briefly surface the notch on new thinking bursts, file edits, and completed commands."
@@ -43,6 +100,8 @@ struct NotchHUDSettingsPane: View {
                     Toggle("", isOn: $preferences.autoPeekOnEvents)
                         .labelsHidden()
                 }
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Auto-Expand on Input Needed",
@@ -52,13 +111,15 @@ struct NotchHUDSettingsPane: View {
                         .labelsHidden()
                 }
 
+                SettingsRowDivider()
+
                 SettingRow(
                     title: "Hover Open Delay",
                     description: "How long the pointer must rest over the notch before expanding."
                 ) {
                     HStack(spacing: 8) {
                         Slider(value: $preferences.hoverOpenDelay, in: 0.05...0.50, step: 0.05)
-                            .frame(width: 120)
+                            .frame(width: 124)
                         Text("\(Int((preferences.hoverOpenDelay * 1000).rounded())) ms")
                             .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                             .monospacedDigit()
@@ -67,23 +128,22 @@ struct NotchHUDSettingsPane: View {
                     }
                 }
                 .disabled(!preferences.hoverToExpand)
+                .opacity(preferences.hoverToExpand ? 1.0 : 0.45)
             }
 
-            Section("Smart Attention Rules") {
+            SettingsCardGroup(title: "Smart Attention Rules", badge: "SMART", staggerIndex: 2) {
                 SettingRow(
                     title: "Minimum Turn Duration",
                     description: "Only chime or peek on turn completion if Antigravity worked longer than this threshold."
                 ) {
-                    Picker("", selection: $preferences.smartAlertMinDurationSeconds) {
-                        Text("Always").tag(0.0)
-                        Text("> 10s").tag(10.0)
-                        Text("> 30s").tag(30.0)
-                        Text("> 60s").tag(60.0)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 244)
+                    SettingsSegmentedPill(
+                        options: Self.durationOptions,
+                        selection: selectedDurationOption,
+                        label: \.label
+                    )
                 }
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Urgent Alert When Backgrounded",
@@ -93,6 +153,8 @@ struct NotchHUDSettingsPane: View {
                         .labelsHidden()
                 }
 
+                SettingsRowDivider()
+
                 SettingRow(
                     title: "Notify on Turn Completion",
                     description: "Surface a subtle peek & completion chime when Antigravity finishes a response."
@@ -100,6 +162,8 @@ struct NotchHUDSettingsPane: View {
                     Toggle("", isOn: $preferences.notifyOnTurnCompleted)
                         .labelsHidden()
                 }
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Notify on Failures",
@@ -110,7 +174,7 @@ struct NotchHUDSettingsPane: View {
                 }
             }
 
-            Section("Display & Feedback") {
+            SettingsCardGroup(title: "Display & Feedback", staggerIndex: 3) {
                 SettingRow(
                     title: "Show Live Focus",
                     description: "Show Antigravity's live task focus headline inside the collapsed Notch pill."
@@ -118,6 +182,8 @@ struct NotchHUDSettingsPane: View {
                     Toggle("", isOn: $preferences.showCollapsedFocus)
                         .labelsHidden()
                 }
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Show Step Progress Ring",
@@ -127,13 +193,17 @@ struct NotchHUDSettingsPane: View {
                         .labelsHidden()
                 }
 
+                SettingsRowDivider()
+
                 SettingRow(
                     title: "Show Idle Token Count",
-                    description: "Display compact session token totals in the collapsed pill while idle."
+                    description: "Display live rolling ↓In / ↑Out token odometers inside the collapsed Notch pill."
                 ) {
                     Toggle("", isOn: $preferences.showCollapsedTokens)
                         .labelsHidden()
                 }
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Haptic Feedback",
@@ -143,6 +213,8 @@ struct NotchHUDSettingsPane: View {
                         .labelsHidden()
                 }
 
+                SettingsRowDivider()
+
                 SettingRow(
                     title: "Play Sounds",
                     description: "Play crisp audio cues for turn completions, command failures, and Mini Pet interactions."
@@ -151,38 +223,7 @@ struct NotchHUDSettingsPane: View {
                         .labelsHidden()
                 }
             }
-
-            Section("Quick Actions") {
-                SettingRow(
-                    title: "Notch Status",
-                    description: statusSubtitle,
-                    descriptionStyle: .subtitle
-                ) {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(statusDotColor)
-                            .frame(width: 6, height: 6)
-
-                        Text(statusLabel)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                SettingRow(
-                    title: "Toggle Notch HUD",
-                    description: "Immediately expand or collapse the Notch HUD panel on the active display."
-                ) {
-                    Button("Toggle Notch") {
-                        onToggleNotch?()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
-                    .disabled(onToggleNotch == nil)
-                }
-            }
         }
-        .formStyle(.grouped)
     }
 
     private var isPaused: Bool {

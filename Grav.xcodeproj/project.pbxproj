@@ -70,6 +70,7 @@
 		8CA7E9A88CB1F1895C561CB7 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852BD2EC804A1743843856FE /* AppDelegate.swift */; };
 		8CF109A20EDC98490D24E345 /* NotchHUDSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC6AD83E77E0351195E31D2 /* NotchHUDSettingsPane.swift */; };
 		8EA536B96D3FD137481EDB3B /* LanguageIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECA5F119FC0A9559C7E19B80 /* LanguageIconView.swift */; };
+		8EDFA650984F9578AE8D84BD /* GravPrecisionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB45B5A97F54C0C237DC9B6 /* GravPrecisionSettings.swift */; };
 		91D3F498CDC55C2DBAFDBA40 /* ExpandedNotchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D80414C1DE01980C28A80A7E /* ExpandedNotchView.swift */; };
 		99C6DDB49219B483546F383D /* SwarmSubagentWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AA4D5DAB9532096AF75857D /* SwarmSubagentWatcher.swift */; };
 		A067CAF76F04349D2BCC5E94 /* GravOnboardingInstructionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0ED16A6DD522EF786F805CC /* GravOnboardingInstructionPanel.swift */; };
@@ -181,6 +182,7 @@
 		8A98C6410980250835F954E2 /* OnboardingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingWindowController.swift; sourceTree = "<group>"; };
 		8AD2BFC0EB482A7BD92E7778 /* NotchTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchTab.swift; sourceTree = "<group>"; };
 		8B6E5791B3ECCE0F3282AC33 /* TranscriptTailerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptTailerTests.swift; sourceTree = "<group>"; };
+		8BB45B5A97F54C0C237DC9B6 /* GravPrecisionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravPrecisionSettings.swift; sourceTree = "<group>"; };
 		8F6C215E35EBA9F7D3735BF6 /* PreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesStore.swift; sourceTree = "<group>"; };
 		8F6D0C56A09AC458AF195BB2 /* GravButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravButtonStyles.swift; sourceTree = "<group>"; };
 		91C5365F5C81059CA33138E1 /* MiniPetSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPetSettingsPane.swift; sourceTree = "<group>"; };
@@ -316,6 +318,7 @@
 			children = (
 				89DB957442A77B4D96BE4F37 /* AboutSettingsPane.swift */,
 				72CD0B6FECEE6F1844388B13 /* GeneralSettingsPane.swift */,
+				8BB45B5A97F54C0C237DC9B6 /* GravPrecisionSettings.swift */,
 				D955AE3AFBBD48C3582D82C0 /* MenuBarShortcutsPermissionsPanes.swift */,
 				91C5365F5C81059CA33138E1 /* MiniPetSettingsPane.swift */,
 				9AC6AD83E77E0351195E31D2 /* NotchHUDSettingsPane.swift */,
@@ -634,6 +637,7 @@
 				BB14A74A8328E1D5636BD5B4 /* GravOnboardingWelcome.swift in Sources */,
 				1940B0E8A7F2C61E35B37300 /* GravOnboardingWelcomeAudio.swift in Sources */,
 				0116BB96D5F38F2C48262403 /* GravPalette.swift in Sources */,
+				8EDFA650984F9578AE8D84BD /* GravPrecisionSettings.swift in Sources */,
 				D5BC543BAE973137B730FC0A /* GravTokens.swift in Sources */,
 				220A388048F22F57D801797A /* GravUnevenRoundedRectangle.swift in Sources */,
 				73DAA053421AD224E49CCF44 /* JSONValue.swift in Sources */,

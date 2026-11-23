@@ -1,18 +1,19 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Setting Row (Ported 1:1 from Snapzy's PreferencesSettingRow)
+// MARK: - Precision Setting Row
 
 /// Where a setting row's description is rendered.
 enum SettingRowDescriptionStyle: Sendable {
-    /// Static explanation revealed by hovering the ⓘ badge beside the title. Keeps rows single-line.
+    /// Clean inline subtitle rendered directly under the title for immediate scannability.
     case hint
-    /// Live state the user should see at a glance (a path, a session count, a live metric).
+    /// Live telemetry state or path rendered directly under the title.
     case subtitle
 }
 
-/// Reusable compact settings row: title with optional hover info popover or live subtitle,
-/// trailing control content, and search-jump scroll anchor with accent highlight flash.
+/// Precision settings row used inside `SettingsCardGroup`:
+/// clean two-line editorial typography, subtle hover wash, small macOS switch alignment,
+/// and animated search-jump highlight flash.
 struct SettingRow<Content: View>: View {
     let title: String
     let description: String?
@@ -23,46 +24,60 @@ struct SettingRow<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     @Environment(\.preferencesHighlightedSetting) private var highlightedSetting
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+
+    private var isHighlighted: Bool {
+        highlightedSetting == title
+    }
 
     var body: some View {
-        row
-            .id(title)
-            .background {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.accentColor.opacity(highlightedSetting == title ? 0.16 : 0))
-                    .padding(.horizontal, -6)
-                    .padding(.vertical, -4)
-                    .animation(.easeInOut(duration: 0.35), value: highlightedSetting == title)
-            }
-    }
+        HStack(alignment: alignment, spacing: 16) {
+            VStack(alignment: .leading, spacing: 2.5) {
+                HStack(spacing: 5) {
+                    Text(title)
+                        .font(.system(size: 12.8, weight: .medium))
+                        .foregroundStyle(.primary)
 
-    private var row: some View {
-        HStack(alignment: alignment, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                if let hintText {
-                    Text(title)
-                        .settingsHint(hintText, variant: .icon(.info))
-                } else {
-                    Text(title)
+                    if let tooltip, !tooltip.isEmpty {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .help(tooltip)
+                    }
                 }
 
-                if descriptionStyle == .subtitle, let description {
+                if let description, !description.isEmpty {
                     Text(description)
-                        .font(.caption)
+                        .font(.system(size: 11.2, weight: .regular))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            Spacer()
-            content()
-        }
-    }
+            Spacer(minLength: 12)
 
-    private var hintText: String? {
-        let hinted = descriptionStyle == .hint ? description : nil
-        let parts = [hinted, tooltip].compactMap { $0 }.filter { !$0.isEmpty }
-        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+            content()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .id(title)
+        .background {
+            if isHighlighted {
+                Color.accentColor.opacity(0.14)
+            } else if isHovering {
+                Color.primary.opacity(0.024)
+            } else {
+                Color.clear
+            }
+        }
+        .contentShape(Rectangle())
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: isHighlighted)
+        .onHover { isHovering = $0 }
     }
 }
 
@@ -77,89 +92,5 @@ extension EnvironmentValues {
     var preferencesHighlightedSetting: String? {
         get { self[PreferencesHighlightedSettingKey.self] }
         set { self[PreferencesHighlightedSettingKey.self] = newValue }
-    }
-}
-
-// MARK: - Hover Hint Popover (Ported 1:1 from Snapzy's TooltipView)
-
-enum SettingsHintIconStyle: Sendable {
-    case info
-
-    var systemImage: String {
-        switch self {
-        case .info: return "info.circle.fill"
-        }
-    }
-}
-
-enum SettingsHintVariant: Sendable {
-    case inline
-    case icon(SettingsHintIconStyle)
-}
-
-extension View {
-    func settingsHint(_ text: String, variant: SettingsHintVariant = .inline) -> some View {
-        modifier(SettingsHintModifier(text: text, variant: variant))
-    }
-}
-
-private struct SettingsHintModifier: ViewModifier {
-    let text: String
-    let variant: SettingsHintVariant
-
-    @State private var isHovering = false
-
-    func body(content: Content) -> some View {
-        switch variant {
-        case .inline:
-            content
-                .onHover { hovering in isHovering = hovering }
-                .popover(isPresented: $isHovering, arrowEdge: .bottom) {
-                    SettingsHintPopoverContent(text: text)
-                }
-
-        case .icon(let style):
-            HStack(spacing: 6) {
-                content
-
-                Image(systemName: style.systemImage)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .onHover { hovering in isHovering = hovering }
-                    .popover(isPresented: $isHovering, arrowEdge: .bottom) {
-                        SettingsHintPopoverContent(text: text)
-                    }
-            }
-        }
-    }
-}
-
-private struct SettingsHintPopoverContent: View {
-    let text: String
-
-    private static let fontSize: CGFloat = 11
-    private static let maxTextWidth: CGFloat = 240
-    private static let horizontalPadding: CGFloat = 10
-    private static let verticalPadding: CGFloat = 6
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: Self.fontSize))
-            .foregroundStyle(.primary)
-            .lineLimit(nil)
-            .frame(width: Self.textWidth(for: text), alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, Self.horizontalPadding)
-            .padding(.vertical, Self.verticalPadding)
-            .fixedSize()
-    }
-
-    private static func textWidth(for text: String) -> CGFloat {
-        let rect = (text as NSString).boundingRect(
-            with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: NSFont.systemFont(ofSize: fontSize)]
-        )
-        return min(ceil(rect.width) + 2, maxTextWidth)
     }
 }

@@ -1,25 +1,105 @@
 import AppKit
 import SwiftUI
 
-/// Native grouped-form Telemetry preferences pane backed by live `AntigravityTelemetryStore` state.
+/// Precision Canvas Telemetry pane with a live 3-metric Flight Deck strip (Live State, Active Model,
+/// Rolling Token Flow & Context Meter) plus Antigravity Runtime and Session Monitoring cards.
 struct TelemetrySettingsPane: View {
     @Bindable var preferences: PreferencesStore
     let store: AntigravityTelemetryStore
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var didCopyBrainPath = false
 
     var body: some View {
         let status = store.connectionStatus
 
-        Form {
-            Section("Antigravity Runtime") {
+        SettingsPageCanvas(
+            tab: .telemetry,
+            subtitle: "Zero-polling local kqueue & SQLite WAL bridge to Google Antigravity."
+        ) {
+            HStack(spacing: 6) {
+                SettingsActionPill(title: "Refresh", systemImage: "arrow.clockwise") {
+                    store.refreshConnectionStatus()
+                }
+                SettingsActionPill(
+                    title: status.isAppRunning ? "Focus Antigravity" : "Open Antigravity",
+                    systemImage: "arrow.up.forward.app"
+                ) {
+                    store.activateAntigravityApp()
+                }
+            }
+        } content: {
+            // Live Telemetry Flight-Deck Strip (pure precision instrumentation)
+            SettingsCardGroup(
+                title: "Live Session Flight Deck",
+                badge: store.isPaused ? "PAUSED" : (store.state.isActive ? "STREAMING" : "IDLE"),
+                staggerIndex: 0,
+                contentPadding: EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12)
+            ) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        SettingsMetricTile(
+                            label: "State",
+                            value: store.isPaused ? "Paused" : store.state.label,
+                            detail: store.executionMode.rawValue,
+                            accentDot: runtimeDotColor(for: status)
+                        )
+
+                        SettingsMetricTile(
+                            label: "Active Model",
+                            value: shortModelName,
+                            detail: store.tokenMetrics.lastTurnTokensPerSecond.map { "\(Int($0.rounded())) tok/s" } ?? "Waiting"
+                        )
+
+                        SettingsMetricTile(
+                            label: "Token Flow",
+                            value: TokenMetrics.formatCompact(store.tokenMetrics.totalTokens),
+                            detail: "↓\(TokenMetrics.formatCompact(store.tokenMetrics.inputTokens)) · ↑\(TokenMetrics.formatCompact(store.tokenMetrics.outputTokens))"
+                        )
+                    }
+
+                    if store.tokenMetrics.latestContextTokens > 0 {
+                        let ratio = store.tokenMetrics.contextFillRatio
+                        let pct = Int((ratio * 100.0).rounded())
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text("Context Window")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text(
+                                    verbatim: "\(TokenMetrics.formatCompact(store.tokenMetrics.latestContextTokens)) / \(TokenMetrics.formatCompact(store.tokenMetrics.contextWindowLimit)) (\(pct)%)"
+                                )
+                                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                                .monospacedDigit()
+                                .foregroundStyle(store.tokenMetrics.isContextNearCompaction ? GravPalette.fileEdit : .secondary)
+                            }
+
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule(style: .continuous)
+                                        .fill(Color.primary.opacity(0.08))
+                                    Capsule(style: .continuous)
+                                        .fill(store.tokenMetrics.isContextNearCompaction ? GravPalette.fileEdit : GravPalette.glacialCyan)
+                                        .frame(width: max(6, geo.size.width * ratio))
+                                        .animation(reduceMotion ? nil : .spring(duration: 0.42, bounce: 0.08), value: ratio)
+                                }
+                            }
+                            .frame(height: 4)
+                        }
+                        .padding(.horizontal, 2)
+                    }
+                }
+            }
+
+            SettingsCardGroup(title: "Antigravity Runtime", staggerIndex: 1) {
                 SettingRow(
                     title: "Antigravity App",
                     description: runtimeDescription(for: status),
                     descriptionStyle: .subtitle
                 ) {
                     HStack(spacing: 8) {
-                        AntigravityLogoView(icon: store.antigravityIcon, size: 20)
+                        AntigravityLogoView(icon: store.antigravityIcon, size: 19)
 
                         HStack(spacing: 5) {
                             Circle()
@@ -30,23 +110,10 @@ struct TelemetrySettingsPane: View {
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }
-
-                        Button {
-                            store.refreshConnectionStatus()
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Refresh Antigravity connection status")
-
-                        Button(status.isAppRunning ? "Focus" : "Open") {
-                            store.activateAntigravityApp()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.regular)
                     }
                 }
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Brain Directory",
@@ -54,52 +121,54 @@ struct TelemetrySettingsPane: View {
                     descriptionStyle: .subtitle
                 ) {
                     HStack(spacing: 6) {
-                        Button {
+                        SettingsActionPill(
+                            title: didCopyBrainPath ? "Copied" : "Copy",
+                            systemImage: didCopyBrainPath ? "checkmark" : "doc.on.doc"
+                        ) {
                             copyBrainPath(status.brainDirectoryURL.path)
-                        } label: {
-                            Image(systemName: didCopyBrainPath ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 11, weight: .medium))
                         }
-                        .buttonStyle(.borderless)
-                        .help(didCopyBrainPath ? "Copied" : "Copy brain directory path")
 
                         if status.needsFolderAccess {
-                            Button("Grant Access") {
+                            SettingsActionPill(title: "Grant Access", systemImage: "lock.open", prominent: true) {
                                 store.requestBrainFolderAccess()
                             }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.regular)
                         }
 
-                        Button("Reveal") {
+                        SettingsActionPill(title: "Reveal", systemImage: "folder") {
                             revealBrainFolder(status.brainDirectoryURL)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.regular)
                     }
                 }
             }
 
-            Section("Sessions & Monitoring") {
+            SettingsCardGroup(title: "Sessions & Monitoring", staggerIndex: 2) {
                 SettingRow(
                     title: "Active Conversations",
                     description: conversationSummary(for: status),
                     descriptionStyle: .subtitle
                 ) {
                     Text("\(conversationCount(for: status))")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.system(size: 13.5, weight: .semibold, design: .monospaced))
                         .monospacedDigit()
                         .foregroundStyle(.primary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.primary.opacity(0.06))
+                        )
                 }
 
                 if !store.sessions.isEmpty {
+                    SettingsRowDivider()
+
                     SettingRow(
                         title: "Active Session",
                         description: "Pin a specific local conversation to stream into the Notch HUD."
                     ) {
                         Picker("", selection: activeSessionBinding) {
                             ForEach(store.sessions) { session in
-                                Text(session.title)
+                                Text(cleanSessionTitle(session.title))
                                     .tag(session.id)
                             }
                         }
@@ -109,6 +178,8 @@ struct TelemetrySettingsPane: View {
                     }
                 }
 
+                SettingsRowDivider()
+
                 SettingRow(
                     title: "Pause Telemetry",
                     description: "Stop watching local transcripts and task logs until resumed."
@@ -117,37 +188,27 @@ struct TelemetrySettingsPane: View {
                         .labelsHidden()
                 }
             }
-
-            Section("Session Metrics") {
-                SettingRow(
-                    title: "Active Model",
-                    description: "Model reported by the most recent Antigravity planner step."
-                ) {
-                    Text(store.activeModel ?? "Waiting for activity")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(store.activeModel == nil ? .secondary : .primary)
-                        .lineLimit(1)
-                }
-
-                SettingRow(
-                    title: "Token Totals",
-                    description: tokenBreakdownSubtitle,
-                    descriptionStyle: .subtitle
-                ) {
-                    Text(TokenMetrics.formatCompact(store.tokenMetrics.totalTokens))
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                }
-            }
         }
-        .formStyle(.grouped)
         .onAppear {
             store.refreshConnectionStatus()
         }
     }
 
-    // MARK: - Bindings
+    // MARK: - Bindings & Helpers
+
+    private var shortModelName: String {
+        guard let raw = store.activeModel, !raw.isEmpty else { return "Standby" }
+        return raw
+    }
+
+    private func cleanSessionTitle(_ raw: String) -> String {
+        let cleaned = raw
+            .replacingOccurrences(of: "<USER_REQUEST>", with: "")
+            .replacingOccurrences(of: "</USER_REQUEST>", with: "")
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Active Session" : cleaned
+    }
 
     private var pauseTelemetryBinding: Binding<Bool> {
         Binding(
@@ -170,8 +231,6 @@ struct TelemetrySettingsPane: View {
         )
     }
 
-    // MARK: - Formatting
-
     private func conversationCount(for status: AntigravityConnectionStatus) -> Int {
         max(status.activeConversationCount, store.sessions.count)
     }
@@ -181,43 +240,27 @@ struct TelemetrySettingsPane: View {
             return "Grant access to ~/.gemini/antigravity/brain to discover conversations."
         }
         let count = conversationCount(for: status)
-        if count == 0 {
-            return "No local transcript logs found yet."
-        }
-        return count == 1
-            ? "1 local conversation workspace indexed."
-            : "\(count) local conversation workspaces indexed."
+        if count == 0 { return "No local transcript logs found yet." }
+        return count == 1 ? "1 local conversation workspace indexed." : "\(count) local conversation workspaces indexed."
     }
 
     private func runtimeStatusLabel(for status: AntigravityConnectionStatus) -> String {
-        if store.isPaused || preferences.isTelemetryPaused {
-            return "Paused"
-        }
-        if status.isAppRunning {
-            return "Running"
-        }
-        if status.isAppInstalled {
-            return "Installed"
-        }
+        if store.isPaused || preferences.isTelemetryPaused { return "Paused" }
+        if status.isAppRunning { return "Running" }
+        if status.isAppInstalled { return "Installed" }
         return "Not Found"
     }
 
     private func runtimeDotColor(for status: AntigravityConnectionStatus) -> Color {
-        if store.isPaused || preferences.isTelemetryPaused {
-            return .secondary
-        }
-        if status.isAppRunning && status.isBrainAccessible {
-            return .green
-        }
-        if status.isAppInstalled {
-            return .orange
-        }
+        if store.isPaused || preferences.isTelemetryPaused { return .secondary }
+        if status.isAppRunning && status.isBrainAccessible { return GravPalette.emerald }
+        if status.isAppInstalled { return .orange }
         return .red
     }
 
     private func runtimeDescription(for status: AntigravityConnectionStatus) -> String {
         if status.isAppRunning {
-            return "Detected at \(status.appURL.path) · Event-driven kqueue observation"
+            return "Detected at \(status.appURL.path) · Event-driven kqueue + SQLite WAL"
         }
         if status.isAppInstalled {
             return "Installed at \(status.appURL.path) · Launch Antigravity for live streaming"
@@ -225,23 +268,10 @@ struct TelemetrySettingsPane: View {
         return "Expected at /Applications/Antigravity.app"
     }
 
-    private var tokenBreakdownSubtitle: String {
-        let metrics = store.tokenMetrics
-        guard metrics.totalTokens > 0 else {
-            return "Input, cache read, and output counts populate as planner steps arrive."
-        }
-        let input = TokenMetrics.formatCompact(metrics.inputTokens)
-        let cache = TokenMetrics.formatCompact(metrics.cacheReadTokens)
-        let output = TokenMetrics.formatCompact(metrics.outputTokens)
-        return "Input \(input) · Cache \(cache) · Output \(output)"
-    }
-
     private func abbreviatedPath(_ url: URL) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let path = url.path
-        if path.hasPrefix(home) {
-            return "~" + path.dropFirst(home.count)
-        }
+        if path.hasPrefix(home) { return "~" + path.dropFirst(home.count) }
         return path
     }
 
@@ -250,11 +280,7 @@ struct TelemetrySettingsPane: View {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } else {
             let parent = url.deletingLastPathComponent()
-            if FileManager.default.fileExists(atPath: parent.path) {
-                NSWorkspace.shared.activateFileViewerSelecting([parent])
-            } else {
-                NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser)
-            }
+            NSWorkspace.shared.open(FileManager.default.fileExists(atPath: parent.path) ? parent : FileManager.default.homeDirectoryForCurrentUser)
         }
     }
 
@@ -262,7 +288,6 @@ struct TelemetrySettingsPane: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(path, forType: .string)
         didCopyBrainPath = true
-
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(1500))
             didCopyBrainPath = false

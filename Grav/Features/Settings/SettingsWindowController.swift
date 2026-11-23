@@ -9,11 +9,11 @@ import SwiftUI
 /// AppKit enforcement, dynamic `appearanceMode` syncing, and `.regular` ↔ `.accessory` elevation.
 @MainActor
 public final class SettingsWindowController: NSWindowController, NSWindowDelegate {
-    /// Default content size: wide enough for the 220pt sidebar and grouped form cards.
-    public static let defaultContentSize = CGSize(width: 800, height: 620)
+    /// Default content size: wide enough for the 224pt sidebar and Precision Canvas cards.
+    public static let defaultContentSize = CGSize(width: 880, height: 660)
 
     /// Minimum window size to prevent label truncation.
-    public static let minimumContentSize = CGSize(width: 700, height: 520)
+    public static let minimumContentSize = CGSize(width: 740, height: 540)
 
     private let preferences: PreferencesStore
     private let store: AntigravityTelemetryStore

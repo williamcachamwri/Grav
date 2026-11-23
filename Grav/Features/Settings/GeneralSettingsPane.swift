@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// Native grouped-form General preferences pane matching Snapzy's `GeneralSettingsView`.
+/// Precision Canvas General preferences pane: Startup, Appearance, Liquid Glass & Onboarding.
 struct GeneralSettingsPane: View {
     @Bindable var preferences: PreferencesStore
     var onReplayWelcome: (() -> Void)?
 
     var body: some View {
-        Form {
-            Section("Startup") {
+        SettingsPageCanvas(
+            tab: .general,
+            subtitle: "Startup behavior, window appearance, Liquid Glass chrome, and welcome walkthrough."
+        ) {
+            SettingsCardGroup(title: "Startup & Integration", staggerIndex: 0) {
                 SettingRow(
                     title: "Launch at Login",
                     description: "Start Grav automatically in your menu bar when you sign in to macOS."
@@ -17,26 +20,30 @@ struct GeneralSettingsPane: View {
                 }
 
                 if let errorMessage = preferences.launchAtLoginError, !errorMessage.isEmpty {
-                    HStack(alignment: .top, spacing: 6) {
+                    HStack(alignment: .center, spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption)
+                            .font(.system(size: 11))
                             .foregroundStyle(.orange)
                         Text(errorMessage)
-                            .font(.caption)
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 10)
                 }
+
+                SettingsRowDivider()
 
                 SettingRow(
                     title: "Show Menu Bar Icon",
-                    description: "Display Grav's orbital telemetry status icon in the macOS menu bar."
+                    description: "Display Grav's orbital telemetry status icon and quick menu in the macOS menu bar."
                 ) {
                     Toggle("", isOn: $preferences.showMenuBarIcon)
                         .labelsHidden()
                 }
             }
 
-            Section("Appearance") {
+            SettingsCardGroup(title: "Appearance & Feedback", staggerIndex: 1) {
                 SettingRow(
                     title: "Appearance",
                     description: "Choose System to match macOS automatically, or pin Grav to Light or Dark mode.",
@@ -45,37 +52,38 @@ struct GeneralSettingsPane: View {
                     AppearanceModePicker(selection: $preferences.appearanceMode)
                 }
 
+                SettingsRowDivider()
+
                 SettingRow(
                     title: "Liquid Glass",
-                    description: "Enable translucent Liquid Glass materials across Grav surfaces and controls."
+                    description: "Use macOS translucent Liquid Glass optical refraction across Grav surfaces and previews."
                 ) {
                     Toggle("", isOn: $preferences.useLiquidGlass)
                         .labelsHidden()
                 }
 
+                SettingsRowDivider()
+
                 SettingRow(
                     title: "Sound Effects",
-                    description: "Play ambient soundscape and subtle tactile glass cues during the welcome experience."
+                    description: "Play subtle tactile chimes for completions, failures, and onboarding transitions."
                 ) {
                     Toggle("", isOn: $preferences.playSounds)
                         .labelsHidden()
                 }
             }
 
-            Section("Help") {
+            SettingsCardGroup(title: "Walkthrough", staggerIndex: 2) {
                 SettingRow(
                     title: "Restart Onboarding",
-                    description: "Revisit the welcome screen, live Antigravity connection check, and Notch HUD walkthrough."
+                    description: "Reopen the interactive welcome experience, Notch HUD demo, and Mini Pet studio."
                 ) {
-                    Button("Restart") {
+                    SettingsActionPill(title: "Replay Welcome", systemImage: "arrow.counterclockwise") {
                         onReplayWelcome?()
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear {
             preferences.refreshLaunchAtLoginStatus()
         }
