@@ -806,4 +806,16 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(outArt.toolActivities.first?.kind, .artifact)
         XCTAssertEqual(outArt.toolActivities.first?.title, "Artifact · plan.md")
     }
+
+    func testSuperSaiyanAudioSourceNodeRendersSafelyOffMainThread() {
+        let expectation = expectation(description: "Offline AVAudioSourceNode render off main thread")
+        var renderedPeak: Float = 0
+        DispatchQueue.global(qos: .userInteractive).async {
+            XCTAssertFalse(Thread.isMainThread)
+            renderedPeak = SuperSaiyanAudioEngine.renderTestFramesOffMainThread(theme: .superSaiyan)
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 5.0)
+        XCTAssertGreaterThan(renderedPeak, 0.001, "Super Saiyan real-time DSP should render non-zero audio frames safely off the main thread")
+    }
 }

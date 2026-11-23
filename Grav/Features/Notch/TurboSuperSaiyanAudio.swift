@@ -127,12 +127,11 @@ public final class SuperSaiyanAudioEngine {
         }
 
         if sourceNode == nil {
-            let dspRef = dsp
-            dspRef.setSampleRate(sampleRate)
-            let node = AVAudioSourceNode(format: renderFormat) { _, _, frameCount, audioBufferList -> OSStatus in
-                dspRef.render(frameCount: Int(frameCount), audioBufferList: audioBufferList)
-                return noErr
-            }
+            dsp.setSampleRate(sampleRate)
+            // CRITICAL (Swift 6): Construct `AVAudioSourceNode` via a `nonisolated` factory so the
+            // render closure does NOT inherit `@MainActor` isolation and never trips
+            // `_dispatch_assert_queue_fail` on CoreAudio's real-time `IOThread.client`!
+            let node = Self.makeNonIsolatedSourceNode(format: renderFormat, dsp: dsp)
             audioEngine.attach(node)
             audioEngine.connect(node, to: mixer, format: renderFormat)
             mixer.outputVolume = 1.0
@@ -147,6 +146,50 @@ public final class SuperSaiyanAudioEngine {
         } catch {
             // Silently ignore unavailable audio hardware
         }
+    }
+
+    /// Strictly `nonisolated` factory ensuring the CoreAudio render block carries zero `@MainActor`
+    /// runtime executor assertions on `com.apple.audio.IOThread.client`.
+    nonisolated private static func makeNonIsolatedSourceNode(
+        format: AVAudioFormat,
+        dsp: RealTimeSuperSaiyanDSPState
+    ) -> AVAudioSourceNode {
+        AVAudioSourceNode(format: format) { _, _, frameCount, audioBufferList -> OSStatus in
+            dsp.render(frameCount: Int(frameCount), audioBufferList: audioBufferList)
+            return noErr
+        }
+    }
+
+    /// Runs an offline off-main-thread render pass through the exact `AVAudioSourceNode` factory
+    /// (used by XCTest to guarantee Swift 6 never injects `@MainActor` checks onto the CoreAudio thread).
+    nonisolated internal static func renderTestFramesOffMainThread(theme: SuperSaiyanAuraTheme = .superSaiyan) -> Float {
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2) else { return 0 }
+        let testDSP = RealTimeSuperSaiyanDSPState()
+        testDSP.setSampleRate(44_100)
+        testDSP.applyTheme(theme)
+        testDSP.triggerEruption(gain: 0.85)
+        testDSP.setContinuousAura(active: true, targetLevel: 0.5)
+
+        let engine = AVAudioEngine()
+        let node = makeNonIsolatedSourceNode(format: format, dsp: testDSP)
+        engine.attach(node)
+        engine.connect(node, to: engine.mainMixerNode, format: format)
+
+        guard (try? engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 512)) != nil,
+              (try? engine.start()) != nil,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 512)
+        else {
+            return 0
+        }
+        defer { engine.stop() }
+
+        let status = try? engine.renderOffline(512, to: buffer)
+        guard status == .success, let ch0 = buffer.floatChannelData?[0] else { return 0 }
+        var peak: Float = 0
+        for i in 0..<Int(buffer.frameLength) {
+            peak = max(peak, abs(ch0[i]))
+        }
+        return peak
     }
 
     private func scheduleSleepCheckIfNotLooping() {
@@ -331,12 +374,13 @@ private final class RealTimeSuperSaiyanDSPState: @unchecked Sendable {
         let targetRoot = ctrl.theme.audioRootHz
 
         let abl = UnsafeMutableAudioBufferListPointer(audioBufferList)
-        guard abl.count >= 2,
-              let outL = abl[0].mData?.assumingMemoryBound(to: Float.self),
-              let outR = abl[1].mData?.assumingMemoryBound(to: Float.self)
-        else {
+        guard abl.count >= 1 else { return }
+        let outL = abl[0].mData?.assumingMemoryBound(to: Float.self)
+        let outR = abl.count >= 2 ? abl[1].mData?.assumingMemoryBound(to: Float.self) : outL
+        guard let outL, let outR else {
             return
         }
+        let isMono = (abl.count == 1)
 
         let bufMask = Self.delayBufSize - 1
 
@@ -524,8 +568,14 @@ private final class RealTimeSuperSaiyanDSPState: @unchecked Sendable {
             }
 
             // Warm analog soft-clipping limiter — punchy, full, zero digital harshness
-            outL[frame] = Float(tanh(mixL * 1.18) * 0.82)
-            outR[frame] = Float(tanh(mixR * 1.18) * 0.82)
+            let finalL = Float(tanh(mixL * 1.18) * 0.82)
+            let finalR = Float(tanh(mixR * 1.18) * 0.82)
+            if isMono {
+                outL[frame] = (finalL + finalR) * 0.5
+            } else {
+                outL[frame] = finalL
+                outR[frame] = finalR
+            }
         }
     }
 
