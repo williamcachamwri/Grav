@@ -1,35 +1,80 @@
+<div align="center">
+
+<img src="Assets/grav-banner.png" alt="Grav 1.0 — Antigravity companion in your MacBook notch" width="100%" />
+
+<br />
+<br />
+
 # Grav
 
-Native macOS 14+ SwiftUI + AppKit menu-bar and hardware-notch telemetry companion for Google **Antigravity** (`/Applications/Antigravity.app`), powered by [NotchKit](https://github.com/duongductrong/NotchKit) (`1.3.0`).
+A lightweight native macOS notch companion for **Google Antigravity**.
 
-Grav turns the MacBook hardware notch — and falls back cleanly to a standalone top-edge pill on external displays — into a 120Hz flight-deck telemetry island driven exclusively by real local Antigravity runtime files under `~/.gemini/antigravity/brain/`.
+<p>
+  <img src="https://img.shields.io/badge/macOS-14%2B-18181b?style=flat-square&labelColor=09090b&logo=apple&logoColor=a1a1aa" alt="macOS 14+" />
+  <img src="https://img.shields.io/badge/Swift-6.0-18181b?style=flat-square&labelColor=09090b&logo=swift&logoColor=a1a1aa" alt="Swift 6" />
+  <img src="https://img.shields.io/badge/Display-120fps%20GPU-18181b?style=flat-square&labelColor=09090b" alt="120fps GPU" />
+  <img src="https://img.shields.io/badge/Memory-~68%20MB-18181b?style=flat-square&labelColor=09090b" alt="~68 MB RAM" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-27272a?style=flat-square&labelColor=09090b" alt="MIT License" /></a>
+</p>
 
-## Architecture
+</div>
 
-- **`Grav/App/`**: Accessory lifecycle (`LSUIElement = YES`), `AppDelegate`, `PreferencesStore` (`SMAppService.mainApp`), and native monochrome template `MenuBarController`.
-- **`Grav/Core/Telemetry/`**: Event-driven, zero-mock local Antigravity ingestion engine:
-  - `AntigravityAppDetector`: Bundle (`com.google.antigravity`) and `/Applications/Antigravity.app` detection, cached real icon extraction, window activation, and optional security-scoped bookmarking.
-  - `ConversationDiscovery`: `DispatchSource.makeFileSystemObjectSource` directory watcher for `~/.gemini/antigravity/brain/<uuid>/.system_generated/logs/transcript.jsonl`.
-  - `TranscriptTailer`: Swift `actor` maintaining persisted byte offsets, partial-line buffering, truncation/rotation recovery, and on-demand single-step lookups in `transcript_full.jsonl`.
-  - `TaskLogTailer`: Incremental live tailer for `.system_generated/tasks/task-<id>.log` and `.system_generated/steps/<idx>/output.txt` with `ANSIStripper` normalization.
-  - `DiffComputer` & `DestructiveCommandParser`: Real line-level LCS diff hunks (`+added / -removed`) for `edit_file`, `replace_file_content`, `multi_replace_file_content`, `write_file`, and shell `rm` / `git rm` / `unlink` path extraction.
-  - `EventClassifier` & `AntigravityTelemetryStore`: Pure `Sendable` state machine (`idle -> thinking -> editing / runningCommand -> idle`) and `@MainActor @Observable` store with active-only idle decay (`< 0.5%` idle CPU).
-- **`Grav/Features/Notch/`**: `NotchKit 1.3.0` single-shape morphing HUD (`NotchHUDCoordinator`, `CollapsedNotchView` via `NotchCutoutLayout` + CALayer `NotchBars`, and 3-tab `ExpandedNotchView` across `Live`, `Files`, and `Terminal` with `1`/`2`/`3`, `Esc`, and `⌘C` shortcuts).
-- **`Grav/Features/Onboarding/`**: Dark Liquid Glass borderless floating onboarding window (`1060×720`–`1280×826`), 7-beat Glacial Teal-Cyan organic portal welcome choreography, 3-step live setup flow, and full-screen curved-arc notch arrival finale.
-- **`Grav/Features/Settings/`**: Full Light/Dark adaptive macOS Settings window (`520×440`, unified titlebar).
-- **`Grav/DesignSystem/`**: Aerospace Obsidian (`#05080C`) × Glacial Teal-Cyan (`#14B8A6` → `#38BDF8`) palette, continuous corner geometry tokens, Dark Liquid Glass primitives, and semantic telemetry indicators.
+---
 
-## Building & Testing
+Grav sits in your MacBook notch (or as a minimal top pill on external monitors) and shows what Antigravity is doing right now—without switching windows. Everything is read locally from Antigravity's runtime files, stays under ~70 MB of RAM, and idles near 0% CPU.
 
-Requires macOS 14.0+ and Xcode 16+ (Swift 6 strict concurrency enabled).
+## What it does
+
+- **Live Notch HUD** — Watch reasoning, streamed replies, file diffs (`+added / -removed`), terminal output, and swarm agents in real time. Switching between chats hits an in-memory LRU cache in under a millisecond.
+- **Drop to Chat** — Drag screenshots or files straight up to the notch to open the drop shelf, type a prompt, and send it directly into your active Antigravity session (or spin up a new chat).
+- **Usage & Models** — Check 5-hour and 7-day activity, session token counts, live context window fill, and active Gemini models right from the notch.
+- **Desktop Mini Pet** — An optional pixel-art buddy on your desktop that reacts to builds, edits, and thinking turns, composited directly on the GPU via CoreAnimation.
+- **Built to stay out of your way** — Event-driven `kqueue` file watchers, read-only SQLite WAL inspection, FTS5 Spotlight search across past chats, and GPU-offloaded animations for locked 120Hz ProMotion.
+
+## Shortcuts
+
+| Shortcut | Action |
+| :--- | :--- |
+| `⌥ Space` | Toggle Notch HUD |
+| `1` – `5` | Switch between Live, Reply, Files, Terminal, and Swarm tabs |
+| `⌘ [` / `⌘ ]` | Cycle recent Antigravity chats |
+| `⌘ D` | Open Drop Shelf & Prompt Composer |
+| `⌘ U` | Open Usage & Models drawer |
+| `⌘ C` | Copy active reply, diff, or command output |
+| `⌘ L` | Pin or unpin the notch |
+| `Esc` | Close drawer or collapse notch |
+
+## Build from source
+
+Requires **macOS 14.0+** and **Xcode 16+** (Swift 6).
 
 ```bash
-# Regenerate Xcode project from project.yml (optional)
-xcodegen generate
+# Clone the repo
+git clone https://github.com/<your-username>/Grav.git
+cd Grav
 
-# Build Grav.app
+# Build Debug (Apple Silicon)
 xcodebuild -project Grav.xcodeproj -scheme Grav -configuration Debug -destination 'platform=macOS,arch=arm64' build
 
-# Run XCTest unit suite
-xcodebuild -project Grav.xcodeproj -scheme Grav -configuration Debug -destination 'platform=macOS,arch=arm64' test
+# Build Universal Release (arm64 + x86_64)
+xcodebuild -project Grav.xcodeproj -scheme Grav -configuration Release ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build
+
+# Run unit tests
+xcodebuild -project Grav.xcodeproj -scheme Grav -configuration Debug test
 ```
+
+If you edit `project.yml`, regenerate the Xcode project with `xcodegen generate`.
+
+> **Note on Active-Chat Send:** Sending prompts straight into your currently open Antigravity session uses macOS Accessibility (`CGEvent`) to paste and submit cleanly. When prompted, grant Grav permission in **System Settings → Privacy & Security → Accessibility**. Signing locally with a consistent Apple Development certificate keeps that permission across rebuilds.
+
+## Privacy & local-only design
+
+Grav reads local session files under `~/.gemini/antigravity/` (transcripts, task logs, annotations, and read-only SQLite WAL snapshots). It never uploads your prompts, code, or usage data anywhere.
+
+## Contributing
+
+Bug reports, ideas, and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
+
+## License
+
+Grav is released under the [MIT License](LICENSE). Built with [NotchKit](https://github.com/duongductrong/NotchKit).
