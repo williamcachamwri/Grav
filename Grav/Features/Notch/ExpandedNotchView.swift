@@ -79,33 +79,40 @@ public struct ExpandedNotchView: View {
                     swarmCount: store.totalAgentsBadgeCount,
                     hasStreamingReply: store.latestResponse?.isStreaming == true && !store.isPaused,
                     hasRunningCommand: store.activeCommand != nil && !store.isPaused,
-                    hasActiveSwarm: (store.activeSwarmSnapshot != nil || store.runningSubagentCount > 0) && !store.isPaused
-                )
-
-                tabViewport
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-            if isShowingProfile {
-                AntigravityProfileDrawerView(
-                    store: store,
-                    onDismiss: {
-                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
-                            isShowingProfile = false
+                    hasActiveSwarm: (store.activeSwarmSnapshot != nil || store.runningSubagentCount > 0) && !store.isPaused,
+                    isSelectionDimmed: isShowingProfile,
+                    onSelectAnyTab: { _ in
+                        if isShowingProfile {
+                            withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                                isShowingProfile = false
+                            }
                         }
                     }
                 )
-                .padding(.top, 30)
+
+                ZStack {
+                    if isShowingProfile {
+                        AntigravityProfileDrawerView(
+                            store: store,
+                            onDismiss: {
+                                withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                                    isShowingProfile = false
+                                }
+                            }
+                        )
+                        .id("notch-inline-profile")
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 4)))
+                    } else {
+                        tabViewport
+                            .id("notch-tab-viewport")
+                            .transition(.opacity)
+                    }
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .transition(
-                    reduceMotion
-                        ? .opacity
-                        : .opacity.combined(with: .scale(scale: 0.985, anchor: .top))
-                )
-                .zIndex(10)
+                .clipped()
+                .animation(reduceMotion ? nil : GravMotion.contentSlide, value: isShowingProfile)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             if let message = statusBannerMessage {
                 HStack(spacing: 5) {
@@ -335,12 +342,14 @@ public struct ExpandedNotchView: View {
     }
 
     private func switchTab(to target: NotchTab) {
-        guard target != selectedTab else { return }
+        guard target != selectedTab || isShowingProfile else { return }
         slideDirection = target.rawValue >= selectedTab.rawValue ? 1 : -1
         if reduceMotion {
+            isShowingProfile = false
             selectedTab = target
         } else {
             withAnimation(GravMotion.contentSlide) {
+                isShowingProfile = false
                 selectedTab = target
             }
         }

@@ -12,6 +12,8 @@ public struct SegmentedModeRail: View {
     public var hasStreamingReply: Bool
     public var hasRunningCommand: Bool
     public var hasActiveSwarm: Bool
+    public var isSelectionDimmed: Bool
+    public var onSelectAnyTab: ((NotchTab) -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var railNamespace
@@ -26,7 +28,9 @@ public struct SegmentedModeRail: View {
         swarmCount: Int = 0,
         hasStreamingReply: Bool = false,
         hasRunningCommand: Bool = false,
-        hasActiveSwarm: Bool = false
+        hasActiveSwarm: Bool = false,
+        isSelectionDimmed: Bool = false,
+        onSelectAnyTab: ((NotchTab) -> Void)? = nil
     ) {
         self._selection = selection
         self.liveCount = liveCount
@@ -37,6 +41,8 @@ public struct SegmentedModeRail: View {
         self.hasStreamingReply = hasStreamingReply
         self.hasRunningCommand = hasRunningCommand
         self.hasActiveSwarm = hasActiveSwarm
+        self.isSelectionDimmed = isSelectionDimmed
+        self.onSelectAnyTab = onSelectAnyTab
     }
 
     public var body: some View {
@@ -53,7 +59,7 @@ public struct SegmentedModeRail: View {
     }
 
     private func tabButton(for tab: NotchTab) -> some View {
-        let isSelected = selection == tab
+        let isSelected = !isSelectionDimmed && selection == tab
         let isHovered = hoveredTab == tab
         let count = itemCount(for: tab)
 
@@ -135,8 +141,9 @@ public struct SegmentedModeRail: View {
     }
 
     private func select(_ tab: NotchTab) {
-        guard selection != tab else { return }
+        guard selection != tab || isSelectionDimmed else { return }
         GravOnboardingWelcomeAudio.shared.playTabSwitch()
+        onSelectAnyTab?(tab)
         if reduceMotion {
             selection = tab
         } else {

@@ -1,28 +1,17 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Profile, Usage & Models Drawer (`⌘U`)
+// MARK: - Inline Native Profile & Usage View (Flush Inside Notch, Zero Popover)
 
-/// Swiss-precision Account, Usage & Models drawer inside Grav's Expanded Notch.
-/// Strict anti-AI-slop standard: zero filler badges, zero apologetic callout boxes,
-/// zero empty "Unused" rows — pure tabular typographic hierarchy, a single 3pt proportional
-/// model-share hairline, and 120Hz `matchedGeometryEffect` spring transitions.
+/// Pure borderless native macOS Notch view for Account, Activity & Models.
+/// Sits directly on the pitch-black Notch surface — zero nested popover card, zero outer border,
+/// zero KPI dashboard eyebrows, zero stacked rainbow bars, zero redundant sub-tabs.
 public struct AntigravityProfileDrawerView: View {
     public var store: AntigravityTelemetryStore
     public var onDismiss: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var profileTabNamespace
 
-    private enum ProfileSection: String, CaseIterable, Identifiable {
-        case usage = "Usage"
-        case models = "Models"
-        var id: String { rawValue }
-    }
-
-    @State private var selectedSection: ProfileSection = .usage
-    @State private var animateBars: Bool = false
-    @State private var isRefreshing: Bool = false
     @State private var hoveredModelID: String?
     @State private var copiedModelID: String?
 
@@ -40,159 +29,90 @@ public struct AntigravityProfileDrawerView: View {
         )
     }
 
-    private var activeModelsWithUsage: [AntigravityAvailableModel] {
-        snapshot.availableModels.filter { $0.recentTokens7d > 0 || $0.recentTurns7d > 0 || isCurrentActiveModel($0) }
-    }
-
     public var body: some View {
-        VStack(spacing: 0) {
-            accountHeaderBar
+        VStack(alignment: .leading, spacing: 0) {
+            accountStrip
 
             Rectangle()
                 .fill(Color.white.opacity(0.07))
                 .frame(height: 0.5)
+                .padding(.vertical, 8)
 
-            ZStack {
-                switch selectedSection {
-                case .usage:
-                    usageContent
-                        .id(ProfileSection.usage)
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .asymmetric(
-                                    insertion: .opacity.combined(with: .move(edge: .leading)),
-                                    removal: .opacity.combined(with: .move(edge: .leading))
-                                )
-                        )
+            HStack(alignment: .top, spacing: 14) {
+                activityColumn
+                    .frame(width: 224, alignment: .leading)
 
-                case .models:
-                    modelsContent
-                        .id(ProfileSection.models)
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .asymmetric(
-                                    insertion: .opacity.combined(with: .move(edge: .trailing)),
-                                    removal: .opacity.combined(with: .move(edge: .trailing))
-                                )
-                        )
-                }
+                Rectangle()
+                    .fill(Color.white.opacity(0.07))
+                    .frame(width: 0.5)
+                    .padding(.vertical, 2)
+
+                modelsColumn
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-            .animation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.05), value: selectedSection)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(red: 0.068, green: 0.072, blue: 0.084).opacity(0.985))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.11), lineWidth: 0.6)
-                )
-        )
-        .shadow(color: Color.black.opacity(0.48), radius: 16, y: 6)
+        .padding(.horizontal, 6)
+        .padding(.top, 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             store.refreshProfileSnapshot()
-            if reduceMotion {
-                animateBars = true
-            } else {
-                animateBars = false
-                withAnimation(.spring(duration: 0.50, bounce: 0.06).delay(0.04)) {
-                    animateBars = true
-                }
-            }
-        }
-        .onKeyPress(.escape) {
-            onDismiss()
-            return .handled
         }
     }
 
-    // MARK: - Minimal Account Header Bar
+    // MARK: - Quiet Account Line (Flush, Borderless)
 
-    private var accountHeaderBar: some View {
-        HStack(spacing: 9) {
-            avatarBadge
+    private var accountStrip: some View {
+        HStack(spacing: 8) {
+            avatarCircle
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 0.5) {
                 HStack(spacing: 6) {
                     Text(snapshot.displayName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .tracking(-0.18)
-                        .foregroundStyle(Color.white.opacity(0.94))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.92))
                         .lineLimit(1)
 
                     if let planName = snapshot.planName, !planName.isEmpty {
-                        Text(planName)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.62))
-                            .padding(.horizontal, 5.5)
-                            .padding(.vertical, 1.5)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.white.opacity(0.075))
-                            )
-                            .fixedSize(horizontal: true, vertical: false)
+                        Text("· \(planName)")
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.42))
+                            .lineLimit(1)
                     }
                 }
 
                 if let email = snapshot.email, !email.isEmpty {
                     Text(email)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.white.opacity(0.42))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Color.white.opacity(0.38))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
             }
 
-            Spacer(minLength: 6)
-
-            sectionSegmentedPill
+            Spacer(minLength: 8)
 
             Button {
                 GravOnboardingWelcomeAudio.shared.playButtonTap()
                 store.activateAntigravityApp()
             } label: {
-                Image(systemName: "arrow.up.forward.app")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.50))
-                    .frame(width: 22, height: 22)
+                HStack(spacing: 3) {
+                    Text("Open Antigravity")
+                        .font(.system(size: 10.5, weight: .regular))
+                    Image(systemName: "arrow.up.forward")
+                        .font(.system(size: 8.5, weight: .medium))
+                }
+                .foregroundStyle(Color.white.opacity(0.50))
             }
-            .buttonStyle(NotchChromeButtonStyle(isActive: false, cornerRadius: 6))
-            .help("Open Antigravity")
-
-            Button {
-                triggerRefresh()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 9.5, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.48))
-                    .rotationEffect(.degrees(isRefreshing ? 360 : 0))
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(NotchChromeButtonStyle(isActive: false, cornerRadius: 6))
-            .help("Refresh")
-
-            Button {
-                onDismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.48))
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(NotchChromeButtonStyle(isActive: false, cornerRadius: 6))
-            .help("Close (Esc)")
+            .buttonStyle(.plain)
+            .help("Open Antigravity to view live server quota")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
     }
 
-    private var avatarBadge: some View {
+    private var avatarCircle: some View {
         ZStack {
             Circle()
-                .fill(Color.white.opacity(0.075))
+                .fill(Color.white.opacity(0.08))
 
             if let url = snapshot.avatarURL {
                 AsyncImage(url: url) { phase in
@@ -202,315 +122,138 @@ public struct AntigravityProfileDrawerView: View {
                             .resizable()
                             .scaledToFill()
                     default:
-                        initialsText
+                        Text(snapshot.initials)
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.76))
                     }
                 }
             } else {
-                initialsText
+                Text(snapshot.initials)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.76))
             }
         }
-        .frame(width: 26, height: 26)
+        .frame(width: 24, height: 24)
         .clipShape(Circle())
-        .overlay(
-            Circle()
-                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
-        )
     }
 
-    private var initialsText: some View {
-        Text(snapshot.initials)
-            .font(.system(size: 10, weight: .semibold, design: .rounded))
-            .foregroundStyle(Color.white.opacity(0.78))
-    }
+    // MARK: - Left Column: Quiet Native Activity Rows
 
-    private var sectionSegmentedPill: some View {
-        HStack(spacing: 2) {
-            ForEach(ProfileSection.allCases) { section in
-                let isSelected = selectedSection == section
-                Button {
-                    GravOnboardingWelcomeAudio.shared.playTabSwitch()
-                    withAnimation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.08)) {
-                        selectedSection = section
-                    }
-                } label: {
-                    HStack(spacing: 3.5) {
-                        Text(section.rawValue)
-                            .font(.system(size: 10.5, weight: isSelected ? .semibold : .regular))
-                            .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.46))
+    private var activityColumn: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("Usage")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.45))
 
-                        if section == .models && !snapshot.availableModels.isEmpty {
-                            Text("\(snapshot.availableModels.count)")
-                                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                .monospacedDigit()
-                                .foregroundStyle(isSelected ? Color.white.opacity(0.60) : Color.white.opacity(0.28))
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .frame(height: 21)
-                    .background {
-                        if isSelected {
-                            RoundedRectangle(cornerRadius: 5.5, style: .continuous)
-                                .fill(Color.white.opacity(0.11))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 5.5, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
-                                )
-                                .matchedGeometryEffect(id: "grav-profile-section-pill", in: profileTabNamespace)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(2)
-        .background(
-            RoundedRectangle(cornerRadius: 7.5, style: .continuous)
-                .fill(Color.white.opacity(0.04))
-        )
-    }
-
-    // MARK: - Tab 1: Swiss Precision Usage Overview
-
-    private var usageContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                if snapshot.hasFreshServerQuota {
-                    serverQuotaSection
-                } else {
-                    heroTelemetryStrip
-                    if !activeModelsWithUsage.isEmpty {
-                        modelDistributionSection
-                    }
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-        }
-    }
-
-    /// Clean two-column Swiss metric strip (`5h Window` | `7-Day Total`) — zero boxed cards.
-    private var heroTelemetryStrip: some View {
-        HStack(alignment: .top, spacing: 0) {
-            metricColumn(
-                eyebrow: "5H WINDOW",
-                value: TokenMetrics.formatCompact(snapshot.totalTokens5h),
-                unit: "tokens",
-                subtext: "\(snapshot.totalTurns5h.formatted()) turns"
-            )
-
-            Rectangle()
-                .fill(Color.white.opacity(0.07))
-                .frame(width: 0.5, height: 42)
-                .padding(.horizontal, 18)
-
-            metricColumn(
-                eyebrow: "7-DAY TOTAL",
-                value: TokenMetrics.formatCompact(snapshot.totalTokens7d),
-                unit: "tokens",
-                subtext: "\(snapshot.totalTurns7d.formatted()) turns"
-            )
-
-            Spacer(minLength: 10)
-
-            if let credits = snapshot.availableCredits {
-                metricColumn(
-                    eyebrow: "CREDITS",
-                    value: credits.formatted(),
-                    unit: "",
-                    subtext: "available",
-                    alignment: .trailing
-                )
-            } else if let active = store.activeModel, !active.isEmpty {
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text("ACTIVE MODEL")
-                        .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
-                        .tracking(0.6)
-                        .foregroundStyle(Color.white.opacity(0.34))
-
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(GravPalette.emerald)
-                            .frame(width: 5, height: 5)
-                        Text(AntigravityProfileProbe.prettifyModelIdentifier(active))
-                            .font(.system(size: 11.5, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.86))
-                            .lineLimit(1)
-                    }
-                    .padding(.top, 2)
-                }
-            }
-        }
-    }
-
-    private func metricColumn(
-        eyebrow: String,
-        value: String,
-        unit: String,
-        subtext: String,
-        alignment: HorizontalAlignment = .leading
-    ) -> some View {
-        VStack(alignment: alignment, spacing: 2) {
-            Text(eyebrow)
-                .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
-                .tracking(0.6)
-                .foregroundStyle(Color.white.opacity(0.34))
-
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(value)
-                    .font(.system(size: 20, weight: .medium, design: .rounded))
-                    .tracking(-0.4)
-                    .monospacedDigit()
-                    .foregroundStyle(Color.white.opacity(0.95))
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(.system(size: 10, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.36))
-                }
-            }
-
-            Text(subtext)
-                .font(.system(size: 10, weight: .regular, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(Color.white.opacity(0.42))
-        }
-    }
-
-    /// Razor-thin 3pt multi-segment proportional bar + cleanly aligned per-model breakdown.
-    private var modelDistributionSection: some View {
-        let items = activeModelsWithUsage
-        let totalTokens = max(1, items.reduce(0) { $0 + $1.recentTokens7d })
-
-        return VStack(alignment: .leading, spacing: 10) {
-            // Single 3pt proportional distribution hairline
-            GeometryReader { geo in
-                let totalW = max(20, geo.size.width)
-                let gap: CGFloat = items.count > 1 ? 2 : 0
-                let usableW = max(10, totalW - gap * CGFloat(max(0, items.count - 1)))
-
-                HStack(spacing: gap) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { idx, model in
-                        let share = Double(model.recentTokens7d) / Double(totalTokens)
-                        let w = max(4, usableW * CGFloat(animateBars ? share : 0))
-                        Capsule(style: .continuous)
-                            .fill(seriesColor(for: idx))
-                            .frame(width: w)
-                    }
-                }
-            }
-            .frame(height: 3)
-
-            VStack(spacing: 7) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { idx, model in
-                    let sharePct = Int(((Double(model.recentTokens7d) / Double(totalTokens)) * 100.0).rounded())
-                    HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                            .fill(seriesColor(for: idx))
-                            .frame(width: 6, height: 6)
-
-                        Text(model.displayName)
-                            .font(.system(size: 11.5, weight: isCurrentActiveModel(model) ? .medium : .regular))
-                            .foregroundStyle(Color.white.opacity(isCurrentActiveModel(model) ? 0.92 : 0.72))
-                            .lineLimit(1)
-
-                        Spacer(minLength: 8)
-
-                        Text(TokenMetrics.formatCompact(model.recentTokens7d))
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .monospacedDigit()
-                            .foregroundStyle(Color.white.opacity(0.84))
-                            .frame(width: 44, alignment: .trailing)
-
-                        Text("\(model.recentTurns7d)t")
-                            .font(.system(size: 10, weight: .regular, design: .monospaced))
-                            .monospacedDigit()
-                            .foregroundStyle(Color.white.opacity(0.38))
-                            .frame(width: 42, alignment: .trailing)
-
-                        Text("\(sharePct)%")
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
-                            .monospacedDigit()
-                            .foregroundStyle(Color.white.opacity(0.46))
-                            .frame(width: 30, alignment: .trailing)
-                    }
-                }
-            }
-        }
-    }
-
-    /// Rendered only when Antigravity provides verified, fresh, matching-account server quota rings.
-    private var serverQuotaSection: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            ForEach(snapshot.usageGroups) { group in
-                let activeWindows = group.windows.filter { $0.serverRemainingFraction != nil || $0.turnsCount > 0 }
-                if !activeWindows.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(group.title)
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .tracking(-0.15)
-                            .foregroundStyle(Color.white.opacity(0.92))
-
-                        ForEach(activeWindows) { window in
-                            if let remaining = window.serverRemainingFraction, let pct = window.remainingPercent {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 1.5) {
-                                        Text(window.label)
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(Color.white.opacity(0.68))
-                                        if let reset = window.resetCountdownLabel() {
-                                            Text("Resets in \(reset)")
-                                                .font(.system(size: 9.5))
-                                                .foregroundStyle(Color.white.opacity(0.38))
-                                        }
-                                    }
-                                    Spacer()
-                                    HStack(spacing: 7) {
-                                        Text("\(pct)% left")
-                                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                                            .monospacedDigit()
-                                            .foregroundStyle(Color.white.opacity(0.72))
-                                        QuotaCircularRing(
-                                            progress: animateBars ? remaining : 0,
-                                            color: quotaRingColor(for: remaining),
-                                            size: 15,
-                                            lineWidth: 2.1
-                                        )
+            if snapshot.hasFreshServerQuota {
+                ForEach(snapshot.usageGroups) { group in
+                    let active = group.windows.filter { $0.serverRemainingFraction != nil }
+                    ForEach(active) { window in
+                        if let frac = window.serverRemainingFraction, let pct = window.remainingPercent {
+                            HStack(spacing: 6) {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(group.title)
+                                        .font(.system(size: 11.5))
+                                        .foregroundStyle(Color.white.opacity(0.84))
+                                    if let reset = window.resetCountdownLabel() {
+                                        Text("Resets in \(reset)")
+                                            .font(.system(size: 9.5))
+                                            .foregroundStyle(Color.white.opacity(0.36))
                                     }
                                 }
+                                Spacer()
+                                Text("\(pct)%")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .monospacedDigit()
+                                    .foregroundStyle(Color.white.opacity(0.68))
+                                QuotaCircularRing(
+                                    progress: frac,
+                                    color: quotaRingColor(for: frac),
+                                    size: 13,
+                                    lineWidth: 1.9
+                                )
                             }
                         }
                     }
                 }
-            }
-        }
-    }
-
-    // MARK: - Tab 2: Clean Models List (Click to Copy Model ID)
-
-    private var modelsContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            if snapshot.availableModels.isEmpty {
-                VStack(spacing: 4) {
-                    Text("No models observed yet")
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.46))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 44)
             } else {
-                VStack(spacing: 2) {
-                    ForEach(Array(snapshot.availableModels.enumerated()), id: \.element.id) { idx, model in
-                        modelRow(model, index: idx)
+                VStack(spacing: 8) {
+                    nativeKeyValueRow(
+                        label: "Last 5 hours",
+                        primary: TokenMetrics.formatCompact(snapshot.totalTokens5h),
+                        secondary: "\(snapshot.totalTurns5h) turns"
+                    )
+                    nativeKeyValueRow(
+                        label: "Last 7 days",
+                        primary: TokenMetrics.formatCompact(snapshot.totalTokens7d),
+                        secondary: "\(snapshot.totalTurns7d) turns"
+                    )
+                    nativeKeyValueRow(
+                        label: "This session",
+                        primary: TokenMetrics.formatCompact(store.tokenMetrics.totalTokens),
+                        secondary: "↑\(TokenMetrics.formatCompact(store.tokenMetrics.outputTokens))"
+                    )
+                    if store.tokenMetrics.latestContextTokens > 0 {
+                        let ctxPct = Int((store.tokenMetrics.contextFillRatio * 100.0).rounded())
+                        nativeKeyValueRow(
+                            label: "Context",
+                            primary: "\(ctxPct)%",
+                            secondary: TokenMetrics.formatCompact(store.tokenMetrics.latestContextTokens)
+                        )
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
             }
         }
     }
 
-    private func modelRow(_ model: AntigravityAvailableModel, index: Int) -> some View {
+    private func nativeKeyValueRow(label: String, primary: String, secondary: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(label)
+                .font(.system(size: 11.5, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.56))
+                .lineLimit(1)
+
+            Spacer(minLength: 4)
+
+            Text(primary)
+                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(Color.white.opacity(0.90))
+
+            Text(secondary)
+                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(Color.white.opacity(0.34))
+                .frame(minWidth: 46, alignment: .trailing)
+        }
+    }
+
+    // MARK: - Right Column: Borderless Native Models List
+
+    private var modelsColumn: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Models")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.45))
+
+            if snapshot.availableModels.isEmpty {
+                Text("No models active yet")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.white.opacity(0.36))
+                    .padding(.top, 2)
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 1) {
+                        ForEach(snapshot.availableModels) { model in
+                            inlineModelRow(model)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func inlineModelRow(_ model: AntigravityAvailableModel) -> some View {
         let isActive = isCurrentActiveModel(model)
         let isHovered = hoveredModelID == model.id
         let isCopied = copiedModelID == model.id
@@ -527,71 +270,57 @@ public struct AntigravityProfileDrawerView: View {
                 }
             }
         } label: {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(isActive ? GravPalette.emerald : seriesColor(for: index).opacity(0.55))
-                    .frame(width: 5.5, height: 5.5)
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(isActive ? Color.white.opacity(0.90) : .clear)
+                    .frame(width: 11)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(model.displayName)
-                        .font(.system(size: 11.5, weight: isActive ? .semibold : .regular))
-                        .foregroundStyle(Color.white.opacity(isActive ? 0.96 : 0.80))
-                        .lineLimit(1)
+                Text(model.displayName)
+                    .font(.system(size: 11.5, weight: isActive ? .medium : .regular))
+                    .foregroundStyle(Color.white.opacity(isActive ? 0.94 : 0.68))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-                    Text(model.rawIdentifier)
-                        .font(.system(size: 9.5, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.32))
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 6)
+                Spacer(minLength: 4)
 
                 if isCopied {
                     Text("Copied")
-                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                        .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(GravPalette.emerald)
                 } else if let remaining = model.serverRemainingFraction, let pct = model.remainingPercent {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 5) {
                         Text("\(pct)%")
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .font(.system(size: 10, design: .monospaced))
                             .monospacedDigit()
                             .foregroundStyle(Color.white.opacity(0.46))
                         QuotaCircularRing(
-                            progress: animateBars ? remaining : 0,
+                            progress: remaining,
                             color: quotaRingColor(for: remaining),
-                            size: 12.5,
-                            lineWidth: 1.8
+                            size: 11.5,
+                            lineWidth: 1.7
                         )
                     }
-                } else if model.recentTurns7d > 0 {
-                    Text("\(TokenMetrics.formatCompact(model.recentTokens7d)) · \(model.recentTurns7d) turns")
-                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                } else if model.recentTokens7d > 0 {
+                    Text(TokenMetrics.formatCompact(model.recentTokens7d))
+                        .font(.system(size: 10.5, design: .monospaced))
                         .monospacedDigit()
-                        .foregroundStyle(Color.white.opacity(0.44))
+                        .foregroundStyle(Color.white.opacity(0.38))
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6.5)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: 7.5, style: .continuous)
-                    .fill(isHovered ? Color.white.opacity(0.065) : (isActive ? Color.white.opacity(0.04) : Color.clear))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovered ? Color.white.opacity(0.065) : Color.clear)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 7.5, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
             hoveredModelID = hovering ? model.id : (hoveredModelID == model.id ? nil : hoveredModelID)
         }
-        .help("Click to copy model identifier")
-    }
-
-    private func seriesColor(for index: Int) -> Color {
-        switch index {
-        case 0: return Color.white.opacity(0.82)
-        case 1: return GravPalette.glacialCyan.opacity(0.85)
-        case 2: return Color.white.opacity(0.38)
-        default: return Color.white.opacity(0.24)
-        }
+        .help("Copy \(model.rawIdentifier)")
     }
 
     private func isCurrentActiveModel(_ model: AntigravityAvailableModel) -> Bool {
@@ -606,15 +335,6 @@ public struct AntigravityProfileDrawerView: View {
         if fraction <= 0.15 { return GravPalette.coral }
         if fraction <= 0.35 { return Color(red: 0.96, green: 0.72, blue: 0.28) }
         return Color(red: 0.31, green: 0.67, blue: 0.36)
-    }
-
-    private func triggerRefresh() {
-        GravOnboardingWelcomeAudio.shared.playButtonTap()
-        store.refreshProfileSnapshot()
-        guard !reduceMotion else { return }
-        withAnimation(.easeInOut(duration: 0.45)) {
-            isRefreshing.toggle()
-        }
     }
 }
 
