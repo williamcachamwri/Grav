@@ -70,24 +70,6 @@ public struct ExpandedNotchHeaderView: View {
                 unreadJumpPill
             }
 
-            if store.isTurboMode && !store.isPaused {
-                Text("TURBO")
-                    .font(.system(size: 8.5, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.96, green: 0.72, blue: 0.30).opacity(0.92))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1.5)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color(red: 0.96, green: 0.72, blue: 0.30).opacity(0.13))
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .strokeBorder(Color(red: 0.96, green: 0.72, blue: 0.30).opacity(0.28), lineWidth: 0.5)
-                            )
-                    )
-                    .fixedSize(horizontal: true, vertical: false)
-                    .help("Antigravity is running in Turbo auto-approval mode")
-            }
-
             inlineStatusReadout
         }
     }

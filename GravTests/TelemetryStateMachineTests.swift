@@ -942,14 +942,7 @@ final class TelemetryStateMachineTests: XCTestCase {
         )
         XCTAssertNil(ConversationSQLiteProbe.buildFTS5MatchExpression(from: "   "))
 
-        // 3. Destructive shell command risk classifier
-        XCTAssertNotNil(AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: "rm -rf /tmp/foo"))
-        XCTAssertNotNil(AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: "git reset --hard HEAD~1"))
-        XCTAssertNotNil(AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: "git push --force origin main"))
-        XCTAssertNotNil(AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: "sudo launchctl unload foo"))
-        XCTAssertNil(AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: "xcodebuild -scheme Grav test"))
-
-        // 4. Artifacts, MCP servers & background tasks scanners on isolated temp fixture
+        // 3. Artifacts, MCP servers & background tasks scanners on isolated temp fixture
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("grav-anti-fixture-\(UUID().uuidString)", isDirectory: true)
         defer { try? fm.removeItem(at: root) }

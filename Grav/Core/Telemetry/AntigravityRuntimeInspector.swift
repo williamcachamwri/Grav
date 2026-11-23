@@ -1,49 +1,9 @@
 import Foundation
 
 /// Pure local filesystem & command telemetry inspector powering Grav's Antigravity-native modules:
-/// - **Feature #2**: Destructive command risk classification & Approval/Turbo radar synthesis.
 /// - **Feature #4**: Session Artifacts, Plans, Scratch scripts & media Quick-Look scanner (`brain/<id>/`).
 /// - **Feature #6**: Installed MCP servers (`~/.gemini/antigravity/mcp/`) & Background Tasks / `/schedule` monitor.
 public enum AntigravityRuntimeInspector: Sendable {
-
-    // MARK: - Feature #2: Destructive Shell Command Risk Classifier
-
-    /// Evaluates a shell `CommandLine` and returns a concise, non-alarmist risk label if destructive.
-    public static func assessDestructiveRisk(commandLine: String) -> String? {
-        let trimmed = commandLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let lowered = trimmed.lowercased()
-
-        // High-impact recursive or forced deletion
-        if lowered.contains("rm -rf") || lowered.contains("rm -fr") || lowered.contains("rm -r -f") {
-            return "Recursive force delete (rm -rf)"
-        }
-        if lowered.contains("git reset --hard") {
-            return "Hard git reset (discards uncommitted work)"
-        }
-        if lowered.contains("git push --force") || lowered.contains("git push -f") {
-            return "Force git push"
-        }
-        if lowered.contains("git clean -fd") || lowered.contains("git clean -fx") {
-            return "Git clean untracked files"
-        }
-        if lowered.hasPrefix("sudo ") || lowered.contains(" sudo ") || lowered.contains(";sudo ") || lowered.contains("&&sudo ") {
-            return "Elevated sudo execution"
-        }
-        if lowered.contains("drop table") || lowered.contains("drop database") || lowered.contains("truncate table") {
-            return "Destructive SQL operation"
-        }
-        if lowered.contains("chmod -r 777") || lowered.contains("diskutil erase") || lowered.contains("mkfs") || lowered.contains("dd if=") {
-            return "System-level disk or permission change"
-        }
-
-        // Fall back to Grav's existing exact `DestructiveCommandParser` for multi-file deletions
-        let deletedPaths = DestructiveCommandParser.extractDeletedPaths(from: trimmed)
-        if deletedPaths.count >= 2 {
-            return "Deletes \(deletedPaths.count) files"
-        }
-        return nil
-    }
 
     // MARK: - Feature #4: Session Artifacts, Plans & Scratch Quick-Look Scanner
 

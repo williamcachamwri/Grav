@@ -78,41 +78,22 @@ public final class AntigravityTelemetryStore {
         }
     }
 
-    /// High-signal real-time Attention / Safety Radar alert for the active session (Feature #2).
+    /// High-signal real-time Approval / Question alert for the active session (Feature #2).
     public var activeRadarAlert: AntigravityRadarAlert? {
         guard !isPaused else { return nil }
 
-        // 1. Waiting for user input / ask_question / approval
+        // Waiting for user input / ask_question / approval
         if case let .waitingForInput(prompt) = state {
             let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             let detail = trimmed.isEmpty ? "Antigravity paused for your response or approval." : trimmed
             let alert = AntigravityRadarAlert(
                 id: "waiting-\(detail.hashValue)",
                 severity: .approval,
-                title: "Approval or Reply Needed",
+                title: "Approval or Question",
                 detail: detail,
-                badge: isTurboMode ? "TURBO · WAITING" : "WAITING"
+                badge: "WAITING"
             )
             return dismissedRadarAlertID == alert.id ? nil : alert
-        }
-
-        // 2. Destructive shell command currently running or executed within the last 15 seconds
-        let now = Date()
-        for cmd in commands.prefix(4) {
-            let isFresh = cmd.status == .running
-                || now.timeIntervalSince(cmd.completedAt ?? cmd.startedAt) < 15.0
-            guard isFresh else { continue }
-            if let risk = AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: cmd.commandLine) {
-                let alert = AntigravityRadarAlert(
-                    id: "destructive-\(cmd.id)",
-                    severity: .destructive,
-                    title: risk,
-                    detail: cmd.commandLine,
-                    badge: isTurboMode ? "TURBO · RISK" : "HIGH RISK",
-                    timestamp: cmd.startedAt
-                )
-                return dismissedRadarAlertID == alert.id ? nil : alert
-            }
         }
 
         return nil

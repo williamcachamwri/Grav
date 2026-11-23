@@ -332,10 +332,9 @@ public struct AntigravitySpotlightOverlayView: View {
     }
 }
 
-// MARK: - Feature #2: Approval, Question & Destructive Command Radar Strip
+// MARK: - Feature #2: Approval & Question Banner Strip
 
-/// Compact, anti-AI-slop matte alert strip shown only when Antigravity needs user approval/input
-/// or executes a high-risk destructive shell command.
+/// Compact, anti-AI-slop matte alert strip shown only when Antigravity needs user approval or an answer.
 public struct AntigravityRadarBannerView: View {
     public let alert: AntigravityRadarAlert
     public let onFocusAntigravity: () -> Void
@@ -352,22 +351,7 @@ public struct AntigravityRadarBannerView: View {
     }
 
     private var accentColor: Color {
-        switch alert.severity {
-        case .approval:
-            return Color(red: 0.96, green: 0.72, blue: 0.28)
-        case .destructive:
-            return Color(red: 0.96, green: 0.36, blue: 0.36)
-        case .turboCaution:
-            return Color(red: 0.95, green: 0.62, blue: 0.24)
-        }
-    }
-
-    private var symbolName: String {
-        switch alert.severity {
-        case .approval: return "hand.raised.fill"
-        case .destructive: return "exclamationmark.triangle.fill"
-        case .turboCaution: return "bolt.shield.fill"
-        }
+        Color(red: 0.96, green: 0.72, blue: 0.28)
     }
 
     public var body: some View {
@@ -376,7 +360,7 @@ public struct AntigravityRadarBannerView: View {
                 .fill(accentColor)
                 .frame(width: 2.5, height: 22)
 
-            Image(systemName: symbolName)
+            Image(systemName: "hand.raised.fill")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(accentColor)
 
@@ -399,7 +383,7 @@ public struct AntigravityRadarBannerView: View {
                 }
 
                 Text(alert.detail)
-                    .font(.system(size: 10, design: alert.severity == .destructive ? .monospaced : .default))
+                    .font(.system(size: 10))
                     .foregroundStyle(Color.white.opacity(0.54))
                     .lineLimit(1)
                     .truncationMode(.tail)

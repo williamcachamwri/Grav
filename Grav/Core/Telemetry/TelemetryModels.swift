@@ -289,12 +289,10 @@ public struct AntigravitySpotlightHit: Sendable, Equatable, Identifiable {
     }
 }
 
-/// High-signal real-time Antigravity attention alert (Approval / Question / Destructive Command).
+/// High-signal real-time Antigravity attention alert (Approval / Question).
 public struct AntigravityRadarAlert: Sendable, Equatable, Identifiable {
     public enum Severity: String, Sendable, Equatable {
         case approval
-        case destructive
-        case turboCaution
     }
 
     public let id: String
