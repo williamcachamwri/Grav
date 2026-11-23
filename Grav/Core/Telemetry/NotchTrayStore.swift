@@ -64,6 +64,14 @@ public struct QueuedPromptItem: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+/// Outcome of dispatching a prompt bundle from Grav's Notch Composer to Antigravity.
+public enum AntigravityPromptDispatchResult: Sendable, Equatable {
+    /// Opened Antigravity's sanctioned `antigravity://open?prompt=...` deep link directly into the chat composer.
+    case openedDeepLink(URL)
+    /// Prompt exceeded the safe URL ceiling or LaunchServices could not open the scheme; copied to clipboard instead.
+    case copiedToClipboardFallback
+}
+
 // MARK: - Notch Drop Shelf & Prompt Queue Store
 
 /// `@MainActor @Observable` store managing Grav's Notch Drop Shelf (files/images dropped onto
@@ -230,6 +238,78 @@ public final class NotchTrayStore {
         }
         let attachmentsBlock = cleanPaths.map { "@\($0)" }.joined(separator: "\n")
         return "\(trimmed)\n\n\(attachmentsBlock)"
+    }
+
+    private static let deepLinkQueryValueAllowed: CharacterSet = {
+        var allowed = CharacterSet.urlQueryAllowed
+        // Percent-encode `+` (decoded as space by JS URLSearchParams) and all query/fragment delimiters.
+        allowed.remove(charactersIn: "+&=/?#%\\")
+        return allowed
+    }()
+
+    /// Builds Antigravity's sanctioned `antigravity://open?prompt=...` deep link URL.
+    ///
+    /// Verified statically against `/Applications/Antigravity.app` (`Info.plist` `CFBundleURLSchemes`,
+    /// `app.asar` `dist/main.js` `open-url` -> `handleDeepLink`, and the renderer's `deepLinkListener`),
+    /// which focuses the Antigravity window, injects `prompt` directly into the chat Lexical editor,
+    /// and preserves `\n` / `\t` while stripping `\r`.
+    public static func buildAntigravityPromptDeepLinkURL(
+        prompt: String,
+        project: String? = nil
+    ) -> URL? {
+        let normalized = prompt
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty, normalized.utf8.count <= 12_000 else { return nil }
+        guard let encodedPrompt = normalized.addingPercentEncoding(withAllowedCharacters: deepLinkQueryValueAllowed) else {
+            return nil
+        }
+
+        var query = "prompt=\(encodedPrompt)"
+        if let project = project?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !project.isEmpty,
+           let encodedProject = project.addingPercentEncoding(withAllowedCharacters: deepLinkQueryValueAllowed)
+        {
+            query += "&project=\(encodedProject)"
+        }
+
+        var components = URLComponents()
+        components.scheme = "antigravity"
+        components.host = "open"
+        components.percentEncodedQuery = query
+        return components.url
+    }
+
+    /// Dispatches the current draft + staged items straight into Antigravity's chat composer via
+    /// `antigravity://open?prompt=...` (while also backing up the bundle to the clipboard) and clears the draft.
+    @discardableResult
+    public func sendCurrentBundleToAntigravity(
+        openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    ) -> AntigravityPromptDispatchResult? {
+        guard let formatted = copyCurrentBundleAndClear() else { return nil }
+        if let deepLink = Self.buildAntigravityPromptDeepLinkURL(prompt: formatted),
+           openURL(deepLink)
+        {
+            return .openedDeepLink(deepLink)
+        }
+        return .copiedToClipboardFallback
+    }
+
+    /// Pops a queued prompt and dispatches it straight into Antigravity's chat composer via
+    /// `antigravity://open?prompt=...` (with clipboard backup).
+    @discardableResult
+    public func sendQueuedPromptToAntigravity(
+        id: String,
+        openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    ) -> AntigravityPromptDispatchResult? {
+        guard let formatted = popQueuedPromptToPasteboard(id: id) else { return nil }
+        if let deepLink = Self.buildAntigravityPromptDeepLinkURL(prompt: formatted),
+           openURL(deepLink)
+        {
+            return .openedDeepLink(deepLink)
+        }
+        return .copiedToClipboardFallback
     }
 
     /// Copies the current draft + staged items to the macOS pasteboard (including native file URLs

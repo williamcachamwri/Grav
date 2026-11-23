@@ -806,14 +806,6 @@ struct MiniPetSettingsPane: View {
                 rowDivider
 
                 tuningToggleRow(
-                    title: "Window-Edge Perching",
-                    subtitle: "Drag your pet near the top edge of Antigravity, Terminal, or any window to magnetically perch and follow it.",
-                    isOn: $preferences.miniPetWindowPerching
-                )
-
-                rowDivider
-
-                tuningToggleRow(
                     title: "Click to Interact",
                     subtitle: "Clicking the pet triggers a spring bounce with wave and jump animations.",
                     isOn: $preferences.miniPetInteractiveClick

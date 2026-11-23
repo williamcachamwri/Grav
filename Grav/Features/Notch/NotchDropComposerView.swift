@@ -13,7 +13,7 @@ extension Notification.Name {
 /// - Staged files/images animate in as a tactile fanned micro-card deck (`±2.2°` physical tilt,
 ///   straightening and lifting smoothly on hover) with native macOS drag-OUT (`.draggable(url)`).
 /// - Borderless prompt input lets you draft follow-ups while Antigravity is busy, queue them
-///   persistently, or copy + focus Antigravity in one click (`⌘↵`).
+///   persistently, or send them straight into Antigravity chat via `antigravity://open?prompt=...` (`⌘↵`).
 public struct NotchDropComposerView: View {
     public var store: AntigravityTelemetryStore
     public var trayStore: NotchTrayStore
@@ -333,7 +333,7 @@ public struct NotchDropComposerView: View {
             )
             .onSubmit {
                 if NSEvent.modifierFlags.contains(.command) {
-                    copyAndFocusAntigravity()
+                    sendToAntigravityChat()
                 } else {
                     queueCurrentDraft()
                 }
@@ -355,7 +355,7 @@ public struct NotchDropComposerView: View {
                     }
                     .buttonStyle(.plain)
                 } else {
-                    Text("↵ Queue  ·  ⌘↵ Copy & Focus")
+                    Text("↵ Queue  ·  ⌘↵ Send to Chat")
                         .font(.system(size: 9.5, weight: .regular, design: .monospaced))
                         .foregroundStyle(Color.white.opacity(0.28))
                 }
@@ -387,13 +387,13 @@ public struct NotchDropComposerView: View {
                 .disabled(!trayStore.hasComposableContent)
 
                 Button {
-                    copyAndFocusAntigravity()
+                    sendToAntigravityChat()
                 } label: {
-                    HStack(spacing: 4) {
-                        Text("Copy & Focus")
+                    HStack(spacing: 4.5) {
+                        Text("Send")
                             .font(.system(size: 10.5, weight: .semibold))
-                        Image(systemName: "arrow.up.forward")
-                            .font(.system(size: 8.5, weight: .bold))
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 8.5, weight: .semibold))
                     }
                     .foregroundStyle(trayStore.hasComposableContent ? Color.black.opacity(0.92) : Color.white.opacity(0.28))
                     .padding(.horizontal, 10)
@@ -406,6 +406,7 @@ public struct NotchDropComposerView: View {
                 .buttonStyle(.plain)
                 .disabled(!trayStore.hasComposableContent)
                 .keyboardShortcut(.return, modifiers: [.command])
+                .help("Send straight into Antigravity chat (⌘↵)")
             }
         }
     }
@@ -477,16 +478,16 @@ public struct NotchDropComposerView: View {
 
             if isHovered {
                 Button {
-                    popAndFocus(item)
+                    sendQueuedPrompt(item)
                 } label: {
-                    HStack(spacing: 3) {
-                        Text("Use")
+                    HStack(spacing: 3.5) {
+                        Text("Send")
                             .font(.system(size: 9.5, weight: .semibold))
-                        Image(systemName: "arrow.up.forward")
-                            .font(.system(size: 8, weight: .bold))
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 7.5, weight: .semibold))
                     }
                     .foregroundStyle(Color.black.opacity(0.90))
-                    .padding(.horizontal, 7)
+                    .padding(.horizontal, 7.5)
                     .padding(.vertical, 2.5)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
@@ -516,7 +517,7 @@ public struct NotchDropComposerView: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 6.5, style: .continuous))
         .onTapGesture {
-            popAndFocus(item)
+            sendQueuedPrompt(item)
         }
         .onHover { hovering in
             hoveredQueueID = hovering ? item.id : (hoveredQueueID == item.id ? nil : hoveredQueueID)
@@ -541,18 +542,34 @@ public struct NotchDropComposerView: View {
         onShowToast("Queued for next turn")
     }
 
-    private func copyAndFocusAntigravity() {
-        guard trayStore.copyCurrentBundleAndClear() != nil else { return }
+    private func sendToAntigravityChat() {
+        guard let result = trayStore.sendCurrentBundleToAntigravity() else { return }
+        promptFieldFocused = false
+        isInputFocused = false
         GravOnboardingWelcomeAudio.shared.playButtonTap()
-        onShowToast("Copied · Paste ⌘V in Antigravity")
-        store.activateAntigravityApp()
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        switch result {
+        case .openedDeepLink:
+            onShowToast("Sent to Antigravity chat")
+        case .copiedToClipboardFallback:
+            onShowToast("Copied · Paste ⌘V in Antigravity")
+            store.activateAntigravityApp()
+        }
     }
 
-    private func popAndFocus(_ item: QueuedPromptItem) {
-        guard trayStore.popQueuedPromptToPasteboard(id: item.id) != nil else { return }
+    private func sendQueuedPrompt(_ item: QueuedPromptItem) {
+        guard let result = trayStore.sendQueuedPromptToAntigravity(id: item.id) else { return }
+        promptFieldFocused = false
+        isInputFocused = false
         GravOnboardingWelcomeAudio.shared.playButtonTap()
-        onShowToast("Copied · Paste ⌘V in Antigravity")
-        store.activateAntigravityApp()
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        switch result {
+        case .openedDeepLink:
+            onShowToast("Sent to Antigravity chat")
+        case .copiedToClipboardFallback:
+            onShowToast("Copied · Paste ⌘V in Antigravity")
+            store.activateAntigravityApp()
+        }
     }
 
     private func browseLocalFiles() {

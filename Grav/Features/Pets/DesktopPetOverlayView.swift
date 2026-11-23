@@ -8,7 +8,6 @@ struct DesktopPetOverlayView: View {
     var store: AntigravityTelemetryStore
     var preferences: PreferencesStore
     var petsStore: CodexPetsStore = .shared
-    var coordinator: DesktopPetCoordinator? = nil
 
     var onDragBegan: () -> Void
     var onDragChanged: () -> Void
@@ -54,27 +53,7 @@ struct DesktopPetOverlayView: View {
                 VStack(spacing: 4) {
                     petCharacterStage(pet: pet, animState: animState)
 
-                    if let candidateApp = coordinator?.perchCandidateAppName, isDraggingWindow {
-                        HStack(spacing: 4) {
-                            Image(systemName: "macwindow")
-                                .font(.system(size: 9, weight: .semibold))
-                            Text("Perch on \(candidateApp)")
-                                .font(.system(size: 10, weight: .medium))
-                                .lineLimit(1)
-                        }
-                        .foregroundStyle(Color.white.opacity(0.92))
-                        .padding(.horizontal, 8.5)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color(red: 0.08, green: 0.085, blue: 0.10).opacity(0.94))
-                                .overlay(
-                                    Capsule(style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.6)
-                                )
-                        )
-                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
-                    } else if shouldShowStatusBubble {
+                    if shouldShowStatusBubble {
                         liveSpeechBubble(animState: animState)
                             .onHover { hovering in
                                 isHoveringBubble = hovering
@@ -293,16 +272,6 @@ struct DesktopPetOverlayView: View {
                 Button(corner.displayName) {
                     onSnapPlacement(corner)
                 }
-            }
-        }
-
-        if let perchedApp = coordinator?.perchedAppName {
-            Button("Unperch from \(perchedApp)") {
-                coordinator?.clearPerch()
-            }
-        } else if preferences.miniPetWindowPerching {
-            Button("Perch on Antigravity Window") {
-                coordinator?.perchOnAntigravityWindow()
             }
         }
 

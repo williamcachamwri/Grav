@@ -1190,7 +1190,7 @@ final class TelemetryStateMachineTests: XCTestCase {
     }
 
     @MainActor
-    func testNotchDropShelfPromptQueueAndWindowPerchingPreference() throws {
+    func testNotchDropShelfPromptQueueAndAntigravityDeepLink() throws {
         let suiteName = "grav.test.tray.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1233,11 +1233,32 @@ final class TelemetryStateMachineTests: XCTestCase {
         )
         XCTAssertEqual(formatted, "Check layout\n\n@/tmp/a.png\n@/tmp/b.swift")
 
-        // Verify Window-Edge Perching preference persistence
-        let prefs1 = PreferencesStore(defaults: defaults)
-        XCTAssertTrue(prefs1.miniPetWindowPerching)
-        prefs1.miniPetWindowPerching = false
-        let prefs2 = PreferencesStore(defaults: defaults)
-        XCTAssertFalse(prefs2.miniPetWindowPerching)
+        // Verify sanctioned antigravity://open?prompt=... deep link encoding (including +, &, =, UTF-8, newlines)
+        let trickyPrompt = "Fix C++ a+b & status=500?\r\nSửa lỗi 100%\n\n@/tmp/a.png"
+        let deepLink = try XCTUnwrap(NotchTrayStore.buildAntigravityPromptDeepLinkURL(prompt: trickyPrompt))
+        XCTAssertEqual(deepLink.scheme, "antigravity")
+        XCTAssertEqual(deepLink.host, "open")
+        // `+` MUST be %2B so JavaScript URLSearchParams.get("prompt") does not decode it as a space
+        XCTAssertTrue(deepLink.absoluteString.contains("C%2B%2B"))
+        XCTAssertFalse(deepLink.absoluteString.contains("%0D"))
+        let parsedComponents = try XCTUnwrap(URLComponents(url: deepLink, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(
+            parsedComponents.queryItems?.first(where: { $0.name == "prompt" })?.value,
+            "Fix C++ a+b & status=500?\nSửa lỗi 100%\n\n@/tmp/a.png"
+        )
+
+        // Oversized prompts cleanly return nil so caller falls back to clipboard
+        let oversized = String(repeating: "a", count: 13_000)
+        XCTAssertNil(NotchTrayStore.buildAntigravityPromptDeepLinkURL(prompt: oversized))
+
+        // Verify direct send flow invokes openURL with the exact antigravity://open?prompt=... URL
+        var openedURLs: [URL] = []
+        let dispatchResult = reloaded.sendQueuedPromptToAntigravity(id: queued.id) { url in
+            openedURLs.append(url)
+            return true
+        }
+        XCTAssertEqual(openedURLs.count, 1)
+        XCTAssertEqual(dispatchResult, .openedDeepLink(openedURLs[0]))
+        XCTAssertTrue(reloaded.queuedPrompts.isEmpty)
     }
 }

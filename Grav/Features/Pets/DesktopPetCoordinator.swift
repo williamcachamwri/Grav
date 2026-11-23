@@ -16,9 +16,6 @@ public final class DesktopPetCoordinator {
     public var onFocusAntigravity: (() -> Void)?
     public var onToggleNotch: (() -> Void)?
 
-    public private(set) var perchedAppName: String?
-    public private(set) var perchCandidateAppName: String?
-
     private var panel: NSPanel?
     private var isInstalled = false
     private var isHiddenForFullscreen = false
@@ -27,19 +24,6 @@ public final class DesktopPetCoordinator {
     @ObservationIgnored private var dragStartMouseLocation: NSPoint = .zero
     @ObservationIgnored private var dragStartWindowOrigin: NSPoint = .zero
     @ObservationIgnored private var lastTrackedPlacement: MiniPetPlacement = .topRight
-    @ObservationIgnored private var perchedWindowID: CGWindowID?
-    @ObservationIgnored private var perchedOffsetXRatio: CGFloat = 0.78
-    @ObservationIgnored private var perchCandidate: WindowEdgeCandidate?
-    @ObservationIgnored private var perchTrackingTask: Task<Void, Never>?
-
-    private struct WindowEdgeCandidate {
-        let windowID: CGWindowID
-        let appName: String
-        let appKitMinX: CGFloat
-        let appKitWidth: CGFloat
-        let appKitTopY: CGFloat
-        let offsetXRatio: CGFloat
-    }
 
     public init(
         store: AntigravityTelemetryStore,
@@ -70,7 +54,6 @@ public final class DesktopPetCoordinator {
     public func uninstall() {
         isInstalled = false
         isObserving = false
-        clearPerch()
         for observer in workspaceObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
@@ -127,11 +110,10 @@ public final class DesktopPetCoordinator {
         }
     }
 
-    // MARK: - Dragging, Resizing & Window-Edge Perching Handlers
+    // MARK: - Dragging & Resizing Handlers
 
     func beginWindowDrag() {
         guard let panel else { return }
-        clearPerch()
         dragStartMouseLocation = NSEvent.mouseLocation
         dragStartWindowOrigin = panel.frame.origin
     }
@@ -144,33 +126,10 @@ public final class DesktopPetCoordinator {
         let rawOrigin = NSPoint(x: dragStartWindowOrigin.x + dx, y: dragStartWindowOrigin.y + dy)
         let clamped = clampOrigin(rawOrigin, size: panel.frame.size)
         panel.setFrameOrigin(clamped)
-
-        if preferences.miniPetWindowPerching {
-            let previousCandidateID = perchCandidate?.windowID
-            let candidate = findNearestWindowTopEdge(forPanelFrame: panel.frame)
-            perchCandidate = candidate
-            perchCandidateAppName = candidate?.appName
-            if candidate?.windowID != nil && candidate?.windowID != previousCandidateID {
-                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-            }
-        } else {
-            perchCandidate = nil
-            perchCandidateAppName = nil
-        }
     }
 
     func endWindowDrag() {
         guard let panel else { return }
-
-        if preferences.miniPetWindowPerching, let candidate = perchCandidate {
-            perchCandidate = nil
-            perchCandidateAppName = nil
-            attachPerch(to: candidate, animated: true)
-            return
-        }
-
-        perchCandidate = nil
-        perchCandidateAppName = nil
         let origin = panel.frame.origin
         preferences.miniPetOriginX = Double(origin.x)
         preferences.miniPetOriginY = Double(origin.y)
@@ -181,193 +140,10 @@ public final class DesktopPetCoordinator {
     }
 
     func snapToPlacement(_ placement: MiniPetPlacement) {
-        clearPerch()
         preferences.miniPetOriginX = nil
         preferences.miniPetOriginY = nil
         preferences.miniPetPlacement = placement
         syncPanelState(animated: true)
-    }
-
-    /// Perches the Mini Pet onto the top edge of Antigravity's main window (or frontmost non-Grav window).
-    public func perchOnAntigravityWindow() {
-        guard preferences.miniPetEnabled else { return }
-        _ = ensurePanel()
-        let candidates = listPerchableWindows()
-        let target = candidates.first(where: { $0.appName.localizedCaseInsensitiveContains("Antigravity") })
-            ?? candidates.first
-        guard let target else { return }
-        attachPerch(
-            to: WindowEdgeCandidate(
-                windowID: target.windowID,
-                appName: target.appName,
-                appKitMinX: target.appKitMinX,
-                appKitWidth: target.appKitWidth,
-                appKitTopY: target.appKitTopY,
-                offsetXRatio: 0.80
-            ),
-            animated: true
-        )
-    }
-
-    public func clearPerch() {
-        perchTrackingTask?.cancel()
-        perchTrackingTask = nil
-        perchedWindowID = nil
-        perchedAppName = nil
-        perchCandidate = nil
-        perchCandidateAppName = nil
-    }
-
-    private func attachPerch(to candidate: WindowEdgeCandidate, animated: Bool) {
-        perchedWindowID = candidate.windowID
-        perchedAppName = candidate.appName
-        perchedOffsetXRatio = min(0.92, max(0.08, candidate.offsetXRatio))
-        if preferences.miniPetPlacement != .free {
-            lastTrackedPlacement = .free
-            preferences.miniPetPlacement = .free
-        }
-        positionPanelOnPerch(
-            appKitMinX: candidate.appKitMinX,
-            appKitWidth: candidate.appKitWidth,
-            appKitTopY: candidate.appKitTopY,
-            animated: animated
-        )
-        startPerchTrackingLoop()
-    }
-
-    private func startPerchTrackingLoop() {
-        perchTrackingTask?.cancel()
-        guard let targetID = perchedWindowID else { return }
-        perchTrackingTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(120))
-                guard !Task.isCancelled, let self, self.perchedWindowID == targetID else { break }
-                guard self.preferences.miniPetEnabled, self.preferences.miniPetWindowPerching else {
-                    self.clearPerch()
-                    break
-                }
-                if let bounds = Self.readAppKitBounds(forWindowID: targetID) {
-                    self.positionPanelOnPerch(
-                        appKitMinX: bounds.minX,
-                        appKitWidth: bounds.width,
-                        appKitTopY: bounds.maxY,
-                        animated: false
-                    )
-                } else {
-                    // Host window closed or minimized — gracefully stay put on desktop
-                    self.clearPerch()
-                    break
-                }
-            }
-        }
-    }
-
-    private func positionPanelOnPerch(
-        appKitMinX: CGFloat,
-        appKitWidth: CGFloat,
-        appKitTopY: CGFloat,
-        animated: Bool
-    ) {
-        guard let panel else { return }
-        let petSize = CGFloat(min(144.0, max(48.0, preferences.miniPetSize)))
-        let feetOffsetFromPanelTop: CGFloat = 30.0 + petSize - 4.0
-        let desiredOriginY = (appKitTopY + feetOffsetFromPanelTop) - panel.frame.height
-        let desiredCenterX = appKitMinX + (appKitWidth * perchedOffsetXRatio)
-        let desiredOriginX = desiredCenterX - (panel.frame.width / 2.0)
-        let clamped = clampOrigin(NSPoint(x: desiredOriginX, y: desiredOriginY), size: panel.frame.size)
-
-        guard abs(panel.frame.origin.x - clamped.x) > 0.5 || abs(panel.frame.origin.y - clamped.y) > 0.5 else {
-            return
-        }
-
-        if animated {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.22
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().setFrameOrigin(clamped)
-            }
-        } else {
-            panel.setFrameOrigin(clamped)
-        }
-        preferences.miniPetOriginX = Double(clamped.x)
-        preferences.miniPetOriginY = Double(clamped.y)
-    }
-
-    private func findNearestWindowTopEdge(forPanelFrame frame: NSRect) -> WindowEdgeCandidate? {
-        let petSize = CGFloat(min(144.0, max(48.0, preferences.miniPetSize)))
-        let feetY = frame.maxY - (30.0 + petSize)
-        let feetCenterX = frame.midX
-
-        for win in listPerchableWindows() {
-            let verticalDistance = abs(feetY - win.appKitTopY)
-            guard verticalDistance <= 32.0 else { continue }
-            guard feetCenterX >= win.appKitMinX + 20.0 && feetCenterX <= (win.appKitMinX + win.appKitWidth - 20.0) else {
-                continue
-            }
-            let ratio = (feetCenterX - win.appKitMinX) / max(1.0, win.appKitWidth)
-            return WindowEdgeCandidate(
-                windowID: win.windowID,
-                appName: win.appName,
-                appKitMinX: win.appKitMinX,
-                appKitWidth: win.appKitWidth,
-                appKitTopY: win.appKitTopY,
-                offsetXRatio: ratio
-            )
-        }
-        return nil
-    }
-
-    private func listPerchableWindows() -> [WindowEdgeCandidate] {
-        guard let infoList = CGWindowListCopyWindowInfo(
-            [.optionOnScreenOnly, .excludeDesktopElements],
-            kCGNullWindowID
-        ) as? [[String: Any]] else {
-            return []
-        }
-
-        let myPID = ProcessInfo.processInfo.processIdentifier
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 900.0
-        var results: [WindowEdgeCandidate] = []
-
-        for dict in infoList {
-            guard let layer = dict[kCGWindowLayer as String] as? Int, layer == 0,
-                  let ownerPID = dict[kCGWindowOwnerPID as String] as? Int32, ownerPID != myPID,
-                  let windowID = dict[kCGWindowNumber as String] as? CGWindowID,
-                  let ownerName = dict[kCGWindowOwnerName as String] as? String, !ownerName.isEmpty,
-                  let boundsDict = dict[kCGWindowBounds as String] as? NSDictionary,
-                  let cgRect = CGRect(dictionaryRepresentation: boundsDict)
-            else { continue }
-
-            guard cgRect.width >= 240, cgRect.height >= 140 else { continue }
-            let appKitTopY = primaryHeight - cgRect.origin.y
-            // Skip fullscreen / menu-bar-flush windows where the pet would clip above the top edge
-            guard appKitTopY < primaryHeight - 28 else { continue }
-
-            results.append(
-                WindowEdgeCandidate(
-                    windowID: windowID,
-                    appName: ownerName,
-                    appKitMinX: cgRect.origin.x,
-                    appKitWidth: cgRect.width,
-                    appKitTopY: appKitTopY,
-                    offsetXRatio: 0.78
-                )
-            )
-        }
-        return results
-    }
-
-    private static func readAppKitBounds(forWindowID windowID: CGWindowID) -> NSRect? {
-        guard let infoList = CGWindowListCopyWindowInfo(.optionIncludingWindow, windowID) as? [[String: Any]],
-              let dict = infoList.first,
-              let boundsDict = dict[kCGWindowBounds as String] as? NSDictionary,
-              let cgRect = CGRect(dictionaryRepresentation: boundsDict),
-              cgRect.width >= 100, cgRect.height >= 60
-        else { return nil }
-
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 900.0
-        let appKitMinY = primaryHeight - (cgRect.origin.y + cgRect.height)
-        return NSRect(x: cgRect.origin.x, y: appKitMinY, width: cgRect.width, height: cgRect.height)
     }
 
     // MARK: - Private Panel Construction
@@ -400,7 +176,6 @@ public final class DesktopPetCoordinator {
             store: store,
             preferences: preferences,
             petsStore: petsStore,
-            coordinator: self,
             onDragBegan: { [weak self] in self?.beginWindowDrag() },
             onDragChanged: { [weak self] in self?.updateWindowDrag() },
             onDragEnded: { [weak self] in self?.endWindowDrag() },
