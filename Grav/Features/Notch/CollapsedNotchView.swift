@@ -193,7 +193,19 @@ public struct CollapsedNotchView: View {
     private func trailingWing(compact: Bool) -> some View {
         HStack(alignment: .center, spacing: 6) {
             ZStack(alignment: .trailing) {
-                if !store.isPaused, let activeSwarm = store.activeSwarmSnapshot {
+                if trayStore.isGlobalDragActive {
+                    HStack(spacing: 4) {
+                        Image(systemName: trayStore.globalDragHasImage ? "photo.badge.arrow.down" : "arrow.down.doc")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.92))
+                        Text(compact ? "Drop" : "Drop here")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.92))
+                            .lineLimit(1)
+                    }
+                    .id("collapsed-global-drag")
+                    .transition(signalTransition)
+                } else if !store.isPaused, let activeSwarm = store.activeSwarmSnapshot {
                     swarmTrailingSignal(for: activeSwarm, compact: compact)
                         .id("collapsed-swarm-\(activeSwarm.runningWorkers.count)-\(activeSwarm.waitingWorkers.count)")
                         .transition(signalTransition)
@@ -265,6 +277,7 @@ public struct CollapsedNotchView: View {
         .animation(reduceMotion ? nil : islandSpring, value: effectiveState)
         .animation(reduceMotion ? nil : islandSpring, value: store.runningTaskCount)
         .animation(reduceMotion ? nil : islandSpring, value: store.activeSwarmSnapshot?.collapsedRatioBadge)
+        .animation(reduceMotion ? nil : islandSpring, value: trayStore.isGlobalDragActive)
     }
 
     private func swarmTrailingSignal(for swarm: SwarmSnapshot, compact: Bool) -> some View {

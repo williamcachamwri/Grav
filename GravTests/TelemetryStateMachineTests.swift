@@ -1251,14 +1251,41 @@ final class TelemetryStateMachineTests: XCTestCase {
         let oversized = String(repeating: "a", count: 13_000)
         XCTAssertNil(NotchTrayStore.buildAntigravityPromptDeepLinkURL(prompt: oversized))
 
-        // Verify direct send flow invokes openURL with the exact antigravity://open?prompt=... URL
+        // Verify default target is .activeSession (preserves open session instead of forcing New Chat)
+        XCTAssertEqual(reloaded.sendTarget, .activeSession)
+
+        // Verify explicit .newChat dispatch invokes openURL with the exact antigravity://open?prompt=... URL
         var openedURLs: [URL] = []
-        let dispatchResult = reloaded.sendQueuedPromptToAntigravity(id: queued.id) { url in
-            openedURLs.append(url)
-            return true
-        }
+        let dispatchResult = reloaded.sendQueuedPromptToAntigravity(
+            id: queued.id,
+            target: .newChat,
+            activateApp: {},
+            openURL: { url in
+                openedURLs.append(url)
+                return true
+            }
+        )
         XCTAssertEqual(openedURLs.count, 1)
-        XCTAssertEqual(dispatchResult, .openedDeepLink(openedURLs[0]))
+        XCTAssertEqual(dispatchResult, .openedNewChatDeepLink(openedURLs[0]))
         XCTAssertTrue(reloaded.queuedPrompts.isEmpty)
+
+        // Verify .activeSession dispatch activates Antigravity without calling antigravity://open (which wipes cascadeId)
+        reloaded.draftPrompt = "Continue fixing this file"
+        var activatedCount = 0
+        var openedDuringActive = 0
+        let activeResult = reloaded.sendCurrentBundleToAntigravity(
+            target: .activeSession,
+            activateApp: { activatedCount += 1 },
+            openURL: { _ in
+                openedDuringActive += 1
+                return true
+            }
+        )
+        XCTAssertEqual(activatedCount, 1)
+        XCTAssertEqual(openedDuringActive, 0)
+        XCTAssertTrue(
+            activeResult == .sentToActiveSession || activeResult == .copiedToActiveSessionNeedsAccessibility
+        )
+        XCTAssertTrue(reloaded.draftPrompt.isEmpty)
     }
 }

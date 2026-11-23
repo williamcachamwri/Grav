@@ -172,6 +172,56 @@ public struct ExpandedNotchView: View {
                 )
                 .allowsHitTesting(false)
             }
+
+            // Full-surface native AppKit NSDraggingDestination catcher (active ONLY during macOS drags
+            // so normal clicks, typing, scrolling, and hover pass straight through at 100% fidelity).
+            NotchNativeDropBridgeView(
+                isCatchingActive: trayStore.isGlobalDragActive || trayStore.isGlobalDragNearNotch,
+                onTargetedChanged: { targeted in
+                    trayStore.isDropTargeted = targeted
+                    if targeted {
+                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                        if !isShowingTray {
+                            withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                                isShowingProfile = false
+                                isShowingTray = true
+                            }
+                        }
+                    }
+                },
+                onDropPasteboard: { pb in
+                    let added = trayStore.stageFromPasteboard(pb, allowPlainText: true)
+                    if added > 0 {
+                        withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                            isShowingProfile = false
+                            isShowingTray = true
+                        }
+                        trayStore.isGlobalDragActive = false
+                        trayStore.isGlobalDragNearNotch = false
+                        trayStore.isDropTargeted = false
+                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                        GravOnboardingWelcomeAudio.shared.playButtonTap()
+                        showBanner(added == 1 ? "Attached to Notch" : "Attached \(added) items to Notch")
+                    }
+                    return added
+                },
+                onPromisedURLs: { urls in
+                    let added = trayStore.stageFileURLs(urls)
+                    if added > 0 {
+                        withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                            isShowingProfile = false
+                            isShowingTray = true
+                        }
+                        trayStore.isGlobalDragActive = false
+                        trayStore.isGlobalDragNearNotch = false
+                        trayStore.isDropTargeted = false
+                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                        GravOnboardingWelcomeAudio.shared.playButtonTap()
+                        showBanner(added == 1 ? "Attached to Notch" : "Attached \(added) items to Notch")
+                    }
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: statusBannerMessage)
         .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: store.activeRadarAlert?.id)

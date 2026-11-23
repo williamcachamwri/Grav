@@ -1,4 +1,6 @@
 import AppKit
+import ApplicationServices
+import Carbon.HIToolbox
 import Foundation
 import Observation
 import UniformTypeIdentifiers
@@ -64,18 +66,32 @@ public struct QueuedPromptItem: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+/// Destination mode for sending prompts from Grav's Notch Composer to Antigravity.
+public enum AntigravitySendTarget: String, CaseIterable, Identifiable, Sendable {
+    /// Targets the currently open Antigravity session (keeps `cascadeId` intact; pastes images + text & submits).
+    case activeSession = "active"
+    /// Opens a fresh Antigravity conversation via the sanctioned `antigravity://open?prompt=...` deep link.
+    case newChat = "new"
+
+    public var id: String { rawValue }
+}
+
 /// Outcome of dispatching a prompt bundle from Grav's Notch Composer to Antigravity.
 public enum AntigravityPromptDispatchResult: Sendable, Equatable {
-    /// Opened Antigravity's sanctioned `antigravity://open?prompt=...` deep link directly into the chat composer.
-    case openedDeepLink(URL)
-    /// Prompt exceeded the safe URL ceiling or LaunchServices could not open the scheme; copied to clipboard instead.
+    /// Sent directly into the currently open Antigravity session (`⌘L` focusInput -> paste image/text -> `Return`).
+    case sentToActiveSession
+    /// Focused the active Antigravity session with bundle on clipboard; Accessibility not granted for auto-submit.
+    case copiedToActiveSessionNeedsAccessibility
+    /// Opened Antigravity's sanctioned `antigravity://open?prompt=...` deep link into a new chat.
+    case openedNewChatDeepLink(URL)
+    /// Prompt exceeded URL length cap or LaunchServices rejected the URL; copied to clipboard instead.
     case copiedToClipboardFallback
 }
 
 // MARK: - Notch Drop Shelf & Prompt Queue Store
 
-/// `@MainActor @Observable` store managing Grav's Notch Drop Shelf (files/images dropped onto
-/// Collapsed or Expanded Notch), inline Prompt Composer draft, and persistent Prompt Queue.
+/// `@MainActor @Observable` store managing Grav's Notch Drop Shelf (files/images dragged onto
+/// the Notch), inline Prompt Composer draft, active-session vs new-chat dispatch, and Prompt Queue.
 @MainActor
 @Observable
 public final class NotchTrayStore {
@@ -86,10 +102,23 @@ public final class NotchTrayStore {
     public var draftPrompt: String {
         didSet { persistDraft() }
     }
+    public var sendTarget: AntigravitySendTarget {
+        didSet { defaults.set(sendTarget.rawValue, forKey: Keys.sendTarget) }
+    }
     public private(set) var queuedPrompts: [QueuedPromptItem] = []
 
-    /// True while a drag cursor is actively hovering over the Collapsed or Expanded Notch.
+    /// True while any macOS drag carrying files/images is active anywhere on screen.
+    public var isGlobalDragActive: Bool = false
+    /// True while a drag cursor carrying files/images is inside the Notch magnetic catch zone.
+    public var isGlobalDragNearNotch: Bool = false
+    /// True while a drag cursor is directly hovering inside the Notch drop surface.
     public var isDropTargeted: Bool = false
+    /// True when the active macOS drag pasteboard contains at least one image.
+    public var globalDragHasImage: Bool = false
+    /// Approximate item count on the active macOS drag pasteboard.
+    public var globalDragItemCount: Int = 0
+    /// Incremented whenever an image/file is absorbed into the Notch (drives optical capture pulse).
+    public private(set) var lastCapturePulseToken: Int = 0
 
     public var totalBadgeCount: Int {
         stagedItems.count + queuedPrompts.count
@@ -99,6 +128,10 @@ public final class NotchTrayStore {
         !draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !stagedItems.isEmpty
     }
 
+    public var isAccessibilityTrustedForAutoSend: Bool {
+        AXIsProcessTrusted()
+    }
+
     private let defaults: UserDefaults
     private let cacheDirectoryURL: URL
     private let maxStagedItems = 8
@@ -106,6 +139,7 @@ public final class NotchTrayStore {
     private enum Keys {
         static let draftPrompt = "grav.notch.tray.draftPrompt"
         static let queuedPrompts = "grav.notch.tray.queuedPrompts"
+        static let sendTarget = "grav.notch.tray.sendTarget"
     }
 
     public init(
@@ -118,6 +152,13 @@ public final class NotchTrayStore {
         self.cacheDirectoryURL = cacheDirectoryURL
             ?? caches.appendingPathComponent("com.grav.telemetry/DropShelf", isDirectory: true)
         self.draftPrompt = defaults.string(forKey: Keys.draftPrompt) ?? ""
+        if let rawTarget = defaults.string(forKey: Keys.sendTarget),
+           let parsedTarget = AntigravitySendTarget(rawValue: rawTarget)
+        {
+            self.sendTarget = parsedTarget
+        } else {
+            self.sendTarget = .activeSession
+        }
         if let data = defaults.data(forKey: Keys.queuedPrompts),
            let decoded = try? JSONDecoder().decode([QueuedPromptItem].self, from: data)
         {
@@ -152,10 +193,13 @@ public final class NotchTrayStore {
         if stagedItems.count > maxStagedItems {
             stagedItems = Array(stagedItems.prefix(maxStagedItems))
         }
+        if added > 0 {
+            lastCapturePulseToken += 1
+        }
         return added
     }
 
-    /// Persists raw dropped image data (e.g. dragged from Safari/Preview) into the local DropShelf cache and stages it.
+    /// Persists raw dropped/pasted image data into the local DropShelf cache and stages it.
     @discardableResult
     public func stageDroppedImageData(_ data: Data, preferredExtension: String = "png") -> StagedDropItem? {
         guard !data.isEmpty else { return nil }
@@ -163,7 +207,7 @@ public final class NotchTrayStore {
         try? fm.createDirectory(at: cacheDirectoryURL, withIntermediateDirectories: true)
 
         let ext = preferredExtension.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        let filename = "drop-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(4)).\(ext.isEmpty ? "png" : ext)"
+        let filename = "image-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(4)).\(ext.isEmpty ? "png" : ext)"
         let targetURL = cacheDirectoryURL.appendingPathComponent(filename)
 
         do {
@@ -173,6 +217,73 @@ public final class NotchTrayStore {
         } catch {
             return nil
         }
+    }
+
+    /// Stages an `NSImage` (e.g. from macOS pasteboard or drag) by encoding crisp PNG bytes to the DropShelf cache.
+    @discardableResult
+    public func stageNSImage(_ image: NSImage) -> StagedDropItem? {
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:])
+        else {
+            return nil
+        }
+        let item = stageDroppedImageData(png, preferredExtension: "png")
+        if let item {
+            thumbnails[item.id] = image
+        }
+        return item
+    }
+
+    /// Reads files, raw images (PNG/TIFF/HEIC/JPEG/NSImage), or plain text from an `NSPasteboard`
+    /// (used by both native `NSDraggingDestination` drops and `⌘V` image paste inside the Composer).
+    @discardableResult
+    public func stageFromPasteboard(_ pb: NSPasteboard, allowPlainText: Bool = true) -> Int {
+        // 1. Real local file URLs (Finder, Screenshots, Desktop, Preview)
+        if let urls = pb.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL], !urls.isEmpty {
+            let added = stageFileURLs(urls)
+            if added > 0 { return added }
+        }
+
+        // 2. Direct PNG bytes on pasteboard (Chrome/Safari/Figma/Screenshots)
+        if let pngData = pb.data(forType: .png), !pngData.isEmpty {
+            if stageDroppedImageData(pngData, preferredExtension: "png") != nil {
+                return 1
+            }
+        }
+
+        // 3. Direct JPEG / HEIC / WebP bytes
+        let extraImageTypes: [(NSPasteboard.PasteboardType, String)] = [
+            (NSPasteboard.PasteboardType("public.jpeg"), "jpg"),
+            (NSPasteboard.PasteboardType("public.heic"), "heic"),
+            (NSPasteboard.PasteboardType("org.webmproject.webp"), "webp"),
+        ]
+        for (pbType, ext) in extraImageTypes {
+            if let data = pb.data(forType: pbType), !data.isEmpty {
+                if stageDroppedImageData(data, preferredExtension: ext) != nil {
+                    return 1
+                }
+            }
+        }
+
+        // 4. Generic NSImage / TIFF representation (Preview, macOS apps, copied screenshots)
+        if let image = NSImage(pasteboard: pb), stageNSImage(image) != nil {
+            return 1
+        }
+
+        // 5. Fallback: plain text drop (only when requested, e.g. drag-drop text snippet)
+        if allowPlainText,
+           let str = pb.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !str.isEmpty
+        {
+            appendDroppedText(str)
+            return 1
+        }
+
+        return 0
     }
 
     /// Appends dropped plain text cleanly into the prompt composer draft.
@@ -223,7 +334,7 @@ public final class NotchTrayStore {
         persistQueue()
     }
 
-    /// Formats a clean prompt + file attachment bundle ready to paste into Antigravity.
+    /// Formats a clean prompt + file attachment bundle ready for Antigravity.
     public static func formatPromptBundle(text: String, filePaths: [String]) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanPaths = filePaths
@@ -247,12 +358,12 @@ public final class NotchTrayStore {
         return allowed
     }()
 
-    /// Builds Antigravity's sanctioned `antigravity://open?prompt=...` deep link URL.
+    /// Builds Antigravity's sanctioned `antigravity://open?prompt=...` deep link URL (New Chat).
     ///
     /// Verified statically against `/Applications/Antigravity.app` (`Info.plist` `CFBundleURLSchemes`,
-    /// `app.asar` `dist/main.js` `open-url` -> `handleDeepLink`, and the renderer's `deepLinkListener`),
-    /// which focuses the Antigravity window, injects `prompt` directly into the chat Lexical editor,
-    /// and preserves `\n` / `\t` while stripping `\r`.
+    /// `app.asar` `dist/main.js` `open-url` -> `handleDeepLink`, and `main.js` `deepLinkListener`),
+    /// which focuses the Antigravity window, opens a New Conversation in the active workspace,
+    /// injects `prompt` into the Lexical editor, and preserves `\n` / `\t` while stripping `\r`.
     public static func buildAntigravityPromptDeepLinkURL(
         prompt: String,
         project: String? = nil
@@ -281,56 +392,85 @@ public final class NotchTrayStore {
         return components.url
     }
 
-    /// Dispatches the current draft + staged items straight into Antigravity's chat composer via
-    /// `antigravity://open?prompt=...` (while also backing up the bundle to the clipboard) and clears the draft.
-    @discardableResult
-    public func sendCurrentBundleToAntigravity(
-        openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
-    ) -> AntigravityPromptDispatchResult? {
-        guard let formatted = copyCurrentBundleAndClear() else { return nil }
-        if let deepLink = Self.buildAntigravityPromptDeepLinkURL(prompt: formatted),
-           openURL(deepLink)
-        {
-            return .openedDeepLink(deepLink)
-        }
-        return .copiedToClipboardFallback
+    /// Prompts macOS System Settings → Privacy & Security → Accessibility so Grav can auto-send
+    /// prompts & image attachments straight into Antigravity's active conversation.
+    public func requestAccessibilityPermission() {
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
     }
 
-    /// Pops a queued prompt and dispatches it straight into Antigravity's chat composer via
-    /// `antigravity://open?prompt=...` (with clipboard backup).
+    /// Dispatches the current draft + staged images/files to Antigravity according to `sendTarget`:
+    /// - `.activeSession`: keeps the currently open conversation intact (does NOT open a new chat!).
+    ///   With Accessibility permission: activates Antigravity, focuses active chat input (`⌘L`),
+    ///   pastes staged images as real native attachments (`⌘V`), pastes text (`⌘V`), and submits (`↵`).
+    ///   Without Accessibility permission: copies to clipboard and activates Antigravity on the active session.
+    /// - `.newChat`: opens a fresh conversation via Antigravity's sanctioned `antigravity://open?prompt=...` scheme.
+    @discardableResult
+    public func sendCurrentBundleToAntigravity(
+        target: AntigravitySendTarget? = nil,
+        activateApp: () -> Void,
+        openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    ) -> AntigravityPromptDispatchResult? {
+        let effectiveTarget = target ?? sendTarget
+        let trimmed = draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let items = stagedItems
+        guard !trimmed.isEmpty || !items.isEmpty else { return nil }
+
+        let imageURLs = items.filter(\.isImage).map(\.url)
+        let nonImagePaths = items.filter { !$0.isImage }.map(\.url.path)
+        let allPaths = items.map(\.url.path)
+
+        draftPrompt = ""
+        clearStagedItems()
+
+        return dispatchBundle(
+            text: trimmed,
+            imageURLs: imageURLs,
+            nonImagePaths: nonImagePaths,
+            allPaths: allPaths,
+            target: effectiveTarget,
+            activateApp: activateApp,
+            openURL: openURL
+        )
+    }
+
+    /// Pops a queued prompt and dispatches it straight to Antigravity (active session or new chat).
     @discardableResult
     public func sendQueuedPromptToAntigravity(
         id: String,
+        target: AntigravitySendTarget? = nil,
+        activateApp: () -> Void = {},
         openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
     ) -> AntigravityPromptDispatchResult? {
-        guard let formatted = popQueuedPromptToPasteboard(id: id) else { return nil }
-        if let deepLink = Self.buildAntigravityPromptDeepLinkURL(prompt: formatted),
-           openURL(deepLink)
-        {
-            return .openedDeepLink(deepLink)
-        }
-        return .copiedToClipboardFallback
+        guard let idx = queuedPrompts.firstIndex(where: { $0.id == id }) else { return nil }
+        let item = queuedPrompts.remove(at: idx)
+        persistQueue()
+
+        let effectiveTarget = target ?? sendTarget
+        let stagedFromQueue = item.attachedPaths.map { StagedDropItem(url: URL(fileURLWithPath: $0)) }
+        let imageURLs = stagedFromQueue.filter(\.isImage).map(\.url)
+        let nonImagePaths = stagedFromQueue.filter { !$0.isImage }.map(\.url.path)
+
+        return dispatchBundle(
+            text: item.text,
+            imageURLs: imageURLs,
+            nonImagePaths: nonImagePaths,
+            allPaths: item.attachedPaths,
+            target: effectiveTarget,
+            activateApp: activateApp,
+            openURL: openURL
+        )
     }
 
-    /// Copies the current draft + staged items to the macOS pasteboard (including native file URLs
-    /// when only files/images are staged so `⌘V` attaches images directly inside Antigravity!) and clears the draft.
+    /// Copies the current draft + staged items to the macOS pasteboard and clears the draft.
     @discardableResult
     public func copyCurrentBundleAndClear() -> String? {
         let trimmed = draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let urls = stagedItems.map(\.url)
         guard !trimmed.isEmpty || !urls.isEmpty else { return nil }
 
-        let pb = NSPasteboard.general
-        pb.clearContents()
-
         let formatted = Self.formatPromptBundle(text: trimmed, filePaths: urls.map(\.path))
-        if trimmed.isEmpty && !urls.isEmpty {
-            // Pure file/image drop: write native NSURL objects + string fallback so ⌘V attaches files in Antigravity!
-            pb.writeObjects(urls as [NSURL])
-            pb.setString(formatted, forType: .string)
-        } else {
-            pb.setString(formatted, forType: .string)
-        }
+        writeFallbackClipboard(text: trimmed, urls: urls, formatted: formatted)
 
         draftPrompt = ""
         clearStagedItems()
@@ -351,7 +491,7 @@ public final class NotchTrayStore {
         return formatted
     }
 
-    /// Handles SwiftUI `NSItemProvider` drops from Finder, Screenshots, Preview, Chrome, Safari, or text selections.
+    /// Handles SwiftUI `NSItemProvider` drops as a fallback alongside the native AppKit `NSDraggingDestination`.
     public func handleDrop(providers: [NSItemProvider], onAccepted: @escaping @MainActor () -> Void) -> Bool {
         guard !providers.isEmpty else { return false }
         var handledAny = false
@@ -422,7 +562,129 @@ public final class NotchTrayStore {
         return handledAny
     }
 
-    // MARK: - Private Helpers
+    // MARK: - Private Dispatch Helpers
+
+    private func dispatchBundle(
+        text: String,
+        imageURLs: [URL],
+        nonImagePaths: [String],
+        allPaths: [String],
+        target: AntigravitySendTarget,
+        activateApp: () -> Void,
+        openURL: (URL) -> Bool
+    ) -> AntigravityPromptDispatchResult {
+        let fullFormatted = Self.formatPromptBundle(text: text, filePaths: allPaths)
+        let urls = allPaths.map { URL(fileURLWithPath: $0) }
+        writeFallbackClipboard(text: text, urls: urls, formatted: fullFormatted)
+
+        switch target {
+        case .newChat:
+            if let deepLink = Self.buildAntigravityPromptDeepLinkURL(prompt: fullFormatted),
+               openURL(deepLink)
+            {
+                return .openedNewChatDeepLink(deepLink)
+            }
+            activateApp()
+            return .copiedToClipboardFallback
+
+        case .activeSession:
+            activateApp()
+            guard AXIsProcessTrusted() else {
+                return .copiedToActiveSessionNeedsAccessibility
+            }
+            let textWithNonImageRefs = Self.formatPromptBundle(text: text, filePaths: nonImagePaths)
+            Self.deliverToFocusedAntigravitySession(
+                text: textWithNonImageRefs,
+                imageURLs: imageURLs
+            )
+            return .sentToActiveSession
+        }
+    }
+
+    private func writeFallbackClipboard(text: String, urls: [URL], formatted: String) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        if text.isEmpty && !urls.isEmpty {
+            if urls.count == 1,
+               let img = NSImage(contentsOf: urls[0]),
+               let tiff = img.tiffRepresentation,
+               let rep = NSBitmapImageRep(data: tiff),
+               let png = rep.representation(using: .png, properties: [:])
+            {
+                pb.setData(png, forType: .png)
+            }
+            pb.writeObjects(urls as [NSURL])
+            pb.setString(formatted, forType: .string)
+        } else {
+            pb.setString(formatted, forType: .string)
+        }
+    }
+
+    /// Standard macOS Accessibility-authorized delivery into Antigravity's currently open session:
+    /// 1. `⌘L` -> Antigravity's `focusInput` command (verified in `main.js` `@5815362` for darwin)
+    /// 2. Pastes each staged image via `NSPasteboard` PNG bytes + `⌘V` so Antigravity attaches real images
+    /// 3. Pastes the prompt text + any non-image `@path` references via `⌘V`
+    /// 4. Submits via `Return` (`submitPrompt`, verified in `main.js` `@5465280`)
+    private static func deliverToFocusedAntigravitySession(text: String, imageURLs: [URL]) {
+        Task { @MainActor in
+            // Allow Antigravity window activation to settle before sending chords
+            try? await Task.sleep(for: .milliseconds(160))
+
+            // 1. Focus active session's Lexical chat editor via Antigravity's `focusInput` (`⌘L`)
+            postKeyChord(keyCode: CGKeyCode(kVK_ANSI_L), flags: .maskCommand)
+            try? await Task.sleep(for: .milliseconds(110))
+
+            // 2. Attach each staged image directly via native paste (`⌘V`)
+            for imageURL in imageURLs {
+                if let pngData = loadPNGData(from: imageURL) {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setData(pngData, forType: .png)
+                    postKeyChord(keyCode: CGKeyCode(kVK_ANSI_V), flags: .maskCommand)
+                    try? await Task.sleep(for: .milliseconds(160))
+                }
+            }
+
+            // 3. Paste prompt text (if any)
+            let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedText.isEmpty {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(trimmedText, forType: .string)
+                postKeyChord(keyCode: CGKeyCode(kVK_ANSI_V), flags: .maskCommand)
+                try? await Task.sleep(for: .milliseconds(110))
+            }
+
+            // 4. Submit straight into the active Antigravity session (`Return`)
+            postKeyChord(keyCode: CGKeyCode(kVK_Return), flags: [])
+        }
+    }
+
+    private static func loadPNGData(from url: URL) -> Data? {
+        if url.pathExtension.lowercased() == "png",
+           let raw = try? Data(contentsOf: url), !raw.isEmpty
+        {
+            return raw
+        }
+        guard let image = NSImage(contentsOf: url),
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff)
+        else {
+            return nil
+        }
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    private static func postKeyChord(keyCode: CGKeyCode, flags: CGEventFlags) {
+        guard let source = CGEventSource(stateID: .hidSystemState),
+              let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
+        else { return }
+        down.flags = flags
+        up.flags = flags
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+    }
 
     private func loadThumbnailAsync(for item: StagedDropItem) {
         let url = item.url
