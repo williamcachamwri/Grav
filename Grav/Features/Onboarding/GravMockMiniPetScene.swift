@@ -242,85 +242,11 @@ struct GravMockMiniPetScene: View {
     private func liveStageAndExportCard(for pet: InstalledCodexPet) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 10) {
-                // Dark Matte Pixel Stage
-                ZStack {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color(red: 0.052, green: 0.055, blue: 0.066))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.6)
-                        )
-
-                    CodexPetSpriteView(
-                        pet: pet,
-                        state: state.miniPetPreviewState,
-                        size: 58,
-                        speed: preferences.miniPetSpeed,
-                        reduceMotion: reduceMotion,
-                        petsStore: petsStore
-                    )
-                }
-                .frame(width: 76, height: 76)
-                .onTapGesture {
-                    GravOnboardingWelcomeAudio.shared.playButtonTap()
-                    let next: CodexPetAnimationState = (state.miniPetPreviewState == .waving) ? .jumping : .waving
-                    state.selectMiniPetPreviewState(next)
-                }
+                liveStagePreviewBox(for: pet)
 
                 VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 5) {
-                        Text(pet.displayName)
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(Color.white.opacity(0.94))
-                            .lineLimit(1)
-
-                        Text("v\(pet.spriteVersionNumber) · \(availableStates.count) states")
-                            .font(.system(size: 7.8, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color.white.opacity(0.56))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(Capsule().fill(Color.white.opacity(0.07)))
-                            .fixedSize()
-                    }
-
-                    Text("@\(pet.ownerHandle) — \(pet.description)")
-                        .font(.system(size: 8.2))
-                        .foregroundStyle(Color.white.opacity(0.48))
-                        .lineLimit(1)
-
-                    // All 11 clickable state pills matching Image 4
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 52), spacing: 4)],
-                        alignment: .leading,
-                        spacing: 4
-                    ) {
-                        ForEach(availableStates) { anim in
-                            let selected = state.miniPetPreviewState == anim
-                            Button {
-                                GravOnboardingWelcomeAudio.shared.playButtonTap()
-                                state.selectMiniPetPreviewState(anim)
-                            } label: {
-                                Text(anim.label)
-                                    .font(.system(size: 8.2, weight: selected ? .semibold : .regular))
-                                    .foregroundStyle(selected ? .white : Color.white.opacity(0.62))
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 3)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                            .fill(selected ? Color.white.opacity(0.14) : Color.white.opacity(0.045))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                                    .strokeBorder(
-                                                        Color.white.opacity(selected ? 0.22 : 0.05),
-                                                        lineWidth: 0.5
-                                                    )
-                                            )
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
+                    liveStageHeader(for: pet)
+                    liveStageStateGrid
                 }
             }
 
@@ -328,37 +254,7 @@ struct GravMockMiniPetScene: View {
                 .fill(Color.white.opacity(0.07))
                 .frame(height: 0.5)
 
-            // 1:1 EXPORT Strip
-            HStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("EXPORT")
-                        .font(.system(size: 7.5, weight: .bold, design: .monospaced))
-                        .tracking(0.7)
-                        .foregroundStyle(Color.white.opacity(0.55))
-                    Text("GIFs render from the live sheet — pick a state, then grab it.")
-                        .font(.system(size: 8))
-                        .foregroundStyle(Color.white.opacity(0.44))
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 4)
-
-                HStack(spacing: 4) {
-                    mockHeaderPill(icon: "arrow.down.to.line", title: "\(state.miniPetPreviewState.label) GIF") {
-                        GravOnboardingWelcomeAudio.shared.playButtonTap()
-                        state.markMiniPetCustomized()
-                    }
-                    mockHeaderPill(icon: "shippingbox", title: "All GIFs") {
-                        GravOnboardingWelcomeAudio.shared.playButtonTap()
-                        state.markMiniPetCustomized()
-                    }
-                    mockHeaderPill(icon: "square.grid.3x3", title: "Sheet") {
-                        GravOnboardingWelcomeAudio.shared.playButtonTap()
-                        state.markMiniPetCustomized()
-                    }
-                }
-                .fixedSize(horizontal: true, vertical: false)
-            }
+            liveStageExportStrip
         }
         .padding(10)
         .background(
@@ -369,6 +265,128 @@ struct GravMockMiniPetScene: View {
                         .strokeBorder(Color.white.opacity(0.085), lineWidth: 0.65)
                 )
         )
+    }
+
+    private func liveStagePreviewBox(for pet: InstalledCodexPet) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color(red: 0.052, green: 0.055, blue: 0.066))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.6)
+                )
+
+            CodexPetSpriteView(
+                pet: pet,
+                state: state.miniPetPreviewState,
+                size: 58,
+                speed: preferences.miniPetSpeed,
+                reduceMotion: reduceMotion,
+                petsStore: petsStore
+            )
+        }
+        .frame(width: 76, height: 76)
+        .onTapGesture {
+            GravOnboardingWelcomeAudio.shared.playButtonTap()
+            let next: CodexPetAnimationState = (state.miniPetPreviewState == .waving) ? .jumping : .waving
+            state.selectMiniPetPreviewState(next)
+        }
+    }
+
+    private func liveStageHeader(for pet: InstalledCodexPet) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Text(pet.displayName)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.94))
+                    .lineLimit(1)
+
+                Text("v\(pet.spriteVersionNumber) · \(availableStates.count) states")
+                    .font(.system(size: 7.8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.56))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1.5)
+                    .background(Capsule().fill(Color.white.opacity(0.07)))
+                    .fixedSize()
+            }
+
+            Text("@\(pet.ownerHandle) — \(pet.description)")
+                .font(.system(size: 8.2))
+                .foregroundStyle(Color.white.opacity(0.48))
+                .lineLimit(1)
+        }
+    }
+
+    private var liveStageStateGrid: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 52), spacing: 4)],
+            alignment: .leading,
+            spacing: 4
+        ) {
+            ForEach(availableStates) { anim in
+                liveStageStatePill(for: anim)
+            }
+        }
+    }
+
+    private func liveStageStatePill(for anim: CodexPetAnimationState) -> some View {
+        let selected = state.miniPetPreviewState == anim
+        let fillColor = Color.white.opacity(selected ? 0.14 : 0.045)
+        let strokeColor = Color.white.opacity(selected ? 0.22 : 0.05)
+
+        return Button {
+            GravOnboardingWelcomeAudio.shared.playButtonTap()
+            state.selectMiniPetPreviewState(anim)
+        } label: {
+            Text(anim.label)
+                .font(.system(size: 8.2, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? Color.white : Color.white.opacity(0.62))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 3)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(fillColor)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .strokeBorder(strokeColor, lineWidth: 0.5)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var liveStageExportStrip: some View {
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("EXPORT")
+                    .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                    .tracking(0.7)
+                    .foregroundStyle(Color.white.opacity(0.55))
+                Text("GIFs render from the live sheet — pick a state, then grab it.")
+                    .font(.system(size: 8))
+                    .foregroundStyle(Color.white.opacity(0.44))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 4)
+
+            HStack(spacing: 4) {
+                mockHeaderPill(icon: "arrow.down.to.line", title: "\(state.miniPetPreviewState.label) GIF") {
+                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                    state.markMiniPetCustomized()
+                }
+                mockHeaderPill(icon: "shippingbox", title: "All GIFs") {
+                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                    state.markMiniPetCustomized()
+                }
+                mockHeaderPill(icon: "square.grid.3x3", title: "Sheet") {
+                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                    state.markMiniPetCustomized()
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
     }
 
     private var galleryBrowserStrip: some View {
