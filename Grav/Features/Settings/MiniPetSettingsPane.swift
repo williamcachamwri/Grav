@@ -74,18 +74,21 @@ struct MiniPetSettingsPane: View {
     // MARK: - 1. Codex-Style Minimal Header Bar
 
     private var headerBar: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Pets")
                     .font(.system(size: 18, weight: .semibold))
                     .tracking(-0.3)
 
                 Text("Floating desktop companion synced live with Antigravity.")
-                    .font(.system(size: 12))
+                    .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
+            .layoutPriority(0)
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 8)
 
             HStack(spacing: 6) {
                 subtleActionButton(title: "codex-pets.net", systemImage: "arrow.up.right") {
@@ -109,6 +112,8 @@ struct MiniPetSettingsPane: View {
                     }
                 }
             }
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
         }
     }
 
@@ -791,10 +796,13 @@ struct MiniPetSettingsPane: View {
                     .font(.system(size: 10.5, weight: .medium))
                 Text(title)
                     .font(.system(size: 11.5, weight: .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundStyle(isEmphasized ? Color.white : Color.primary.opacity(0.88))
             .padding(.horizontal, 10)
             .padding(.vertical, 5.5)
+            .fixedSize(horizontal: true, vertical: false)
             .background(
                 RoundedRectangle(cornerRadius: 7.5, style: .continuous)
                     .fill(isEmphasized ? Color.accentColor : Color.primary.opacity(0.06))

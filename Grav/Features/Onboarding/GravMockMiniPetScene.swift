@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Space 2 (Step 3 of 4): 1:1 Codex-style Floating Desktop Mini Pet experience inside Onboarding.
-/// Shows a calm dark Codex Pets settings window alongside a real floating pixel companion with
-/// its live status speech bubble anchored to the mock macOS desktop (moving & scaling live).
+/// Space 2 (Step 3 of 4): Pixel-faithful 1:1 replica of Grav's real Settings → Mini Pet window
+/// (`Grav` sidebar, `< > Mini Pet` toolbar, `Pets` header with single-line actions, interactive
+/// 11-state Live Stage + `EXPORT` bar, `Installed / Explore codex-pets.net` search bar) paired
+/// with the live floating Desktop Mini Pet & telemetry speech bubble anchored cleanly on screen.
 struct GravMockMiniPetScene: View {
     @ObservedObject var state: GravOnboardingState
     let preferences: PreferencesStore
@@ -10,86 +11,495 @@ struct GravMockMiniPetScene: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var petBounce = false
-
-    private let showcaseStates: [CodexPetAnimationState] = [
-        .idle,
-        .running,
-        .review,
-        .waving,
-        .jumping,
-        .failed,
-    ]
+    @State private var selectedChip: String? = "goku"
 
     private var activePet: InstalledCodexPet? {
         petsStore.pet(withID: preferences.activeMiniPetID)
     }
 
-    private var floatingAlignment: Alignment {
-        switch preferences.miniPetPlacement {
-        case .topRight, .free: return .topTrailing
-        case .bottomRight: return .bottomTrailing
-        case .bottomLeft: return .bottomLeading
-        }
+    private var availableStates: [CodexPetAnimationState] {
+        CodexPetAnimationState.availableStates(for: activePet?.spriteVersionNumber ?? 2)
     }
 
     var body: some View {
-        ZStack(alignment: floatingAlignment) {
-            GravMockWallpaper(app: .miniPet).equatable()
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                GravMockWallpaper(app: .miniPet).equatable()
+                    .frame(width: geo.size.width, height: geo.size.height)
 
-            // Calm Codex-style Pets window anchored nicely on the mock desktop
-            VStack(spacing: 0) {
-                codexPetsWindow
-                    .padding(.top, GravMockScene.windowTopInset + 10)
-                    .padding(.leading, GravMockScene.windowInset - 10)
-                    .padding(.trailing, 96)
+                // Exact 1:1 Grav Settings → Mini Pet window
+                VStack(spacing: 0) {
+                    gravMiniPetSettingsWindow
+                        .padding(.top, GravMockScene.windowTopInset + 8)
+                        .padding(.horizontal, max(10, GravMockScene.windowInset - 14))
+
+                    Spacer(minLength: 0)
+                }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+
+                // Live Floating Desktop Mini Pet + Status Bubble positioned cleanly inside viewport
+                if preferences.miniPetEnabled, let pet = activePet {
+                    floatingDesktopPetBadge(for: pet)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(.trailing, 14)
+                        .padding(.bottom, 58)
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .opacity.combined(with: .scale(scale: 0.90))
+                        )
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
+        }
+        .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.16), value: preferences.miniPetEnabled)
+    }
+
+    // MARK: - 1:1 Grav Settings → Mini Pet Window
+
+    private var gravMiniPetSettingsWindow: some View {
+        HStack(spacing: 0) {
+            // Left Sidebar matching Grav Settings 1:1
+            VStack(alignment: .leading, spacing: 0) {
+                GravMockTrafficLights(size: 8.5, spacing: 5)
+                    .padding(.horizontal, 11)
+                    .padding(.top, 10)
+                    .padding(.bottom, 8)
+
+                // Capsule Search Pill
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.42))
+                    Text("Search")
+                        .font(.system(size: 8.8, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.42))
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 7)
+                .frame(height: 19)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.075))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+                        )
+                )
+                .padding(.horizontal, 8)
+                .padding(.bottom, 9)
+
+                // Grav Profile Row
+                HStack(spacing: 7) {
+                    GravAppIconTile(size: 22)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Grav")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.94))
+                        HStack(spacing: 3) {
+                            Circle()
+                                .fill(GravPalette.emerald)
+                                .frame(width: 4.5, height: 4.5)
+                            Text("v1.0.0 · Telemetry")
+                                .font(.system(size: 7.5))
+                                .foregroundStyle(Color.white.opacity(0.48))
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 9)
+                .padding(.bottom, 9)
+
+                // Group 1
+                VStack(spacing: 1.5) {
+                    sidebarRow(symbol: "gearshape.fill", title: "General", tint: Color(white: 0.72), selected: false)
+                    sidebarRow(symbol: "rectangle.topthird.inset.filled", title: "Notch HUD", tint: Color(red: 0.36, green: 0.85, blue: 0.82), selected: false)
+                    sidebarRow(symbol: "pawprint.fill", title: "Mini Pet", tint: Color(red: 0.96, green: 0.72, blue: 0.36), selected: true)
+                    sidebarRow(symbol: "waveform.path.ecg", title: "Telemetry", tint: Color(red: 0.36, green: 0.78, blue: 0.96), selected: false)
+                }
+                .padding(.bottom, 8)
+
+                // Group 2
+                VStack(spacing: 1.5) {
+                    sidebarRow(symbol: "menubar.rectangle", title: "Menu Bar", tint: Color(red: 0.34, green: 0.84, blue: 0.60), selected: false)
+                    sidebarRow(symbol: "command", title: "Shortcuts", tint: Color(red: 0.54, green: 0.58, blue: 0.96), selected: false)
+                    sidebarRow(symbol: "lock.shield.fill", title: "Permissions", tint: Color(red: 0.96, green: 0.74, blue: 0.34), selected: false)
+                }
+                .padding(.bottom, 8)
+
+                // Group 3
+                sidebarRow(symbol: "info.circle", title: "About", tint: Color(red: 0.36, green: 0.85, blue: 0.82), selected: false)
+
+                Spacer(minLength: 0)
+            }
+            .frame(width: 128)
+            .background(Color(red: 0.106, green: 0.110, blue: 0.118))
+
+            Rectangle()
+                .fill(Color.black.opacity(0.65))
+                .frame(width: 0.75)
+
+            // Right Detail Pane matching Image 4 100%
+            VStack(alignment: .leading, spacing: 9) {
+                // Toolbar: `< >` pill + `Mini Pet`
+                HStack(spacing: 8) {
+                    HStack(spacing: 0) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 8.5, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.48))
+                            .frame(width: 20, height: 19)
+                        Rectangle()
+                            .fill(Color.white.opacity(0.14))
+                            .frame(width: 0.5, height: 10)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8.5, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.24))
+                            .frame(width: 20, height: 19)
+                    }
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                            )
+                    )
+
+                    Text("Mini Pet")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.92))
+
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+
+                VStack(alignment: .leading, spacing: 9) {
+                    // Pets Header + Single-Line Action Pills
+                    HStack(alignment: .center, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Pets")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(0.94))
+                            Text("Floating desktop companion synced live with Antigravity.")
+                                .font(.system(size: 8.2))
+                                .foregroundStyle(Color.white.opacity(0.48))
+                                .lineLimit(1)
+                        }
+                        .layoutPriority(0)
+
+                        Spacer(minLength: 4)
+
+                        HStack(spacing: 4) {
+                            mockHeaderPill(icon: "arrow.up.right", title: "codex-pets.net") {
+                                GravOnboardingWelcomeAudio.shared.playButtonTap()
+                                state.markMiniPetCustomized()
+                            }
+                            mockHeaderPill(icon: "arrow.clockwise", title: "Refresh") {
+                                GravOnboardingWelcomeAudio.shared.playButtonTap()
+                                state.markMiniPetCustomized()
+                            }
+                            mockHeaderPill(
+                                icon: preferences.miniPetEnabled ? "eye.slash" : "eye",
+                                title: preferences.miniPetEnabled ? "Tuck Away Pet" : "Show Pet"
+                            ) {
+                                GravOnboardingWelcomeAudio.shared.playButtonTap()
+                                preferences.miniPetEnabled.toggle()
+                                state.markMiniPetCustomized()
+                            }
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+                        .layoutPriority(1)
+                    }
+
+                    // Live Stage + 11 State Pills + Export Bar Card (1:1 Image 4)
+                    if let pet = activePet {
+                        liveStageAndExportCard(for: pet)
+                    }
+
+                    // Gallery Tabs + Search Bar + Quick Chips (1:1 Image 4)
+                    galleryBrowserStrip
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
 
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-            // TRUE Floating Desktop Mini Pet + Live Status Speech Bubble (1:1 Codex reference!)
-            if preferences.miniPetEnabled, let pet = activePet {
-                floatingDesktopPetOverlay(for: pet)
-                    .padding(.top, GravMockScene.windowTopInset + 14)
-                    .padding(.bottom, 54)
-                    .padding(.horizontal, 16)
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .opacity.combined(with: .scale(scale: 0.90))
-                    )
-            }
+            .background(Color(red: 0.082, green: 0.085, blue: 0.094))
         }
-        .animation(reduceMotion ? nil : .spring(duration: 0.36, bounce: 0.16), value: preferences.miniPetPlacement)
-        .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.14), value: preferences.miniPetEnabled)
+        .frame(height: 334)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.75)
+        )
+        .shadow(color: Color.black.opacity(0.48), radius: 22, y: 12)
     }
 
-    // MARK: - Codex-Style Floating Desktop Pet Overlay
+    private func liveStageAndExportCard(for pet: InstalledCodexPet) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                // Dark Matte Pixel Stage
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color(red: 0.052, green: 0.055, blue: 0.066))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.6)
+                        )
 
-    private func floatingDesktopPetOverlay(for pet: InstalledCodexPet) -> some View {
-        let scaledSize = CGFloat(min(84, max(44, preferences.miniPetSize * 0.78)))
+                    CodexPetSpriteView(
+                        pet: pet,
+                        state: state.miniPetPreviewState,
+                        size: 58,
+                        speed: preferences.miniPetSpeed,
+                        reduceMotion: reduceMotion,
+                        petsStore: petsStore
+                    )
+                }
+                .frame(width: 76, height: 76)
+                .onTapGesture {
+                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                    let next: CodexPetAnimationState = (state.miniPetPreviewState == .waving) ? .jumping : .waving
+                    state.selectMiniPetPreviewState(next)
+                }
 
-        return VStack(spacing: 5) {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 5) {
+                        Text(pet.displayName)
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.94))
+                            .lineLimit(1)
+
+                        Text("v\(pet.spriteVersionNumber) · \(availableStates.count) states")
+                            .font(.system(size: 7.8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.56))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Capsule().fill(Color.white.opacity(0.07)))
+                            .fixedSize()
+                    }
+
+                    Text("@\(pet.ownerHandle) — \(pet.description)")
+                        .font(.system(size: 8.2))
+                        .foregroundStyle(Color.white.opacity(0.48))
+                        .lineLimit(1)
+
+                    // All 11 clickable state pills matching Image 4
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 52), spacing: 4)],
+                        alignment: .leading,
+                        spacing: 4
+                    ) {
+                        ForEach(availableStates) { anim in
+                            let selected = state.miniPetPreviewState == anim
+                            Button {
+                                GravOnboardingWelcomeAudio.shared.playButtonTap()
+                                state.selectMiniPetPreviewState(anim)
+                            } label: {
+                                Text(anim.label)
+                                    .font(.system(size: 8.2, weight: selected ? .semibold : .regular))
+                                    .foregroundStyle(selected ? .white : Color.white.opacity(0.62))
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 3)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                            .fill(selected ? Color.white.opacity(0.14) : Color.white.opacity(0.045))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                                    .strokeBorder(
+                                                        Color.white.opacity(selected ? 0.22 : 0.05),
+                                                        lineWidth: 0.5
+                                                    )
+                                            )
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            Rectangle()
+                .fill(Color.white.opacity(0.07))
+                .frame(height: 0.5)
+
+            // 1:1 EXPORT Strip
+            HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("EXPORT")
+                        .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                        .tracking(0.7)
+                        .foregroundStyle(Color.white.opacity(0.55))
+                    Text("GIFs render from the live sheet — pick a state, then grab it.")
+                        .font(.system(size: 8))
+                        .foregroundStyle(Color.white.opacity(0.44))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                HStack(spacing: 4) {
+                    mockHeaderPill(icon: "arrow.down.to.line", title: "\(state.miniPetPreviewState.label) GIF") {
+                        GravOnboardingWelcomeAudio.shared.playButtonTap()
+                        state.markMiniPetCustomized()
+                    }
+                    mockHeaderPill(icon: "shippingbox", title: "All GIFs") {
+                        GravOnboardingWelcomeAudio.shared.playButtonTap()
+                        state.markMiniPetCustomized()
+                    }
+                    mockHeaderPill(icon: "square.grid.3x3", title: "Sheet") {
+                        GravOnboardingWelcomeAudio.shared.playButtonTap()
+                        state.markMiniPetCustomized()
+                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.035))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.085), lineWidth: 0.65)
+                )
+        )
+    }
+
+    private var galleryBrowserStrip: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                HStack(spacing: 2) {
+                    Text("Installed (\(petsStore.installedPets.count))")
+                        .font(.system(size: 8.5, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.56))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+
+                    Text("Explore codex-pets.net")
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3.5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(Color.white.opacity(0.11))
+                        )
+                }
+                .padding(2)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.white.opacity(0.045))
+                )
+
+                Spacer()
+
+                HStack(spacing: 2) {
+                    Text("Popular")
+                        .font(.system(size: 8.2, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.11)))
+                    Text("Newest")
+                        .font(.system(size: 8.2))
+                        .foregroundStyle(Color.white.opacity(0.50))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                }
+                .padding(2)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.045)))
+            }
+
+            // Single-line Search Field Preview
+            HStack(spacing: 6) {
+                HStack(spacing: 5) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 8.5))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                    Text(selectedChip.map { "Search: \($0)" } ?? "Search pets or paste codex-pets.net URL…")
+                        .font(.system(size: 8.8))
+                        .foregroundStyle(Color.white.opacity(selectedChip == nil ? 0.42 : 0.85))
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                .frame(height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                        .fill(Color.white.opacity(0.05))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
+                        )
+                )
+
+                Text("Search")
+                    .font(.system(size: 8.8, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.90))
+                    .padding(.horizontal, 10)
+                    .frame(height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                            .fill(Color.white.opacity(0.11))
+                    )
+            }
+
+            HStack(spacing: 4) {
+                ForEach(["goku", "anime", "cat", "pokemon", "robot", "duck"], id: \.self) { chip in
+                    let active = selectedChip == chip
+                    Button {
+                        GravOnboardingWelcomeAudio.shared.playButtonTap()
+                        selectedChip = chip
+                        state.markMiniPetCustomized()
+                    } label: {
+                        Text(chip)
+                            .font(.system(size: 8, weight: active ? .semibold : .regular))
+                            .foregroundStyle(active ? .white : Color.white.opacity(0.55))
+                            .padding(.horizontal, 6.5)
+                            .padding(.vertical, 2.5)
+                            .background(
+                                Capsule().fill(Color.white.opacity(active ? 0.14 : 0.05))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+                Text("3,711 pets")
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.36))
+            }
+        }
+    }
+
+    // MARK: - Live Floating Desktop Pet Badge
+
+    private func floatingDesktopPetBadge(for pet: InstalledCodexPet) -> some View {
+        VStack(spacing: 4) {
             ZStack {
                 Ellipse()
-                    .fill(Color.black.opacity(0.38))
-                    .frame(width: scaledSize * 0.62, height: 8)
-                    .blur(radius: 4)
-                    .offset(y: scaledSize * 0.44)
+                    .fill(Color.black.opacity(0.42))
+                    .frame(width: 40, height: 7)
+                    .blur(radius: 3.5)
+                    .offset(y: 26)
 
                 CodexPetSpriteView(
                     pet: pet,
                     state: state.miniPetPreviewState,
-                    size: scaledSize,
+                    size: 58,
                     speed: preferences.miniPetSpeed,
                     reduceMotion: reduceMotion,
                     petsStore: petsStore
                 )
                 .scaleEffect(petBounce ? 1.10 : 1.0)
-                .offset(y: petBounce ? -6 : 0)
+                .offset(y: petBounce ? -5 : 0)
                 .animation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.44), value: petBounce)
             }
-            .contentShape(Rectangle())
             .onTapGesture {
                 GravOnboardingWelcomeAudio.shared.playButtonTap()
                 let next: CodexPetAnimationState = (state.miniPetPreviewState == .waving) ? .jumping : .waving
@@ -103,342 +513,87 @@ struct GravMockMiniPetScene: View {
                 }
             }
 
-            if preferences.miniPetShowBubble {
-                VStack(alignment: .leading, spacing: 2.5) {
-                    HStack(spacing: 5) {
-                        Text(mockBubbleTitle)
-                            .font(.system(size: 9.5, weight: .semibold))
-                            .foregroundStyle(Color.white.opacity(0.95))
-                            .lineLimit(1)
-                        Spacer(minLength: 4)
-                        Circle()
-                            .fill(mockBubbleDotColor)
-                            .frame(width: 5, height: 5)
-                    }
-                    Text(mockBubbleSubtitle)
-                        .font(.system(size: 8.5))
-                        .foregroundStyle(Color.white.opacity(0.60))
-                        .lineLimit(2)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 6.5)
-                .frame(width: 152, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 9.5, style: .continuous)
-                        .fill(Color(red: 0.082, green: 0.086, blue: 0.098).opacity(0.95))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9.5, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.7)
-                        )
-                        .shadow(color: Color.black.opacity(0.45), radius: 12, y: 5)
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.94)))
-            }
-        }
-        .animation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.16), value: preferences.miniPetShowBubble)
-    }
-
-    private var mockBubbleTitle: String {
-        switch state.miniPetPreviewState {
-        case .idle: return activePet?.displayName ?? "Grav Pet"
-        case .running: return "Running swift test"
-        case .review: return "Editing PetView.swift"
-        case .waving: return "Hey there!"
-        case .jumping: return "Task completed"
-        case .failed: return "Build failed"
-        default: return state.miniPetPreviewState.label
-        }
-    }
-
-    private var mockBubbleSubtitle: String {
-        switch state.miniPetPreviewState {
-        case .idle: return "Standing by · Drag anywhere on your desktop"
-        case .running: return "Streaming live telemetry from Antigravity…"
-        case .review: return "+42 -8 · Updating desktop pet physics"
-        case .waving: return "Click your pet anytime for a quick reaction"
-        case .jumping: return "30/30 tests passed in 0.16s"
-        case .failed: return "Exit code 1 · Click to inspect logs"
-        default: return "Synced 100% realtime with Antigravity"
-        }
-    }
-
-    private var mockBubbleDotColor: Color {
-        switch state.miniPetPreviewState {
-        case .failed: return GravPalette.coral
-        case .review: return GravPalette.fileEdit
-        case .running: return GravPalette.glacialCyan
-        default: return GravPalette.emerald
-        }
-    }
-
-    // MARK: - Calm Codex-Style Pets Window
-
-    private var codexPetsWindow: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Minimal titlebar
-            HStack(spacing: 8) {
-                GravMockTrafficLights(size: 8.5, spacing: 5)
-
-                Text("Pets")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.90))
-                    .padding(.leading, 4)
-
-                Spacer()
-
-                Button {
-                    GravOnboardingWelcomeAudio.shared.playButtonTap()
-                    preferences.miniPetEnabled.toggle()
-                    state.markMiniPetCustomized()
-                } label: {
-                    Text(preferences.miniPetEnabled ? "Tuck Away Pet" : "Show Pet")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.86))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3.5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color.white.opacity(0.08))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.6)
-                                )
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(Color(red: 0.115, green: 0.118, blue: 0.128))
-
-            Rectangle()
-                .fill(Color.white.opacity(0.07))
-                .frame(height: 0.5)
-
-            VStack(alignment: .leading, spacing: 10) {
-                // Animation state test pills
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("TRY LIVE REACTIONS")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .tracking(0.6)
-                        .foregroundStyle(Color.white.opacity(0.40))
-
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 64), spacing: 5)],
-                        alignment: .leading,
-                        spacing: 5
-                    ) {
-                        ForEach(showcaseStates) { anim in
-                            let selected = state.miniPetPreviewState == anim
-                            Button {
-                                GravOnboardingWelcomeAudio.shared.playButtonTap()
-                                state.selectMiniPetPreviewState(anim)
-                            } label: {
-                                Text(anim.label)
-                                    .font(.system(size: 9.5, weight: selected ? .semibold : .regular))
-                                    .foregroundStyle(selected ? .white : Color.white.opacity(0.68))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 4.5)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 6.5, style: .continuous)
-                                            .fill(selected ? Color.white.opacity(0.15) : Color.white.opacity(0.05))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 6.5, style: .continuous)
-                                                    .strokeBorder(
-                                                        Color.white.opacity(selected ? 0.22 : 0.06),
-                                                        lineWidth: 0.6
-                                                    )
-                                            )
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                // Clean hairline tuning rows
-                VStack(spacing: 0) {
-                    // Position Snap
-                    HStack {
-                        Text("Position")
-                            .font(.system(size: 9.8, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.88))
-                        Spacer()
-                        HStack(spacing: 3) {
-                            ForEach([MiniPetPlacement.topRight, .bottomRight, .bottomLeft]) { corner in
-                                let selected = preferences.miniPetPlacement == corner
-                                Button {
-                                    GravOnboardingWelcomeAudio.shared.playButtonTap()
-                                    preferences.miniPetPlacement = corner
-                                    preferences.miniPetOriginX = nil
-                                    preferences.miniPetOriginY = nil
-                                    preferences.miniPetEnabled = true
-                                    state.markMiniPetCustomized()
-                                } label: {
-                                    Text(corner.displayName)
-                                        .font(.system(size: 8.5, weight: selected ? .semibold : .regular))
-                                        .foregroundStyle(selected ? .white : Color.white.opacity(0.62))
-                                        .padding(.horizontal, 6.5)
-                                        .padding(.vertical, 3)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                                .fill(selected ? Color.white.opacity(0.16) : Color.clear)
-                                        )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(2)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6.5, style: .continuous)
-                                .fill(Color.white.opacity(0.05))
-                        )
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(height: 31)
-
-                    dividerLine
-
-                    // Pet Size
-                    HStack {
-                        Text("Size")
-                            .font(.system(size: 9.8, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.88))
-                        Spacer()
-                        HStack(spacing: 5) {
-                            Button {
-                                GravOnboardingWelcomeAudio.shared.playButtonTap()
-                                preferences.miniPetSize = max(48, preferences.miniPetSize - 8)
-                                state.markMiniPetCustomized()
-                            } label: {
-                                Image(systemName: "minus")
-                                    .font(.system(size: 8.5, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.84))
-                                    .frame(width: 19, height: 19)
-                                    .background(Circle().fill(Color.white.opacity(0.09)))
-                            }
-                            .buttonStyle(.plain)
-
-                            Text("\(Int(preferences.miniPetSize.rounded())) pt")
-                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                                .monospacedDigit()
-                                .foregroundStyle(Color.white.opacity(0.76))
-                                .frame(width: 34)
-
-                            Button {
-                                GravOnboardingWelcomeAudio.shared.playButtonTap()
-                                preferences.miniPetSize = min(144, preferences.miniPetSize + 8)
-                                state.markMiniPetCustomized()
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 8.5, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.84))
-                                    .frame(width: 19, height: 19)
-                                    .background(Circle().fill(Color.white.opacity(0.09)))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(height: 31)
-
-                    dividerLine
-
-                    // Status Bubble toggle
-                    HStack {
-                        Text("Live Status Bubble")
-                            .font(.system(size: 9.8, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.88))
-                        Spacer()
-                        onboardingToggle(
-                            isOn: Binding(
-                                get: { preferences.miniPetShowBubble },
-                                set: { value in
-                                    GravOnboardingWelcomeAudio.shared.playButtonTap()
-                                    preferences.miniPetShowBubble = value
-                                    state.markMiniPetCustomized()
-                                }
-                            )
-                        )
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(height: 31)
-
-                    dividerLine
-
-                    // Idle Roaming toggle
-                    HStack {
-                        Text("Idle Roaming")
-                            .font(.system(size: 9.8, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.88))
-                        Spacer()
-                        onboardingToggle(
-                            isOn: Binding(
-                                get: { preferences.miniPetRoaming },
-                                set: { value in
-                                    GravOnboardingWelcomeAudio.shared.playButtonTap()
-                                    preferences.miniPetRoaming = value
-                                    state.markMiniPetCustomized()
-                                }
-                            )
-                        )
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(height: 31)
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.075), lineWidth: 0.6)
-                        )
-                )
-
-                HStack(spacing: 5) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 8.5))
-                        .foregroundStyle(Color.white.opacity(0.45))
-                    Text("Browse 3,700+ pets & export GIFs in Settings → Mini Pet")
-                        .font(.system(size: 8.8))
-                        .foregroundStyle(Color.white.opacity(0.48))
-                        .lineLimit(1)
-                }
-            }
-            .padding(12)
-        }
-        .frame(maxWidth: 344)
-        .background(Color(red: 0.088, green: 0.091, blue: 0.099))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.13), lineWidth: 0.75)
-        )
-        .shadow(color: Color.black.opacity(0.44), radius: 22, y: 12)
-    }
-
-    private var dividerLine: some View {
-        Rectangle()
-            .fill(Color.white.opacity(0.065))
-            .frame(height: 0.5)
-            .padding(.leading, 10)
-    }
-
-    private func onboardingToggle(isOn: Binding<Bool>) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.22, dampingFraction: 0.80)) {
-                isOn.wrappedValue.toggle()
-            }
-        } label: {
-            ZStack(alignment: isOn.wrappedValue ? .trailing : .leading) {
-                Capsule(style: .continuous)
-                    .fill(isOn.wrappedValue ? Color(red: 0.10, green: 0.52, blue: 0.96) : Color.white.opacity(0.18))
-                    .frame(width: 26, height: 15)
+            HStack(spacing: 5) {
+                Text(state.miniPetPreviewState.label)
+                    .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.92))
                 Circle()
-                    .fill(Color.white)
-                    .frame(width: 11.5, height: 11.5)
-                    .padding(1.75)
+                    .fill(state.miniPetPreviewState == .failed ? GravPalette.coral : GravPalette.emerald)
+                    .frame(width: 4.5, height: 4.5)
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color(red: 0.082, green: 0.086, blue: 0.098).opacity(0.95))
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.65)
+                    )
+                    .shadow(color: Color.black.opacity(0.45), radius: 8, y: 3)
+            )
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func sidebarRow(symbol: String, title: String, tint: Color, selected: Bool) -> some View {
+        HStack(spacing: 6) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 4.5, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(white: 0.20), Color(white: 0.07)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 15, height: 15)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4.5, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.4)
+                    )
+                Image(systemName: symbol)
+                    .font(.system(size: 7.5, weight: .bold))
+                    .foregroundStyle(tint)
+            }
+            Text(title)
+                .font(.system(size: 8.8, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? .white : Color.white.opacity(0.80))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 6)
+        .frame(height: 20)
+        .background(
+            RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                .fill(selected ? Color.white.opacity(0.10) : Color.clear)
+        )
+        .padding(.horizontal, 7)
+    }
+
+    private func mockHeaderPill(icon: String, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 7.5, weight: .medium))
+                Text(title)
+                    .font(.system(size: 8, weight: .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .foregroundStyle(Color.white.opacity(0.86))
+            .padding(.horizontal, 6.5)
+            .padding(.vertical, 3.5)
+            .background(
+                RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                    .fill(Color.white.opacity(0.065))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.11), lineWidth: 0.6)
+                    )
+            )
+            .fixedSize(horizontal: true, vertical: false)
         }
         .buttonStyle(.plain)
     }

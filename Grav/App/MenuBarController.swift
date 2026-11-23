@@ -22,8 +22,11 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     private var autoPeekMenuItem: NSMenuItem?
     private var playSoundsMenuItem: NSMenuItem?
     private var pauseResumeMenuItem: NSMenuItem?
+    private var miniPetParentMenuItem: NSMenuItem?
     private var miniPetSubmenu: NSMenu?
+    private var sessionsParentMenuItem: NSMenuItem?
     private var sessionsSubmenu: NSMenu?
+    private var submenusSeparatorItem: NSMenuItem?
     private var openAntigravityMenuItem: NSMenuItem?
 
     public var onToggleNotch: (() -> Void)?
@@ -156,7 +159,9 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(pauseItem)
         pauseResumeMenuItem = pauseItem
 
-        menu.addItem(.separator())
+        let submenusSep = NSMenuItem.separator()
+        menu.addItem(submenusSep)
+        submenusSeparatorItem = submenusSep
 
         // Mini Pet Submenu
         let petParent = makeMenuItem(
@@ -169,6 +174,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         petSubmenu.autoenablesItems = false
         petParent.submenu = petSubmenu
         menu.addItem(petParent)
+        miniPetParentMenuItem = petParent
         miniPetSubmenu = petSubmenu
 
         // Active Session Submenu
@@ -182,6 +188,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         sessionSubmenu.autoenablesItems = false
         sessionParent.submenu = sessionSubmenu
         menu.addItem(sessionParent)
+        sessionsParentMenuItem = sessionParent
         sessionsSubmenu = sessionSubmenu
 
         menu.addItem(.separator())
@@ -286,7 +293,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func updateDynamicMenuItems() {
-        let contextPercent: Int? = store.tokenMetrics.latestContextTokens > 0
+        let contextPercent: Int? = (preferences.menuBarShowLiveMetrics && store.tokenMetrics.latestContextTokens > 0)
             ? Int((store.tokenMetrics.contextFillRatio * 100.0).rounded())
             : nil
 
@@ -294,14 +301,16 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
             state: store.state,
             isPaused: isPaused,
             activeSessionTitle: store.activeSession?.title,
-            tokenCount: store.tokenMetrics.totalTokens,
+            tokenCount: preferences.menuBarShowLiveMetrics ? store.tokenMetrics.totalTokens : 0,
             contextPercent: contextPercent,
             isAppRunning: store.connectionStatus.isAppRunning,
             isBrainAccessible: store.connectionStatus.isBrainAccessible
         )
 
         if let headerMenuItem {
-            let activePet = preferences.miniPetEnabled ? petsStore.pet(withID: preferences.activeMiniPetID) : nil
+            let activePet = (preferences.miniPetEnabled && preferences.menuBarShowPetInHeader)
+                ? petsStore.pet(withID: preferences.activeMiniPetID)
+                : nil
             let headerView = MenuBarStatusHeaderView(
                 snapshot: snapshot,
                 activePet: activePet,
@@ -312,10 +321,20 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
             headerMenuItem.view = hostingView
         }
 
+        let showQuick = preferences.menuBarShowQuickToggles
+        pinNotchMenuItem?.isHidden = !showQuick
+        hoverToExpandMenuItem?.isHidden = !showQuick
+        autoPeekMenuItem?.isHidden = !showQuick
+        playSoundsMenuItem?.isHidden = !showQuick
+
         pinNotchMenuItem?.state = preferences.isNotchPinned ? .on : .off
         hoverToExpandMenuItem?.state = preferences.hoverToExpand ? .on : .off
         autoPeekMenuItem?.state = preferences.autoPeekOnEvents ? .on : .off
         playSoundsMenuItem?.state = preferences.playSounds ? .on : .off
+
+        miniPetParentMenuItem?.isHidden = !preferences.menuBarShowMiniPetSubmenu
+        sessionsParentMenuItem?.isHidden = !preferences.menuBarShowSessionsSubmenu
+        submenusSeparatorItem?.isHidden = !preferences.menuBarShowMiniPetSubmenu && !preferences.menuBarShowSessionsSubmenu
 
         if let pauseResumeMenuItem {
             let paused = isPaused

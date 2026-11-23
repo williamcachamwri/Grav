@@ -386,6 +386,41 @@ public struct SettingsSearchEntry: Identifiable, Hashable, Sendable {
                 detail: "Keep Grav accessible from the macOS menu bar with live status.",
                 keywords: ["status item", "icon", "top bar", "preview"]
             ),
+            SettingsSearchEntry(
+                .menuBar,
+                section: "Menu Content",
+                title: "Show Mini Pet in Header",
+                detail: "Display your equipped Codex Mini Pet inside the menu bar status header.",
+                keywords: ["pet", "header", "menu bar", "sprite"]
+            ),
+            SettingsSearchEntry(
+                .menuBar,
+                section: "Menu Content",
+                title: "Show Token & Context Metrics",
+                detail: "Include token totals and context window percentage in the menu bar header.",
+                keywords: ["tokens", "context", "metrics", "menu bar"]
+            ),
+            SettingsSearchEntry(
+                .menuBar,
+                section: "Menu Content",
+                title: "Show Quick HUD Toggles",
+                detail: "Show Pin Notch, Hover, Auto-Peek, and Sound toggles in the menu bar dropdown.",
+                keywords: ["toggles", "pin", "hover", "sounds", "quick"]
+            ),
+            SettingsSearchEntry(
+                .menuBar,
+                section: "Menu Content",
+                title: "Show Mini Pet Submenu",
+                detail: "Quickly switch pets, snap position, or tuck away your desktop pet.",
+                keywords: ["submenu", "pet", "menu bar"]
+            ),
+            SettingsSearchEntry(
+                .menuBar,
+                section: "Menu Content",
+                title: "Show Active Sessions Submenu",
+                detail: "Switch Antigravity conversations directly from the menu bar.",
+                keywords: ["sessions", "conversations", "submenu"]
+            ),
 
             // Shortcuts
             SettingsSearchEntry(

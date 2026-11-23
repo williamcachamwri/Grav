@@ -208,8 +208,8 @@ public final class DesktopPetCoordinator {
 
     private func computePanelSize() -> CGSize {
         let petSize = CGFloat(min(144.0, max(48.0, preferences.miniPetSize)))
-        let width = max(236, petSize + 108)
-        let height = petSize + 112
+        let width = max(252, petSize + 108)
+        let height = petSize + 132
         return CGSize(width: width, height: height)
     }
 

@@ -4,19 +4,20 @@ import SwiftUI
 
 // MARK: - Menu Bar Settings Pane
 
-/// Native grouped-form Menu Bar pane with a live macOS status bar preview card.
+/// Native grouped-form Menu Bar pane with a 1:1 authentic macOS menu bar & dropdown mockup
+/// rendered over macOS's real Pro Black dark wallpaper, plus rich live Menu Bar customization controls.
 struct MenuBarSettingsPane: View {
     @Bindable var preferences: PreferencesStore
     let store: AntigravityTelemetryStore
+    var petsStore: CodexPetsStore = .shared
 
     var body: some View {
         Form {
             Section("Preview") {
                 GravMenuBarPreviewCard(
-                    showIcon: preferences.showMenuBarIcon,
-                    isPaused: store.isPaused || preferences.isTelemetryPaused,
-                    statusLabel: store.state.label,
-                    isAppRunning: store.connectionStatus.isAppRunning
+                    preferences: preferences,
+                    store: store,
+                    petsStore: petsStore
                 )
                 .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
             }
@@ -30,113 +31,252 @@ struct MenuBarSettingsPane: View {
                         .labelsHidden()
                 }
             }
+
+            Section("Menu Content") {
+                SettingRow(
+                    title: "Show Mini Pet in Header",
+                    description: "Display your equipped Codex Mini Pet inside the top status header of the menu bar dropdown."
+                ) {
+                    Toggle("", isOn: $preferences.menuBarShowPetInHeader)
+                        .labelsHidden()
+                }
+                .disabled(!preferences.showMenuBarIcon)
+
+                SettingRow(
+                    title: "Show Token & Context Metrics",
+                    description: "Include live session token totals and context window percentage beneath the status headline."
+                ) {
+                    Toggle("", isOn: $preferences.menuBarShowLiveMetrics)
+                        .labelsHidden()
+                }
+                .disabled(!preferences.showMenuBarIcon)
+
+                SettingRow(
+                    title: "Show Quick HUD Toggles",
+                    description: "Keep Pin Notch, Hover to Expand, Auto-Peek, and Sound toggles one click away in the dropdown."
+                ) {
+                    Toggle("", isOn: $preferences.menuBarShowQuickToggles)
+                        .labelsHidden()
+                }
+                .disabled(!preferences.showMenuBarIcon)
+
+                SettingRow(
+                    title: "Show Mini Pet Submenu",
+                    description: "Add quick controls to switch pets, snap desktop position, wave/jump, or tuck away your pet."
+                ) {
+                    Toggle("", isOn: $preferences.menuBarShowMiniPetSubmenu)
+                        .labelsHidden()
+                }
+                .disabled(!preferences.showMenuBarIcon)
+
+                SettingRow(
+                    title: "Show Active Sessions Submenu",
+                    description: "Switch discovered Antigravity conversations or reveal transcripts directly from the menu bar."
+                ) {
+                    Toggle("", isOn: $preferences.menuBarShowSessionsSubmenu)
+                        .labelsHidden()
+                }
+                .disabled(!preferences.showMenuBarIcon)
+            }
         }
         .formStyle(.grouped)
     }
 }
 
-/// Clean live preview of the top-right macOS menu bar corner and Grav's status menu.
+/// 1:1 pixel-faithful macOS menu bar & frosted-glass dropdown mockup over macOS's real dark wallpaper.
 private struct GravMenuBarPreviewCard: View {
-    let showIcon: Bool
-    let isPaused: Bool
-    let statusLabel: String
-    let isAppRunning: Bool
+    let preferences: PreferencesStore
+    let store: AntigravityTelemetryStore
+    let petsStore: CodexPetsStore
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hoveredRow: String?
+
+    private var isPaused: Bool {
+        store.isPaused || preferences.isTelemetryPaused
+    }
+
+    private var activePet: InstalledCodexPet? {
+        guard preferences.miniPetEnabled && preferences.menuBarShowPetInHeader else { return nil }
+        return petsStore.pet(withID: preferences.activeMiniPetID)
+    }
+
+    private var cleanSessionSubtitle: String {
+        var parts: [String] = []
+        if let raw = store.activeSession?.title, !raw.isEmpty {
+            let clean = raw
+                .replacingOccurrences(of: "<USER_REQUEST>", with: "")
+                .replacingOccurrences(of: "</USER_REQUEST>", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !clean.isEmpty { parts.append(clean) }
+        } else {
+            parts.append("Connected to Antigravity")
+        }
+        if preferences.menuBarShowLiveMetrics {
+            if store.tokenMetrics.totalTokens > 0 {
+                parts.append("\(TokenMetrics.formatCompact(store.tokenMetrics.totalTokens)) tok")
+            }
+            if store.tokenMetrics.latestContextTokens > 0 {
+                let pct = Int((store.tokenMetrics.contextFillRatio * 100.0).rounded())
+                parts.append("\(pct)% ctx")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var formattedClock: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm EEE d MMM"
+        return formatter.string(from: Date())
+    }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            // Subtle slate-indigo desktop backdrop matching Snapzy's menu bar preview aesthetic
-            LinearGradient(
-                colors: [
-                    Color(red: 0.09, green: 0.14, blue: 0.22),
-                    Color(red: 0.06, green: 0.09, blue: 0.15),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            // Authentic Apple Pro Black macOS dark desktop wallpaper (same engine as Onboarding!)
+            GravMockWallpaper(app: .settings).equatable()
 
-            VStack(alignment: .trailing, spacing: 6) {
-                // Miniature macOS menu bar strip
-                HStack(spacing: 10) {
+            VStack(alignment: .trailing, spacing: 5) {
+                // 1:1 Translucent macOS Menu Bar Strip
+                HStack(spacing: 11) {
                     Spacer(minLength: 0)
 
-                    Image(systemName: "cloud")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.42))
-
-                    if showIcon {
-                        GravOrbitalMark(size: 13, tint: .white)
-                            .frame(width: 26, height: 18)
+                    if preferences.showMenuBarIcon {
+                        GravOrbitalMark(size: 13.5, tint: .white)
+                            .frame(width: 28, height: 19)
                             .background(
-                                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .fill(Color.white.opacity(0.22))
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.20))
                             )
                             .transition(.opacity.combined(with: .scale(scale: 0.9)))
                     }
 
+                    Image(systemName: "switch.2")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.88))
+
                     Image(systemName: "wifi")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.88))
 
-                    Image(systemName: "battery.75percent")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.85))
+                    Image(systemName: "battery.100percent")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.88))
 
-                    Text("9:41")
-                        .font(.system(size: 11, weight: .medium))
+                    Text(formattedClock)
+                        .font(.system(size: 11.5, weight: .medium))
                         .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.9))
+                        .foregroundStyle(.white.opacity(0.94))
                 }
                 .padding(.horizontal, 12)
-                .frame(height: 24)
-                .background(Color.black.opacity(0.32))
+                .frame(height: 26)
+                .background(
+                    ZStack {
+                        Color.black.opacity(0.42)
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.06), Color.clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+                )
                 .overlay(alignment: .bottom) {
                     Rectangle()
                         .fill(Color.white.opacity(0.10))
                         .frame(height: 0.5)
                 }
 
-                // Miniature dropdown menu panel anchored beneath the Grav icon
-                if showIcon {
+                // 1:1 Authentic macOS Frosted-Glass Status Menu Dropdown
+                if preferences.showMenuBarIcon {
                     VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 6) {
+                        // Live Status Header (matches real MenuBarController header 1:1!)
+                        HStack(spacing: 8) {
                             Circle()
-                                .fill(isPaused ? Color.secondary : (isAppRunning ? Color.green : Color.orange))
+                                .fill(isPaused ? Color.secondary : (store.connectionStatus.isAppRunning ? GravPalette.emerald : GravPalette.fileEdit))
                                 .frame(width: 6, height: 6)
-                            Text(isPaused ? "Telemetry Paused" : "Antigravity · \(statusLabel)")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.92))
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
+
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(isPaused ? "Telemetry Paused" : (store.state.isActive ? store.state.label : "Antigravity Idle"))
+                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.95))
+                                    .lineLimit(1)
+
+                                Text(cleanSessionSubtitle)
+                                    .font(.system(size: 9.8))
+                                    .foregroundStyle(.white.opacity(0.54))
+                                    .lineLimit(1)
+                            }
+
+                            Spacer(minLength: 4)
+
+                            if let pet = activePet {
+                                CodexPetSpriteView(
+                                    pet: pet,
+                                    state: .idle,
+                                    size: 22,
+                                    speed: preferences.miniPetSpeed,
+                                    reduceMotion: reduceMotion,
+                                    petsStore: petsStore
+                                )
+                            }
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
 
                         menuDivider
-                        previewRow(id: "toggle", symbol: "rectangle.topthird.inset.filled", title: "Toggle Notch", shortcut: nil)
+
+                        previewRow(id: "toggle", title: "Toggle Notch HUD", checkmark: false, hasSubmenu: false, shortcut: nil)
+
+                        if preferences.menuBarShowQuickToggles {
+                            previewRow(id: "pin", title: "Pin Notch Open", checkmark: preferences.isNotchPinned, hasSubmenu: false, shortcut: nil)
+                            previewRow(id: "hover", title: "Hover to Expand", checkmark: preferences.hoverToExpand, hasSubmenu: false, shortcut: nil)
+                            previewRow(id: "peek", title: "Auto-Peek on Events", checkmark: preferences.autoPeekOnEvents, hasSubmenu: false, shortcut: nil)
+                            previewRow(id: "sound", title: "Play Sounds", checkmark: preferences.playSounds, hasSubmenu: false, shortcut: nil)
+                        }
+
                         previewRow(
                             id: "pause",
-                            symbol: isPaused ? "play.circle" : "pause.circle",
                             title: isPaused ? "Resume Telemetry" : "Pause Telemetry",
+                            checkmark: false,
+                            hasSubmenu: false,
                             shortcut: nil
                         )
+
+                        if preferences.menuBarShowMiniPetSubmenu || preferences.menuBarShowSessionsSubmenu {
+                            menuDivider
+                            if preferences.menuBarShowMiniPetSubmenu {
+                                previewRow(id: "pet", title: "Mini Pet", checkmark: false, hasSubmenu: true, shortcut: nil)
+                            }
+                            if preferences.menuBarShowSessionsSubmenu {
+                                previewRow(id: "session", title: "Active Session", checkmark: false, hasSubmenu: true, shortcut: nil)
+                            }
+                        }
+
                         menuDivider
-                        previewRow(id: "prefs", symbol: "gearshape", title: "Preferences…", shortcut: "⌘,")
-                        previewRow(id: "quit", symbol: "power", title: "Quit Grav", shortcut: "⌘Q")
+                        previewRow(id: "prefs", title: "Preferences…", checkmark: false, hasSubmenu: false, shortcut: "⌘,")
+                        previewRow(id: "quit", title: "Quit Grav", checkmark: false, hasSubmenu: false, shortcut: "⌘Q")
                     }
                     .padding(5)
-                    .frame(width: 210)
+                    .frame(width: 236)
                     .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color(white: 0.12).opacity(0.92))
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(red: 0.11, green: 0.115, blue: 0.125).opacity(0.84))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.white.opacity(0.08), Color.clear, Color.black.opacity(0.12)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                            )
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
                     )
-                    .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
-                    .padding(.trailing, 54)
+                    .shadow(color: .black.opacity(0.55), radius: 22, y: 10)
+                    .padding(.trailing, 86)
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 } else {
                     HStack {
@@ -146,49 +286,68 @@ private struct GravMenuBarPreviewCard: View {
                             .foregroundStyle(.white.opacity(0.68))
                         Spacer()
                     }
-                    .padding(.top, 52)
+                    .padding(.top, 96)
                 }
 
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: 196)
+        .frame(height: 318)
         .clipShape(Radius.rect(Radius.card))
         .overlay(
             Radius.rect(Radius.card)
-                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.6)
         )
-        .animation(.easeInOut(duration: 0.18), value: showIcon)
+        .animation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.12), value: preferences.showMenuBarIcon)
+        .animation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.10), value: preferences.menuBarShowQuickToggles)
+        .animation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.10), value: preferences.menuBarShowMiniPetSubmenu)
+        .animation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.10), value: preferences.menuBarShowSessionsSubmenu)
     }
 
     private var menuDivider: some View {
         Rectangle()
             .fill(Color.white.opacity(0.12))
             .frame(height: 0.5)
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
             .padding(.vertical, 3)
     }
 
-    private func previewRow(id: String, symbol: String, title: String, shortcut: String?) -> some View {
+    private func previewRow(
+        id: String,
+        title: String,
+        checkmark: Bool,
+        hasSubmenu: Bool,
+        shortcut: String?
+    ) -> some View {
         let isHovered = hoveredRow == id
-        return HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 10.5))
-                .frame(width: 14)
+        return HStack(spacing: 5) {
+            Group {
+                if checkmark {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9.5, weight: .bold))
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(width: 12, height: 12)
 
             Text(title)
-                .font(.system(size: 11.5))
+                .font(.system(size: 11.5, weight: .regular))
                 .lineLimit(1)
 
             Spacer(minLength: 8)
 
-            if let shortcut {
+            if hasSubmenu {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(isHovered ? .white.opacity(0.92) : .white.opacity(0.55))
+            } else if let shortcut {
                 Text(shortcut)
                     .font(.system(size: 11))
-                    .foregroundStyle(isHovered ? .white.opacity(0.85) : .white.opacity(0.45))
+                    .foregroundStyle(isHovered ? .white.opacity(0.88) : .white.opacity(0.45))
             }
         }
-        .foregroundStyle(isHovered ? .white : .white.opacity(0.88))
+        .foregroundStyle(isHovered ? .white : .white.opacity(0.90))
         .padding(.horizontal, 7)
         .frame(height: 20)
         .background(

@@ -24,7 +24,7 @@ enum GravMockApp: String, Equatable, Sendable {
         switch self {
         case .antigravity: "Antigravity"
         case .notchHud: "Grav"
-        case .miniPet: "Codex Pets"
+        case .miniPet: "Grav Pets"
         case .settings: "System Settings"
         }
     }

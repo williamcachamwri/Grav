@@ -79,42 +79,122 @@ struct DesktopPetOverlayView: View {
         pet: InstalledCodexPet,
         animState: CodexPetAnimationState
     ) -> some View {
-        ZStack {
-            // Subtle desktop contact shadow directly under the pet's feet
-            Ellipse()
-                .fill(Color.black.opacity(isDraggingWindow ? 0.16 : 0.30))
-                .frame(width: petDisplaySize * 0.62, height: max(7, petDisplaySize * 0.13))
-                .blur(radius: isDraggingWindow ? 7 : 4.5)
-                .offset(y: petDisplaySize * 0.45)
+        VStack(spacing: 2) {
+            // Top micro-action bar cleanly ABOVE the pet's head (ZERO overlap with pixel art!)
+            HStack(spacing: 4) {
+                Spacer(minLength: 0)
 
-            // Crisp nearest-neighbor Codex sprite
-            CodexPetSpriteView(
-                pet: pet,
-                state: animState,
-                size: petDisplaySize,
-                speed: preferences.miniPetSpeed,
-                reduceMotion: reduceMotion,
-                petsStore: petsStore
-            )
-            .opacity(store.isPaused ? 0.62 : 1.0)
-            .scaleEffect(spriteScale)
-            .offset(y: isDraggingWindow ? -5 : (tapBounce ? -6 : 0))
-            .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.42), value: tapBounce)
-            .animation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.22), value: isDraggingWindow)
-            .animation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.20), value: isHoveringStage)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                handlePetTap()
-            }
-            .gesture(windowDragGesture)
+                if isHoveringStage && !isDraggingWindow {
+                    HStack(spacing: 4) {
+                        Button {
+                            if preferences.playSounds {
+                                GravOnboardingWelcomeAudio.shared.playButtonTap()
+                            }
+                            onTuckAway()
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "eye.slash")
+                                    .font(.system(size: 8.5, weight: .semibold))
+                                Text("Hide")
+                                    .font(.system(size: 9.5, weight: .semibold))
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(Color.white.opacity(0.92))
+                            .padding(.horizontal, 7)
+                            .frame(height: 19)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color(red: 0.10, green: 0.105, blue: 0.12).opacity(0.90))
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.6)
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .help("Tuck away pet")
 
-            // Hover-only Codex micro-controls (exact 1:1 ergonomics)
-            if isHoveringStage && !isDraggingWindow {
-                hoverControlsOverlay(pet: pet)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                        Menu {
+                            petContextMenuItems
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundStyle(Color.white.opacity(0.88))
+                                .frame(width: 19, height: 19)
+                                .background(
+                                    Circle()
+                                        .fill(Color(red: 0.10, green: 0.105, blue: 0.12).opacity(0.90))
+                                        .overlay(
+                                            Circle().strokeBorder(Color.white.opacity(0.16), lineWidth: 0.6)
+                                        )
+                                )
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("\(pet.displayName) options")
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                }
             }
+            .frame(width: petDisplaySize + 38, height: 20)
+
+            // Crisp Sprite Box + Bottom-right corner resize grip cleanly outside the pet's silhouette
+            ZStack {
+                // Subtle desktop contact shadow directly under the pet's feet
+                Ellipse()
+                    .fill(Color.black.opacity(isDraggingWindow ? 0.14 : 0.28))
+                    .frame(width: petDisplaySize * 0.58, height: max(6, petDisplaySize * 0.12))
+                    .blur(radius: isDraggingWindow ? 7 : 4)
+                    .offset(y: petDisplaySize * 0.46)
+
+                // Crisp nearest-neighbor Codex sprite (100% unobstructed!)
+                CodexPetSpriteView(
+                    pet: pet,
+                    state: animState,
+                    size: petDisplaySize,
+                    speed: preferences.miniPetSpeed,
+                    reduceMotion: reduceMotion,
+                    petsStore: petsStore
+                )
+                .opacity(store.isPaused ? 0.62 : 1.0)
+                .scaleEffect(spriteScale)
+                .offset(y: isDraggingWindow ? -5 : (tapBounce ? -6 : 0))
+                .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.42), value: tapBounce)
+                .animation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.22), value: isDraggingWindow)
+                .animation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.20), value: isHoveringStage)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    handlePetTap()
+                }
+                .gesture(windowDragGesture)
+
+                // Corner resize handle cleanly tucked at bottom-right OUTSIDE sprite bounds
+                if isHoveringStage && !isDraggingWindow {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(isResizing ? 0.96 : 0.68))
+                                .frame(width: 17, height: 17)
+                                .background(
+                                    Circle()
+                                        .fill(Color(red: 0.09, green: 0.095, blue: 0.11).opacity(0.86))
+                                        .overlay(
+                                            Circle().strokeBorder(Color.white.opacity(0.16), lineWidth: 0.6)
+                                        )
+                                )
+                                .gesture(resizeGesture)
+                                .help("Drag to resize pet")
+                        }
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .frame(width: petDisplaySize + 38, height: petDisplaySize + 8)
         }
-        .frame(width: petDisplaySize + 44, height: petDisplaySize + 18)
         .offset(x: reduceMotion ? 0 : patrolOffsetX)
         .onHover { hovering in
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
@@ -131,91 +211,6 @@ struct DesktopPetOverlayView: View {
         if tapBounce { return 1.09 }
         if isHoveringStage { return 1.03 }
         return 1.0
-    }
-
-    private func hoverControlsOverlay(pet: InstalledCodexPet) -> some View {
-        ZStack {
-            // Top-right quiet menu chevron
-            VStack {
-                HStack {
-                    Spacer()
-                    Menu {
-                        petContextMenuItems
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(Color.white.opacity(0.86))
-                            .frame(width: 20, height: 20)
-                            .background(
-                                Circle()
-                                    .fill(Color(red: 0.10, green: 0.105, blue: 0.12).opacity(0.82))
-                                    .overlay(
-                                        Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.6)
-                                    )
-                            )
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .help("\(pet.displayName) options")
-                }
-                Spacer()
-            }
-
-            // Codex-style sleek `Close pet` hover pill (matches reference screenshot!)
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    Button {
-                        if preferences.playSounds {
-                            GravOnboardingWelcomeAudio.shared.playButtonTap()
-                        }
-                        onTuckAway()
-                    } label: {
-                        Text("Close pet")
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 3.5)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color(red: 0.10, green: 0.48, blue: 0.94).opacity(0.95))
-                                    .overlay(
-                                        Capsule(style: .continuous)
-                                            .strokeBorder(Color.white.opacity(0.24), lineWidth: 0.6)
-                                    )
-                                    .shadow(color: Color.black.opacity(0.40), radius: 6, y: 2)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.bottom, 12)
-                }
-            }
-
-            // Bottom-right subtle drag-to-resize corner handle
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 8.5, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(isResizing ? 0.95 : 0.62))
-                        .frame(width: 18, height: 18)
-                        .background(
-                            Circle()
-                                .fill(Color(red: 0.09, green: 0.095, blue: 0.11).opacity(0.76))
-                                .overlay(
-                                    Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
-                                )
-                        )
-                        .gesture(resizeGesture)
-                        .help("Drag to resize pet")
-                }
-            }
-        }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 2)
     }
 
     @ViewBuilder
@@ -279,8 +274,17 @@ struct DesktopPetOverlayView: View {
         return false
     }
 
-    private var bubbleHeadline: String {
+    private func bubbleHeadline(for animState: CodexPetAnimationState) -> String {
         if store.isPaused { return "Telemetry paused" }
+        if animState == .failed {
+            if let cmd = store.commands.first, cmd.status == .failed {
+                return "Failed · \(cmd.displayTitle)"
+            }
+            if let tool = CodexPetTelemetryMapper.latestFailedTool(in: store) {
+                return "Failed · \(tool.title)"
+            }
+            return "Command failed"
+        }
         if let focus = store.currentFocus, !focus.isEmpty, store.state.isActive {
             return focus
         }
@@ -311,9 +315,18 @@ struct DesktopPetOverlayView: View {
         }
     }
 
-    private var bubbleDetail: String {
+    private func bubbleDetail(for animState: CodexPetAnimationState) -> String {
         if store.isPaused {
             return "Resume telemetry from the Notch or Menu Bar."
+        }
+        if animState == .failed {
+            if let cmd = store.commands.first, cmd.status == .failed {
+                let exitInfo = cmd.exitCode.map { "Exit \($0) · " } ?? ""
+                return "\(exitInfo)\(cmd.commandLine)"
+            }
+            if let tool = CodexPetTelemetryMapper.latestFailedTool(in: store) {
+                return tool.outputPreview ?? tool.detail ?? "Tool execution failed"
+            }
         }
         switch store.state {
         case let .editing(event):
@@ -360,23 +373,43 @@ struct DesktopPetOverlayView: View {
         }
     }
 
+    private func statePillTint(for animState: CodexPetAnimationState) -> Color {
+        switch animState {
+        case .failed: return GravPalette.coral
+        case .waiting: return GravPalette.fileEdit
+        case .review: return Color(red: 0.96, green: 0.72, blue: 0.24)
+        case .running, .runningRight, .runningLeft: return GravPalette.glacialCyan
+        case .jumping, .waving: return GravPalette.emerald
+        case .idle, .lookRightSide, .lookLeftSide: return Color.white.opacity(0.62)
+        }
+    }
+
     private func liveSpeechBubble(animState: CodexPetAnimationState) -> some View {
         Button {
             onFocusAntigravity()
         } label: {
-            VStack(alignment: .leading, spacing: 3.5) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .center, spacing: 6) {
-                    Text(bubbleHeadline)
+                    Text(bubbleHeadline(for: animState))
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.95))
                         .lineLimit(1)
 
                     Spacer(minLength: 4)
 
-                    bubbleStatusIndicator(animState: animState)
+                    HStack(spacing: 4) {
+                        Text(animState.label)
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(statePillTint(for: animState))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+
+                        bubbleStatusIndicator(animState: animState)
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
                 }
 
-                Text(bubbleDetail)
+                Text(bubbleDetail(for: animState))
                     .font(.system(size: 10.5, weight: .regular))
                     .foregroundStyle(Color.white.opacity(0.64))
                     .lineLimit(2)
@@ -384,7 +417,7 @@ struct DesktopPetOverlayView: View {
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 8)
-            .frame(width: 212, alignment: .leading)
+            .frame(width: 224, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .fill(Color(red: 0.082, green: 0.086, blue: 0.098).opacity(0.94))

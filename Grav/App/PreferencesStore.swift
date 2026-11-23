@@ -42,6 +42,11 @@ public enum GravPreferenceKeys {
     public static let useLiquidGlass = "grav.useLiquidGlass"
     public static let appearanceMode = "grav.appearanceMode"
     public static let showMenuBarIcon = "grav.showMenuBarIcon"
+    public static let menuBarShowPetInHeader = "grav.menuBarShowPetInHeader"
+    public static let menuBarShowLiveMetrics = "grav.menuBarShowLiveMetrics"
+    public static let menuBarShowQuickToggles = "grav.menuBarShowQuickToggles"
+    public static let menuBarShowMiniPetSubmenu = "grav.menuBarShowMiniPetSubmenu"
+    public static let menuBarShowSessionsSubmenu = "grav.menuBarShowSessionsSubmenu"
     public static let playSounds = "grav.playSounds"
 
     // Mini Pet preferences (Codex-style floating desktop companion)
@@ -102,6 +107,26 @@ public final class PreferencesStore {
 
     public var showMenuBarIcon: Bool {
         didSet { defaults.set(showMenuBarIcon, forKey: GravPreferenceKeys.showMenuBarIcon) }
+    }
+
+    public var menuBarShowPetInHeader: Bool {
+        didSet { defaults.set(menuBarShowPetInHeader, forKey: GravPreferenceKeys.menuBarShowPetInHeader) }
+    }
+
+    public var menuBarShowLiveMetrics: Bool {
+        didSet { defaults.set(menuBarShowLiveMetrics, forKey: GravPreferenceKeys.menuBarShowLiveMetrics) }
+    }
+
+    public var menuBarShowQuickToggles: Bool {
+        didSet { defaults.set(menuBarShowQuickToggles, forKey: GravPreferenceKeys.menuBarShowQuickToggles) }
+    }
+
+    public var menuBarShowMiniPetSubmenu: Bool {
+        didSet { defaults.set(menuBarShowMiniPetSubmenu, forKey: GravPreferenceKeys.menuBarShowMiniPetSubmenu) }
+    }
+
+    public var menuBarShowSessionsSubmenu: Bool {
+        didSet { defaults.set(menuBarShowSessionsSubmenu, forKey: GravPreferenceKeys.menuBarShowSessionsSubmenu) }
     }
 
     public var playSounds: Bool {
@@ -212,6 +237,11 @@ public final class PreferencesStore {
         self.isTelemetryPaused = defaults.bool(forKey: GravPreferenceKeys.isTelemetryPaused)
         self.useLiquidGlass = defaults.object(forKey: GravPreferenceKeys.useLiquidGlass) as? Bool ?? true
         self.showMenuBarIcon = defaults.object(forKey: GravPreferenceKeys.showMenuBarIcon) as? Bool ?? true
+        self.menuBarShowPetInHeader = defaults.object(forKey: GravPreferenceKeys.menuBarShowPetInHeader) as? Bool ?? true
+        self.menuBarShowLiveMetrics = defaults.object(forKey: GravPreferenceKeys.menuBarShowLiveMetrics) as? Bool ?? true
+        self.menuBarShowQuickToggles = defaults.object(forKey: GravPreferenceKeys.menuBarShowQuickToggles) as? Bool ?? true
+        self.menuBarShowMiniPetSubmenu = defaults.object(forKey: GravPreferenceKeys.menuBarShowMiniPetSubmenu) as? Bool ?? true
+        self.menuBarShowSessionsSubmenu = defaults.object(forKey: GravPreferenceKeys.menuBarShowSessionsSubmenu) as? Bool ?? true
         self.playSounds = defaults.object(forKey: GravPreferenceKeys.playSounds) as? Bool ?? true
 
         self.miniPetEnabled = defaults.object(forKey: GravPreferenceKeys.miniPetEnabled) as? Bool ?? true

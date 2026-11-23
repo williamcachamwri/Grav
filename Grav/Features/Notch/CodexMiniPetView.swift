@@ -86,6 +86,16 @@ public enum CodexPetTelemetryMapper {
     ]
 
     @MainActor
+    public static func latestFailedTool(in store: AntigravityTelemetryStore) -> AgentToolActivityEvent? {
+        for item in store.recentActivity.prefix(8) {
+            if case let .toolActivity(ev) = item, ev.status == .failed {
+                return ev
+            }
+        }
+        return nil
+    }
+
+    @MainActor
     public static func animationState(
         for store: AntigravityTelemetryStore,
         reactionOverride: CodexPetAnimationState?,
@@ -101,11 +111,17 @@ public enum CodexPetTelemetryMapper {
             return .idle
         }
 
-        // Briefly react with `.failed` when a command fails recently
+        // React immediately with `.failed` when a command or tool fails recently (10s window)
         if let latestCommand = store.commands.first,
            latestCommand.status == .failed,
            let completedAt = latestCommand.completedAt,
-           now.timeIntervalSince(completedAt) <= 6.0
+           now.timeIntervalSince(completedAt) <= 10.0
+        {
+            return .failed
+        }
+
+        if let latestTool = latestFailedTool(in: store),
+           now.timeIntervalSince(latestTool.completedAt ?? latestTool.timestamp) <= 10.0
         {
             return .failed
         }
@@ -116,10 +132,8 @@ public enum CodexPetTelemetryMapper {
             mapped = .waiting
         case .runningCommand:
             mapped = .running
-        case .editing:
+        case .editing, .inspecting:
             mapped = .review
-        case .inspecting:
-            mapped = spriteVersion >= 2 ? .lookRightSide : .review
         case .working, .thinking, .compacting, .toolActivity:
             mapped = .running
         case .replying:

@@ -114,7 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
         self.menuBarController = menuBar
-        menuBar.install()
+        if preferences.showMenuBarIcon {
+            menuBar.install()
+        }
+        observeMenuBarVisibility()
 
         let onboarding = OnboardingWindowController(
             store: telemetryStore,
@@ -136,6 +139,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startTelemetry() {
         telemetryStore.setPaused(preferences.isTelemetryPaused)
         telemetryStore.start()
+    }
+
+    private func observeMenuBarVisibility() {
+        withObservationTracking {
+            _ = preferences.showMenuBarIcon
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.preferences.showMenuBarIcon {
+                    self.menuBarController?.install()
+                } else {
+                    self.menuBarController?.uninstall()
+                }
+                self.observeMenuBarVisibility()
+            }
+        }
     }
 
     // MARK: - Actions
