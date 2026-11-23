@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 /// Elevation steps for calm dark Liquid Glass surfaces inside the Notch HUD.
@@ -57,23 +58,19 @@ extension View {
 }
 
 /// Crisp 5.5pt semantic telemetry dot with optional quiet optical pulse strictly while active.
+/// The pulse ring is driven 100% by CoreAnimation on GPU (0.0% CPU, native 120Hz ProMotion).
 struct NotchSemanticDot: View {
     var color: Color
     var size: CGFloat = 5.5
     var isPulsing: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulseExpanded: Bool = false
 
     var body: some View {
         ZStack {
             if isPulsing && !reduceMotion {
-                Circle()
-                    .strokeBorder(color.opacity(pulseExpanded ? 0.0 : 0.42), lineWidth: 0.9)
+                SemanticPulseRingCALayerView(color: NSColor(color), diameter: size * 2.0)
                     .frame(width: size * 2.0, height: size * 2.0)
-                    .scaleEffect(pulseExpanded ? 1.25 : 0.70)
-                    .onAppear { startPulse() }
-                    .onDisappear { stopPulse() }
             }
 
             Circle()
@@ -81,36 +78,104 @@ struct NotchSemanticDot: View {
                 .frame(width: size, height: size)
         }
         .frame(width: size + 4, height: size + 4)
-        .onChange(of: isPulsing) { _, active in
-            if active && !reduceMotion {
-                startPulse()
-            } else {
-                stopPulse()
-            }
-        }
-        .onChange(of: reduceMotion) { _, reduced in
-            if reduced || !isPulsing {
-                stopPulse()
-            } else {
-                startPulse()
-            }
-        }
         .accessibilityHidden(true)
     }
+}
 
-    private func startPulse() {
-        pulseExpanded = false
-        withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
-            pulseExpanded = true
+private struct SemanticPulseRingCALayerView: NSViewRepresentable {
+    let color: NSColor
+    let diameter: CGFloat
+
+    final class PulseHostView: NSView {
+        private let ringLayer = CAShapeLayer()
+        private var currentColor: NSColor = .white
+        private var currentDiameter: CGFloat = 11
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            layerContentsRedrawPolicy = .never
+            layer?.masksToBounds = false
+            ringLayer.fillColor = nil
+            ringLayer.lineWidth = 0.9
+            layer?.addSublayer(ringLayer)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func layout() {
+            super.layout()
+            updateGeometry()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil {
+                ensureAnimation()
+            } else {
+                ringLayer.removeAllAnimations()
+            }
+        }
+
+        func configure(color: NSColor, diameter: CGFloat) {
+            currentColor = color
+            currentDiameter = diameter
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            ringLayer.strokeColor = color.cgColor
+            updateGeometry()
+            CATransaction.commit()
+            if window != nil {
+                ensureAnimation()
+            }
+        }
+
+        private func updateGeometry() {
+            let inset: CGFloat = 0.45
+            let rect = CGRect(
+                x: inset,
+                y: inset,
+                width: max(1, currentDiameter - inset * 2),
+                height: max(1, currentDiameter - inset * 2)
+            )
+            ringLayer.bounds = CGRect(origin: .zero, size: CGSize(width: currentDiameter, height: currentDiameter))
+            ringLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+            ringLayer.path = CGPath(ellipseIn: rect, transform: nil)
+        }
+
+        private func ensureAnimation() {
+            guard ringLayer.animation(forKey: "semanticPulse") == nil else { return }
+            let scale = CABasicAnimation(keyPath: "transform.scale")
+            scale.fromValue = 0.70
+            scale.toValue = 1.25
+
+            let opacity = CABasicAnimation(keyPath: "opacity")
+            opacity.fromValue = 0.42
+            opacity.toValue = 0.0
+
+            let group = CAAnimationGroup()
+            group.animations = [scale, opacity]
+            group.duration = 1.5
+            group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            group.repeatCount = .infinity
+            group.isRemovedOnCompletion = false
+            ringLayer.add(group, forKey: "semanticPulse")
         }
     }
 
-    private func stopPulse() {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            pulseExpanded = false
-        }
+    func makeNSView(context: Context) -> PulseHostView {
+        let view = PulseHostView(frame: CGRect(x: 0, y: 0, width: diameter, height: diameter))
+        view.configure(color: color, diameter: diameter)
+        return view
+    }
+
+    func updateNSView(_ nsView: PulseHostView, context: Context) {
+        nsView.configure(color: color, diameter: diameter)
     }
 }
 
@@ -269,7 +334,7 @@ enum NotchTelemetryHelpers {
 
 /// Optical specular shimmer text matching Antigravity's exact `Working`, `Compacting`,
 /// and `Thinking for Ns` status sweep — pure luminance wave across crisp SF Pro glyphs,
-/// zero neon glow or AI-slop haze.
+/// interpolated 100% by CoreAnimation `CAGradientLayer` on GPU (native 120Hz ProMotion, 0.0% CPU).
 struct NotchShimmerText: View {
     var text: String
     var font: Font = .system(size: 11.5, weight: .medium)
@@ -289,38 +354,114 @@ struct NotchShimmerText: View {
                 .foregroundStyle(Color.white.opacity(0.78))
                 .lineLimit(1)
         } else {
-            TimelineView(.animation) { context in
-                let t = context.date.timeIntervalSinceReferenceDate
-                let rawPhase = (t.truncatingRemainder(dividingBy: period)) / period
-                let phase = rawPhase < 0 ? rawPhase + 1.0 : rawPhase
-                // Sweep highlight smoothly from -0.35 to 1.35 across the glyph width
-                let center = -0.35 + phase * 1.70
-                let bandHalfWidth = 0.24
-
-                Text(text)
-                    .font(font)
-                    .tracking(tracking)
-                    .foregroundStyle(baseColor)
-                    .lineLimit(1)
-                    .overlay {
-                        LinearGradient(
-                            stops: [
-                                .init(color: .clear, location: max(0, min(1, center - bandHalfWidth))),
-                                .init(color: Color.white.opacity(peakOpacity), location: max(0, min(1, center))),
-                                .init(color: .clear, location: max(0, min(1, center + bandHalfWidth))),
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
+            Text(text)
+                .font(font)
+                .tracking(tracking)
+                .foregroundStyle(baseColor)
+                .lineLimit(1)
+                .overlay {
+                    ShimmerSweepCALayerView(peakOpacity: peakOpacity, period: period)
                         .mask(
                             Text(text)
                                 .font(font)
                                 .tracking(tracking)
                                 .lineLimit(1)
                         )
-                    }
+                }
+        }
+    }
+}
+
+private struct ShimmerSweepCALayerView: NSViewRepresentable {
+    let peakOpacity: Double
+    let period: Double
+
+    final class ShimmerHostView: NSView {
+        private let gradientLayer = CAGradientLayer()
+        private var appliedPeakOpacity: Double = -1
+        private var appliedPeriod: Double = -1
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            layerContentsRedrawPolicy = .never
+            gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.5)
+            gradientLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
+            gradientLayer.locations = [-0.59, -0.35, -0.11] as [NSNumber]
+            gradientLayer.actions = ["bounds": NSNull(), "position": NSNull(), "frame": NSNull()]
+            layer?.addSublayer(gradientLayer)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            gradientLayer.frame = bounds
+            CATransaction.commit()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil {
+                ensureAnimation(forceRestart: false)
+            } else {
+                gradientLayer.removeAllAnimations()
             }
         }
+
+        func configure(peakOpacity: Double, period: Double) {
+            let needsColorUpdate = abs(appliedPeakOpacity - peakOpacity) > 0.001
+            let needsPeriodUpdate = abs(appliedPeriod - period) > 0.001
+            guard needsColorUpdate || needsPeriodUpdate || gradientLayer.animation(forKey: "shimmerSweep") == nil else {
+                return
+            }
+            appliedPeakOpacity = peakOpacity
+            appliedPeriod = period
+
+            if needsColorUpdate {
+                let clear = NSColor.white.withAlphaComponent(0.0).cgColor
+                let peak = NSColor.white.withAlphaComponent(peakOpacity).cgColor
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                gradientLayer.colors = [clear, peak, clear]
+                CATransaction.commit()
+            }
+            if window != nil {
+                ensureAnimation(forceRestart: needsPeriodUpdate)
+            }
+        }
+
+        private func ensureAnimation(forceRestart: Bool) {
+            if !forceRestart, gradientLayer.animation(forKey: "shimmerSweep") != nil {
+                return
+            }
+            gradientLayer.removeAnimation(forKey: "shimmerSweep")
+            let anim = CABasicAnimation(keyPath: "locations")
+            // Exact sweep from center = -0.35 to center = 1.35 with bandHalfWidth = 0.24
+            anim.fromValue = [-0.59, -0.35, -0.11] as [NSNumber]
+            anim.toValue = [1.11, 1.35, 1.59] as [NSNumber]
+            anim.duration = max(0.3, appliedPeriod)
+            anim.repeatCount = .infinity
+            anim.isRemovedOnCompletion = false
+            gradientLayer.add(anim, forKey: "shimmerSweep")
+        }
+    }
+
+    func makeNSView(context: Context) -> ShimmerHostView {
+        let view = ShimmerHostView(frame: .zero)
+        view.configure(peakOpacity: peakOpacity, period: period)
+        return view
+    }
+
+    func updateNSView(_ nsView: ShimmerHostView, context: Context) {
+        nsView.configure(peakOpacity: peakOpacity, period: period)
     }
 }
 

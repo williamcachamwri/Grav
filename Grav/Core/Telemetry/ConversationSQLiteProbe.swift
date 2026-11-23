@@ -209,12 +209,20 @@ public enum ConversationSQLiteProbe {
         }
 
         var rows: [RawRow] = []
+        rows.reserveCapacity(16)
         while sqlite3_step(stmt) == SQLITE_ROW {
             let idx = Int(sqlite3_column_int64(stmt, 0))
             let stepType = Int(sqlite3_column_int(stmt, 1))
             let status = Int(sqlite3_column_int(stmt, 2))
-            let payload = columnBlob(stmt, 3)
-            let errData = columnBlob(stmt, 4)
+            let needsPayload = rows.isEmpty
+                || stepType == StepType.plannerResponse
+                || status == StepStatus.running
+                || status == StepStatus.generating
+                || status == StepStatus.waiting
+                || status == StepStatus.error
+            let needsErrorDetails = rows.count < 6 && (status == StepStatus.error || stepType == StepType.plannerResponse)
+            let payload = needsPayload ? columnBlob(stmt, 3) : Data()
+            let errData = needsErrorDetails ? columnBlob(stmt, 4) : Data()
             rows.append(RawRow(idx: idx, stepType: stepType, status: status, payload: payload, errorDetails: errData))
         }
 

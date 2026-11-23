@@ -201,6 +201,74 @@ public actor TranscriptTailer {
         return results
     }
 
+    /// Streaming line-by-line JSONL reader that decodes each complete `TranscriptStep` in 256 KB
+    /// chunks inside an `autoreleasepool` and hands it directly to `onStep`, avoiding allocating
+    /// a multi-megabyte `[TranscriptStep]` array in RAM during full-session hydration.
+    /// Returns the exact consumed byte offset (matching `TranscriptTailer.byteOffset`).
+    public static func streamSteps(
+        from transcriptURL: URL,
+        onStep: (TranscriptStep) -> Void
+    ) -> UInt64 {
+        guard let handle = try? FileHandle(forReadingFrom: transcriptURL) else {
+            return 0
+        }
+        defer {
+            try? handle.close()
+        }
+
+        let decoder = JSONDecoder()
+        let chunkSize = 262_144
+        let newline: UInt8 = 0x0A
+        var consumedBytes: UInt64 = 0
+        var pending = Data()
+        pending.reserveCapacity(chunkSize * 2)
+
+        while true {
+            var didReadAny = false
+            autoreleasepool {
+                guard let chunk = try? handle.read(upToCount: chunkSize), !chunk.isEmpty else {
+                    return
+                }
+                didReadAny = true
+                pending.append(chunk)
+
+                var lineStart = pending.startIndex
+                while let newlineIdx = pending[lineStart..<pending.endIndex].firstIndex(of: newline) {
+                    let lineSlice = pending[lineStart..<newlineIdx]
+                    let lineByteLen = pending.distance(from: lineStart, to: newlineIdx) + 1
+                    consumedBytes += UInt64(lineByteLen)
+                    lineStart = pending.index(after: newlineIdx)
+
+                    if !lineSlice.isEmpty {
+                        let lineData = Data(lineSlice)
+                        if let step = try? decoder.decode(TranscriptStep.self, from: lineData) {
+                            onStep(step)
+                        }
+                    }
+                }
+
+                if lineStart > pending.startIndex {
+                    pending.removeSubrange(pending.startIndex..<lineStart)
+                }
+            }
+            if !didReadAny {
+                break
+            }
+        }
+
+        if !pending.isEmpty {
+            autoreleasepool {
+                let trailingData = Data(pending)
+                if let step = try? decoder.decode(TranscriptStep.self, from: trailingData) {
+                    onStep(step)
+                    consumedBytes += UInt64(trailingData.count)
+                }
+            }
+        }
+
+        return consumedBytes
+    }
+
     // MARK: - Line Parsing
 
     private func parseSteps(from data: Data) -> [TranscriptStep] {

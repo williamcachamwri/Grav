@@ -1,3 +1,5 @@
+import AppKit
+import QuartzCore
 import SwiftUI
 
 /// Live telemetry overview pairing a serene editorial Thinking sheet with a clean,
@@ -1294,35 +1296,97 @@ private struct AntigravityToolProgressBar: View {
                 .fill(accent.opacity(0.85))
                 .frame(height: 1.8)
         } else {
-            TimelineView(.animation) { context in
-                let t = context.date.timeIntervalSinceReferenceDate
-                let period = 1.45
-                let phase = (t.truncatingRemainder(dividingBy: period)) / period
-                let norm = phase < 0 ? phase + 1.0 : phase
-                let head = min(1.0, norm * 1.35)
-                let tail = max(0.0, head - 0.42)
-
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule(style: .continuous)
-                            .fill(accent.opacity(0.18))
-                        Capsule(style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [accent.opacity(0.25), accent, Color(red: 0.54, green: 0.80, blue: 1.0)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: max(8, geo.size.width * CGFloat(head - tail)))
-                            .offset(x: geo.size.width * CGFloat(tail))
-                    }
-                }
+            ToolProgressBarCALayerView()
                 .frame(height: 1.8)
-                .clipped()
-            }
+                .clipShape(Capsule(style: .continuous))
         }
     }
+}
+
+/// Zero-CPU GPU-composited indeterminate progress sweep matching Antigravity's exact blue bar (120Hz ProMotion).
+private struct ToolProgressBarCALayerView: NSViewRepresentable {
+    final class ProgressHostView: NSView {
+        private let trackLayer = CALayer()
+        private let sweepLayer = CAGradientLayer()
+        private var lastWidth: CGFloat = 0
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            layerContentsRedrawPolicy = .never
+            layer?.masksToBounds = true
+
+            let accent = NSColor(calibratedRed: 0.24, green: 0.54, blue: 1.0, alpha: 1.0)
+            let bright = NSColor(calibratedRed: 0.54, green: 0.80, blue: 1.0, alpha: 1.0)
+
+            trackLayer.backgroundColor = accent.withAlphaComponent(0.18).cgColor
+            trackLayer.actions = ["bounds": NSNull(), "position": NSNull(), "frame": NSNull()]
+            layer?.addSublayer(trackLayer)
+
+            sweepLayer.colors = [
+                accent.withAlphaComponent(0.25).cgColor,
+                accent.cgColor,
+                bright.cgColor,
+            ]
+            sweepLayer.startPoint = CGPoint(x: 0.0, y: 0.5)
+            sweepLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
+            sweepLayer.cornerRadius = 0.9
+            sweepLayer.actions = ["bounds": NSNull(), "position": NSNull(), "frame": NSNull()]
+            layer?.addSublayer(sweepLayer)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            trackLayer.frame = bounds
+            let barW = max(8, bounds.width * 0.42)
+            sweepLayer.bounds = CGRect(x: 0, y: 0, width: barW, height: bounds.height)
+            sweepLayer.position = CGPoint(x: -barW * 0.5, y: bounds.midY)
+            CATransaction.commit()
+
+            if abs(bounds.width - lastWidth) > 0.5 && bounds.width > 0 {
+                lastWidth = bounds.width
+                if window != nil {
+                    restartAnimation()
+                }
+            }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil, bounds.width > 0 {
+                restartAnimation()
+            } else {
+                sweepLayer.removeAllAnimations()
+            }
+        }
+
+        private func restartAnimation() {
+            sweepLayer.removeAnimation(forKey: "toolSweep")
+            let barW = max(8, bounds.width * 0.42)
+            let anim = CABasicAnimation(keyPath: "position.x")
+            anim.fromValue = -barW * 0.5
+            anim.toValue = bounds.width + barW * 0.5
+            anim.duration = 1.45
+            anim.repeatCount = .infinity
+            anim.isRemovedOnCompletion = false
+            sweepLayer.add(anim, forKey: "toolSweep")
+        }
+    }
+
+    func makeNSView(context: Context) -> ProgressHostView {
+        ProgressHostView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: ProgressHostView, context: Context) {}
 }
 
 /// Zero-dependency syntax-highlighted JSON renderer matching Antigravity's dark Tool Arguments palette

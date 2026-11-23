@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 /// Codex-style floating desktop Mini Pet companion with crisp nearest-neighbor pixel rendering,
@@ -41,47 +42,55 @@ struct DesktopPetOverlayView: View {
 
     var body: some View {
         if let pet = activePet {
-            TimelineView(.periodic(from: .now, by: 1.5)) { context in
-                let animState = CodexPetTelemetryMapper.animationState(
-                    for: store,
-                    reactionOverride: petsStore.reactionOverride,
-                    roamingEnabled: preferences.miniPetRoaming && !reduceMotion && !isDraggingWindow && !isResizing,
-                    spriteVersion: pet.spriteVersionNumber,
-                    now: context.date
-                )
-
-                VStack(spacing: 4) {
-                    petCharacterStage(pet: pet, animState: animState)
-
-                    if shouldShowStatusBubble {
-                        liveSpeechBubble(animState: animState)
-                            .onHover { hovering in
-                                isHoveringBubble = hovering
-                                reconcileHoverState()
-                            }
-                            .transition(
-                                reduceMotion
-                                    ? .opacity
-                                    : .asymmetric(
-                                        insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .top)).combined(with: .offset(y: -4)),
-                                        removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
-                                    )
-                            )
-                    }
-
-                    Spacer(minLength: 0)
+            if CodexPetTelemetryMapper.needsTimeBasedDecayCheck(for: store) {
+                TimelineView(.periodic(from: .now, by: 1.5)) { context in
+                    overlayStageContent(pet: pet, now: context.date)
                 }
-                .padding(.top, 8)
-                .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.14), value: shouldShowStatusBubble)
-                .onChange(of: animState) { _, newState in
-                    updatePatrolMotion(for: newState)
-                }
-                .onDisappear {
-                    hoverExitTask?.cancel()
-                }
+            } else {
+                overlayStageContent(pet: pet, now: Date())
             }
+        }
+    }
+
+    private func overlayStageContent(pet: InstalledCodexPet, now: Date) -> some View {
+        let animState = CodexPetTelemetryMapper.animationState(
+            for: store,
+            reactionOverride: petsStore.reactionOverride,
+            roamingEnabled: preferences.miniPetRoaming && !reduceMotion && !isDraggingWindow && !isResizing,
+            spriteVersion: pet.spriteVersionNumber,
+            now: now
+        )
+
+        return VStack(spacing: 4) {
+            petCharacterStage(pet: pet, animState: animState)
+
+            if shouldShowStatusBubble {
+                liveSpeechBubble(animState: animState)
+                    .onHover { hovering in
+                        isHoveringBubble = hovering
+                        reconcileHoverState()
+                    }
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .asymmetric(
+                                insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .top)).combined(with: .offset(y: -4)),
+                                removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
+                            )
+                    )
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 8)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.14), value: shouldShowStatusBubble)
+        .onChange(of: animState) { _, newState in
+            updatePatrolMotion(for: newState)
+        }
+        .onDisappear {
+            hoverExitTask?.cancel()
         }
     }
 
@@ -658,19 +667,143 @@ struct DesktopPetOverlayView: View {
 
 private struct BubbleActivityRing: View {
     let reduceMotion: Bool
-    @State private var angle: Double = 0
 
     var body: some View {
-        Circle()
-            .trim(from: 0.12, to: 0.82)
-            .stroke(Color.white.opacity(0.68), style: StrokeStyle(lineWidth: 1.4, lineCap: .round))
+        if reduceMotion {
+            Circle()
+                .trim(from: 0.12, to: 0.82)
+                .stroke(Color.white.opacity(0.68), style: StrokeStyle(lineWidth: 1.4, lineCap: .round))
+                .frame(width: 10, height: 10)
+        } else {
+            SpinningArcCALayerView(
+                strokeColor: NSColor.white.withAlphaComponent(0.68),
+                trackColor: nil,
+                diameter: 10,
+                lineWidth: 1.4,
+                trimStart: 0.12,
+                trimEnd: 0.82,
+                duration: 0.95
+            )
             .frame(width: 10, height: 10)
-            .rotationEffect(.degrees(angle))
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(.linear(duration: 0.95).repeatForever(autoreverses: false)) {
-                    angle = 360
-                }
+        }
+    }
+}
+
+private struct SpinningArcCALayerView: NSViewRepresentable {
+    let strokeColor: NSColor
+    let trackColor: NSColor?
+    let diameter: CGFloat
+    let lineWidth: CGFloat
+    let trimStart: CGFloat
+    let trimEnd: CGFloat
+    let duration: Double
+
+    final class ArcHostView: NSView {
+        private let trackLayer = CAShapeLayer()
+        private let arcLayer = CAShapeLayer()
+        private var currentDuration: Double = 0.95
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            layerContentsRedrawPolicy = .never
+            trackLayer.fillColor = nil
+            arcLayer.fillColor = nil
+            arcLayer.lineCap = .round
+            layer?.addSublayer(trackLayer)
+            layer?.addSublayer(arcLayer)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil {
+                ensureRotation()
+            } else {
+                arcLayer.removeAllAnimations()
             }
+        }
+
+        func configure(
+            strokeColor: NSColor,
+            trackColor: NSColor?,
+            diameter: CGFloat,
+            lineWidth: CGFloat,
+            trimStart: CGFloat,
+            trimEnd: CGFloat,
+            duration: Double
+        ) {
+            currentDuration = duration
+            let inset = lineWidth * 0.5
+            let rect = CGRect(x: inset, y: inset, width: max(1, diameter - lineWidth), height: max(1, diameter - lineWidth))
+            let path = CGPath(ellipseIn: rect, transform: nil)
+            let center = CGPoint(x: diameter * 0.5, y: diameter * 0.5)
+            let boundsRect = CGRect(origin: .zero, size: CGSize(width: diameter, height: diameter))
+
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            trackLayer.isHidden = (trackColor == nil)
+            trackLayer.strokeColor = trackColor?.cgColor
+            trackLayer.lineWidth = lineWidth
+            trackLayer.bounds = boundsRect
+            trackLayer.position = center
+            trackLayer.path = path
+
+            arcLayer.strokeColor = strokeColor.cgColor
+            arcLayer.lineWidth = lineWidth
+            arcLayer.strokeStart = trimStart
+            arcLayer.strokeEnd = trimEnd
+            arcLayer.bounds = boundsRect
+            arcLayer.position = center
+            arcLayer.path = path
+            CATransaction.commit()
+
+            if window != nil {
+                ensureRotation()
+            }
+        }
+
+        private func ensureRotation() {
+            guard arcLayer.animation(forKey: "spinArc") == nil else { return }
+            let anim = CABasicAnimation(keyPath: "transform.rotation.z")
+            anim.fromValue = 0.0
+            anim.toValue = -Double.pi * 2.0
+            anim.duration = max(0.2, currentDuration)
+            anim.repeatCount = .infinity
+            anim.isRemovedOnCompletion = false
+            arcLayer.add(anim, forKey: "spinArc")
+        }
+    }
+
+    func makeNSView(context: Context) -> ArcHostView {
+        let view = ArcHostView(frame: CGRect(x: 0, y: 0, width: diameter, height: diameter))
+        view.configure(
+            strokeColor: strokeColor,
+            trackColor: trackColor,
+            diameter: diameter,
+            lineWidth: lineWidth,
+            trimStart: trimStart,
+            trimEnd: trimEnd,
+            duration: duration
+        )
+        return view
+    }
+
+    func updateNSView(_ nsView: ArcHostView, context: Context) {
+        nsView.configure(
+            strokeColor: strokeColor,
+            trackColor: trackColor,
+            diameter: diameter,
+            lineWidth: lineWidth,
+            trimStart: trimStart,
+            trimEnd: trimEnd,
+            duration: duration
+        )
     }
 }

@@ -151,6 +151,7 @@ public final class AntigravityTelemetryStore {
     private var truncatedHydrationTask: Task<Void, Never>?
     private var sqliteProbeTask: Task<Void, Never>?
     private var lastSQLiteProbeAt: Date = .distantPast
+    private var lastWALProbeFingerprint: String = ""
     private var hydratedFileContents: [String: String] = [:]
     private var lastFinalIdleAt: Date = .distantPast
     private var isSpeculativeWALWorking: Bool = false
@@ -165,7 +166,8 @@ public final class AntigravityTelemetryStore {
     private var activeTailerByteOffset: UInt64 = 0
     private var sessionCache: [String: CachedSessionState] = [:]
     private var sessionCacheLRU: [String] = []
-    private let maxCachedSessions: Int = 16
+    private let maxCachedSessions: Int = 6
+    private nonisolated static let maxRetainedLogCharacters: Int = 32_000
     private var prewarmTask: Task<Void, Never>?
     private var activeHydrationTask: Task<Void, Never>?
 
@@ -970,11 +972,13 @@ public final class AntigravityTelemetryStore {
     private func storeCurrentSessionInCache(_ session: ConversationSession) {
         let attrs = try? FileManager.default.attributesOfItem(atPath: session.transcriptURL.path)
         let fileSize = (attrs?[.size] as? NSNumber)?.uint64Value ?? activeTailerByteOffset
+        var compactClassifier = classifier
+        compactClassifier.trimTransientBuffersForCache()
         let snapshot = CachedSessionState(
             sessionID: session.id,
             tailerByteOffset: activeTailerByteOffset,
             transcriptFileSize: fileSize,
-            classifier: classifier,
+            classifier: compactClassifier,
             state: state,
             currentThinking: currentThinking,
             thinkingHistory: thinkingHistory,
@@ -999,7 +1003,7 @@ public final class AntigravityTelemetryStore {
             previousObservedModel: previousObservedModel,
             hydratedTruncatedFileSteps: hydratedTruncatedFileSteps,
             pendingTruncatedHydrationSteps: pendingTruncatedHydrationSteps,
-            hydratedFileContents: hydratedFileContents,
+            hydratedFileContents: [:],
             lastStepDate: nil
         )
         cacheSessionSnapshot(snapshot)
@@ -1051,14 +1055,14 @@ public final class AntigravityTelemetryStore {
         previousObservedModel = cached.previousObservedModel
     }
 
-    /// Politely pre-hydrates the next 3 most recent conversations in the background (`.utility` priority)
-    /// so even the very first click to switch chats hits the in-memory cache in < 0.2ms.
+    /// Politely pre-hydrates the next 2 most recent conversations in the background (`.utility` priority)
+    /// so switching between active chats hits RAM cache in < 0.2ms while keeping memory lean.
     private func scheduleRecentSessionsPrewarm(_ discovered: [ConversationSession]) {
         guard isMonitoring, !isPaused else { return }
         let activeID = activeSession?.id
         let candidates = discovered
             .filter { $0.id != activeID && sessionCache[$0.id] == nil }
-            .prefix(3)
+            .prefix(2)
             .map { $0 }
         guard !candidates.isEmpty else { return }
 
@@ -1068,7 +1072,7 @@ public final class AntigravityTelemetryStore {
         prewarmTask?.cancel()
         prewarmTask = Task { [weak self] in
             // Wait politely so startup/active-session hydration finishes first with zero contention
-            try? await Task.sleep(for: .milliseconds(650))
+            try? await Task.sleep(for: .milliseconds(800))
             guard !Task.isCancelled, let self, self.isMonitoring, !self.isPaused else { return }
 
             for candidate in candidates {
@@ -1076,9 +1080,9 @@ public final class AntigravityTelemetryStore {
                 let alreadyCached = await MainActor.run { self.sessionCache[candidate.id] != nil }
                 if alreadyCached { continue }
 
-                // Skip abnormally huge transcripts (> 16 MB) during speculative background pre-warm
+                // Skip huge transcripts (> 6 MB) during speculative background pre-warm to keep idle RAM low
                 let size = (try? FileManager.default.attributesOfItem(atPath: candidate.transcriptURL.path)[.size] as? NSNumber)?.uint64Value ?? 0
-                if size == 0 || size > 16_000_000 { continue }
+                if size == 0 || size > 6_000_000 { continue }
 
                 let hydrated = await Task.detached(priority: .utility) {
                     await Self.hydrateSessionOffMain(
@@ -1097,17 +1101,19 @@ public final class AntigravityTelemetryStore {
         }
     }
 
-    /// Pure off-main-actor transcript reader + `EventClassifier` state reducer.
-    /// Produces a complete `CachedSessionState` without touching `@MainActor` or triggering SwiftUI redraws.
+    private nonisolated static func trimRetainedLogOutput(_ text: String) -> String {
+        guard text.count > maxRetainedLogCharacters else { return text }
+        return String(text.suffix(maxRetainedLogCharacters))
+    }
+
+    /// Pure off-main-actor streaming transcript reader + `EventClassifier` state reducer.
+    /// Produces a compact `CachedSessionState` without allocating a full `[TranscriptStep]` array
+    /// or touching `@MainActor`.
     private nonisolated static func hydrateSessionOffMain(
         session: ConversationSession,
         maxRetainedEvents: Int,
         idleDecaySeconds: TimeInterval
     ) async -> (snapshot: CachedSessionState, tailer: TranscriptTailer) {
-        let tailer = TranscriptTailer(transcriptURL: session.transcriptURL, initialOffset: 0)
-        let steps = await tailer.readNewSteps()
-        let byteOffset = await tailer.byteOffset
-
         let antigravityRoot = session.directoryURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -1157,7 +1163,7 @@ public final class AntigravityTelemetryStore {
 
         let now = Date()
 
-        for step in steps {
+        let byteOffset = TranscriptTailer.streamSteps(from: session.transcriptURL) { step in
             lastStepDate = step.parsedDate
             let output = classifier.process(step: step, session: session)
 
@@ -1251,17 +1257,22 @@ public final class AntigravityTelemetryStore {
                 appendOrUpdateActivity(.command(started))
             }
             for updated in output.updatedCommands {
-                if let idx = commandIndexByID[updated.id] {
-                    var merged = updated
+                var merged = updated
+                if let idx = commandIndexByID[merged.id] {
                     if merged.logOutput.isEmpty, !commands[idx].logOutput.isEmpty {
                         merged.logOutput = commands[idx].logOutput
+                    } else if merged.logOutput.count > maxRetainedLogCharacters {
+                        merged.logOutput = trimRetainedLogOutput(merged.logOutput)
                     }
                     commands[idx] = merged
                     appendOrUpdateActivity(.command(merged))
                 } else {
-                    commandIndexByID[updated.id] = commands.count
-                    commands.append(updated)
-                    appendOrUpdateActivity(.command(updated))
+                    if merged.logOutput.count > maxRetainedLogCharacters {
+                        merged.logOutput = trimRetainedLogOutput(merged.logOutput)
+                    }
+                    commandIndexByID[merged.id] = commands.count
+                    commands.append(merged)
+                    appendOrUpdateActivity(.command(merged))
                 }
             }
 
@@ -1320,6 +1331,9 @@ public final class AntigravityTelemetryStore {
         fileChanges = Array(fileChanges.suffix(maxRetainedEvents).reversed())
         commands = Array(commands.suffix(maxRetainedEvents).reversed())
         recentActivity = Array(recentActivity.suffix(maxRetainedEvents).reversed())
+
+        classifier.trimTransientBuffersForCache()
+        let tailer = TranscriptTailer(transcriptURL: session.transcriptURL, initialOffset: byteOffset)
 
         let attrs = try? FileManager.default.attributesOfItem(atPath: session.transcriptURL.path)
         let fileSize = (attrs?[.size] as? NSNumber)?.uint64Value ?? byteOffset
@@ -1497,18 +1511,32 @@ public final class AntigravityTelemetryStore {
     private func handleLiveConversationWALActivity(pulse: WALActivityPulse) {
         guard !isHydratingActiveSession, !isPaused, let session = activeSession else { return }
 
-        // Throttle read-only SQLite WAL probes to at most once every 220ms (< 0.4ms each)
+        // Throttle read-only SQLite WAL probes to at most once every 350ms
         let now = Date()
-        guard now.timeIntervalSince(lastSQLiteProbeAt) >= 0.22 else { return }
-        lastSQLiteProbeAt = now
+        guard now.timeIntervalSince(lastSQLiteProbeAt) >= 0.35 else { return }
 
-        let generation = sessionGeneration
         let antigravityRoot = session.directoryURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let dbURL = antigravityRoot
             .appendingPathComponent("conversations", isDirectory: true)
             .appendingPathComponent("\(session.id).db")
+        let walPath = dbURL.path + "-wal"
+        let summariesWALPath = antigravityRoot
+            .appendingPathComponent("conversation_summaries.db-wal").path
+
+        // Deduplicate redundant WAL events when neither WAL file's mtime/size actually changed
+        let fm = FileManager.default
+        let w1 = try? fm.attributesOfItem(atPath: walPath)
+        let w2 = try? fm.attributesOfItem(atPath: summariesWALPath)
+        let fingerprint = "\(session.id)|\((w1?[.size] as? NSNumber)?.uint64Value ?? 0)|\((w1?[.modificationDate] as? Date)?.timeIntervalSinceReferenceDate ?? 0)|\((w2?[.size] as? NSNumber)?.uint64Value ?? 0)|\((w2?[.modificationDate] as? Date)?.timeIntervalSinceReferenceDate ?? 0)"
+        if lastSQLiteProbeAt != .distantPast && fingerprint == lastWALProbeFingerprint {
+            return
+        }
+        lastWALProbeFingerprint = fingerprint
+        lastSQLiteProbeAt = now
+
+        let generation = sessionGeneration
         let sessionID = session.id
 
         sqliteProbeTask?.cancel()
@@ -2104,20 +2132,23 @@ public final class AntigravityTelemetryStore {
     }
 
     private func upsertCommand(_ command: CommandExecutionEvent) {
-        if let idx = commands.firstIndex(where: { $0.id == command.id }) {
+        var normalized = command
+        if normalized.logOutput.count > Self.maxRetainedLogCharacters {
+            normalized.logOutput = Self.trimRetainedLogOutput(normalized.logOutput)
+        }
+        if let idx = commands.firstIndex(where: { $0.id == normalized.id }) {
             // Preserve live-tailed logOutput if the updated event has an empty log body
-            var merged = command
-            if merged.logOutput.isEmpty, !commands[idx].logOutput.isEmpty {
-                merged.logOutput = commands[idx].logOutput
+            if normalized.logOutput.isEmpty, !commands[idx].logOutput.isEmpty {
+                normalized.logOutput = commands[idx].logOutput
             }
-            commands[idx] = merged
-            upsertActivity(.command(merged))
+            commands[idx] = normalized
+            upsertActivity(.command(normalized))
         } else {
-            commands.insert(command, at: 0)
+            commands.insert(normalized, at: 0)
             if commands.count > maxRetainedEvents {
                 commands.removeLast(commands.count - maxRetainedEvents)
             }
-            upsertActivity(.command(command))
+            upsertActivity(.command(normalized))
         }
     }
 
@@ -2163,7 +2194,9 @@ public final class AntigravityTelemetryStore {
 
     private func applyLiveTaskLogUpdate(commandID: String, logOutput: String) {
         guard let idx = commands.firstIndex(where: { $0.id == commandID }) else { return }
-        commands[idx].logOutput = logOutput
+        let bounded = Self.trimRetainedLogOutput(logOutput)
+        guard commands[idx].logOutput != bounded else { return }
+        commands[idx].logOutput = bounded
         let updated = commands[idx]
         upsertActivity(.command(updated))
 

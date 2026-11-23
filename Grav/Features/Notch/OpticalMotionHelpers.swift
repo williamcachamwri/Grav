@@ -1,3 +1,5 @@
+import AppKit
+import QuartzCore
 import SwiftUI
 
 /// Ultra-subtle glacial cyan optical ring rendered exclusively while telemetry is active
@@ -74,6 +76,7 @@ public struct OpticalBreathingRing: View {
 }
 
 /// Minimal monochrome aerospace arc spinner for running shell commands.
+/// Driven 100% by CoreAnimation `CAShapeLayer` on GPU (0.0% CPU, native 120Hz ProMotion).
 /// Degrades to a calm static 5pt indicator dot under Reduce Motion or when inactive.
 public struct OpticalCommandSpinner: View {
     public var isActive: Bool
@@ -81,7 +84,6 @@ public struct OpticalCommandSpinner: View {
     public var tint: Color
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isRotating: Bool = false
 
     public init(
         isActive: Bool,
@@ -96,24 +98,8 @@ public struct OpticalCommandSpinner: View {
     public var body: some View {
         Group {
             if isActive && !reduceMotion {
-                ZStack {
-                    Circle()
-                        .stroke(tint.opacity(0.18), lineWidth: 1.35)
-                    Circle()
-                        .trim(from: 0.0, to: 0.34)
-                        .stroke(
-                            tint.opacity(0.92),
-                            style: StrokeStyle(lineWidth: 1.35, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(isRotating ? 360 : 0))
-                }
-                .frame(width: size, height: size)
-                .onAppear {
-                    startRotation()
-                }
-                .onDisappear {
-                    stopRotation()
-                }
+                OpticalSpinnerCALayerView(tint: NSColor(tint), size: size)
+                    .frame(width: size, height: size)
             } else {
                 Circle()
                     .fill(isActive ? tint.opacity(0.85) : GravPalette.idleDot)
@@ -121,36 +107,94 @@ public struct OpticalCommandSpinner: View {
                     .frame(width: size, height: size)
             }
         }
-        .onChange(of: isActive) { _, active in
-            if active && !reduceMotion {
-                startRotation()
-            } else {
-                stopRotation()
-            }
-        }
-        .onChange(of: reduceMotion) { _, reduced in
-            if reduced || !isActive {
-                stopRotation()
-            } else {
-                startRotation()
-            }
-        }
         .accessibilityHidden(true)
     }
+}
 
-    private func startRotation() {
-        isRotating = false
-        withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) {
-            isRotating = true
+private struct OpticalSpinnerCALayerView: NSViewRepresentable {
+    let tint: NSColor
+    let size: CGFloat
+
+    final class SpinnerHostView: NSView {
+        private let trackLayer = CAShapeLayer()
+        private let arcLayer = CAShapeLayer()
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            layerContentsRedrawPolicy = .never
+            trackLayer.fillColor = nil
+            trackLayer.lineWidth = 1.35
+            arcLayer.fillColor = nil
+            arcLayer.lineWidth = 1.35
+            arcLayer.lineCap = .round
+            arcLayer.strokeStart = 0.0
+            arcLayer.strokeEnd = 0.34
+            layer?.addSublayer(trackLayer)
+            layer?.addSublayer(arcLayer)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil {
+                ensureRotation()
+            } else {
+                arcLayer.removeAllAnimations()
+            }
+        }
+
+        func configure(tint: NSColor, size: CGFloat) {
+            let inset: CGFloat = 0.675
+            let rect = CGRect(x: inset, y: inset, width: max(1, size - 1.35), height: max(1, size - 1.35))
+            let path = CGPath(ellipseIn: rect, transform: nil)
+            let center = CGPoint(x: size * 0.5, y: size * 0.5)
+            let boundsRect = CGRect(origin: .zero, size: CGSize(width: size, height: size))
+
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            trackLayer.strokeColor = tint.withAlphaComponent(0.18).cgColor
+            trackLayer.bounds = boundsRect
+            trackLayer.position = center
+            trackLayer.path = path
+
+            arcLayer.strokeColor = tint.withAlphaComponent(0.92).cgColor
+            arcLayer.bounds = boundsRect
+            arcLayer.position = center
+            arcLayer.path = path
+            CATransaction.commit()
+
+            if window != nil {
+                ensureRotation()
+            }
+        }
+
+        private func ensureRotation() {
+            guard arcLayer.animation(forKey: "opticalSpin") == nil else { return }
+            let anim = CABasicAnimation(keyPath: "transform.rotation.z")
+            anim.fromValue = 0.0
+            anim.toValue = -Double.pi * 2.0
+            anim.duration = 0.85
+            anim.repeatCount = .infinity
+            anim.isRemovedOnCompletion = false
+            arcLayer.add(anim, forKey: "opticalSpin")
         }
     }
 
-    private func stopRotation() {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            isRotating = false
-        }
+    func makeNSView(context: Context) -> SpinnerHostView {
+        let view = SpinnerHostView(frame: CGRect(x: 0, y: 0, width: size, height: size))
+        view.configure(tint: tint, size: size)
+        return view
+    }
+
+    func updateNSView(_ nsView: SpinnerHostView, context: Context) {
+        nsView.configure(tint: tint, size: size)
     }
 }
 

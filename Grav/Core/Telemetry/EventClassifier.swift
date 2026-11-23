@@ -895,13 +895,19 @@ public struct EventClassifier: Sendable {
     }
 
     private mutating func cacheFileContent(_ content: String, for path: String) {
-        guard content.utf8.count <= 300_000 else { return }
-        if lastKnownFileContents.count >= 32, lastKnownFileContents[path] == nil,
+        guard content.utf8.count <= 120_000 else { return }
+        if lastKnownFileContents.count >= 16, lastKnownFileContents[path] == nil,
            let oldestKey = lastKnownFileContents.keys.first
         {
             lastKnownFileContents.removeValue(forKey: oldestKey)
         }
         lastKnownFileContents[path] = content
+    }
+
+    /// Releases cached full-file text buffers before storing an inactive session snapshot in RAM;
+    /// all computed `FileChangeEvent.diffHunks` remain intact.
+    public mutating func trimTransientBuffersForCache() {
+        lastKnownFileContents.removeAll(keepingCapacity: false)
     }
 
     internal mutating func registerCommandStart(
