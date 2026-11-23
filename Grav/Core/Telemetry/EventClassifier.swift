@@ -14,6 +14,12 @@ public struct EventClassificationOutput: Sendable, Equatable {
     public var truncatedFileChangeStepIndices: [Int]
     public var startedCommands: [CommandExecutionEvent]
     public var updatedCommands: [CommandExecutionEvent]
+    public var toolActivities: [AgentToolActivityEvent]
+    public var focusUpdate: String?
+    public var clearFocus: Bool
+    public var stepsProgress: AgentStepsProgress?
+    public var turnStartedAt: Date?
+    public var lastTurnDuration: TimeInterval?
     public var peekEvents: [NotchPeekEvent]
     public var didMutateAgentsOrSwarm: Bool
 
@@ -30,6 +36,12 @@ public struct EventClassificationOutput: Sendable, Equatable {
         truncatedFileChangeStepIndices: [Int] = [],
         startedCommands: [CommandExecutionEvent] = [],
         updatedCommands: [CommandExecutionEvent] = [],
+        toolActivities: [AgentToolActivityEvent] = [],
+        focusUpdate: String? = nil,
+        clearFocus: Bool = false,
+        stepsProgress: AgentStepsProgress? = nil,
+        turnStartedAt: Date? = nil,
+        lastTurnDuration: TimeInterval? = nil,
         peekEvents: [NotchPeekEvent] = [],
         didMutateAgentsOrSwarm: Bool = false
     ) {
@@ -45,6 +57,12 @@ public struct EventClassificationOutput: Sendable, Equatable {
         self.truncatedFileChangeStepIndices = truncatedFileChangeStepIndices
         self.startedCommands = startedCommands
         self.updatedCommands = updatedCommands
+        self.toolActivities = toolActivities
+        self.focusUpdate = focusUpdate
+        self.clearFocus = clearFocus
+        self.stepsProgress = stepsProgress
+        self.turnStartedAt = turnStartedAt
+        self.lastTurnDuration = lastTurnDuration
         self.peekEvents = peekEvents
         self.didMutateAgentsOrSwarm = didMutateAgentsOrSwarm
     }
@@ -68,6 +86,7 @@ public struct EventClassifier: Sendable {
     internal var confirmedBackgroundCommandIDs: Set<String> = []
     internal var lastUserPromptPreview: String?
     internal var isTurnActive: Bool = false
+    internal var currentTurnStartedAt: Date?
     internal var lastKnownFileContents: [String: String] = [:]
     internal var previousStepTimestamp: Date?
     internal var throughputSamples: [Double] = []
@@ -89,6 +108,7 @@ public struct EventClassifier: Sendable {
         confirmedBackgroundCommandIDs.removeAll()
         lastUserPromptPreview = nil
         isTurnActive = false
+        currentTurnStartedAt = nil
         lastKnownFileContents.removeAll()
         previousStepTimestamp = nil
         throughputSamples.removeAll()
@@ -262,6 +282,9 @@ public struct EventClassifier: Sendable {
                 output.updatedCommands.append(contentsOf: orphaned)
             }
             isTurnActive = true
+            currentTurnStartedAt = stepDate
+            output.turnStartedAt = stepDate
+            output.clearFocus = true
         }
 
         // 2b. Capture real-time AI Assistant responses (`PLANNER_RESPONSE` with visible content)
@@ -348,10 +371,18 @@ public struct EventClassifier: Sendable {
             if output.responseSnapshot != nil && previousState != .idle {
                 output.peekEvents.append(.turnCompleted)
             }
+            if let startedAt = currentTurnStartedAt {
+                output.lastTurnDuration = max(1, stepDate.timeIntervalSince(startedAt))
+            }
+            output.clearFocus = true
             state = .idle
             isTurnActive = false
             burstEditedPaths.removeAll()
             hasPeekedMultiFileBurst = false
+        } else if step.status == "WAITING" {
+            state = .waitingForInput("Waiting for your approval")
+        } else if let waitingActivity = output.toolActivities.last(where: { $0.kind == .waitingForInput }) {
+            state = .waitingForInput(waitingActivity.detail ?? waitingActivity.title)
         } else if let compaction = output.compactionEvent {
             state = .compacting(compaction)
         } else if let activeCmd = pendingCommands.last {
@@ -360,6 +391,8 @@ public struct EventClassifier: Sendable {
             state = .editing(latestFile)
         } else if let latestInspection = output.fileInspections.last {
             state = .inspecting(latestInspection)
+        } else if let latestToolActivity = output.toolActivities.last {
+            state = .toolActivity(latestToolActivity)
         } else if let reply = output.responseSnapshot, reply.isStreaming {
             state = .replying(reply)
         } else if !trimmedThinking.isEmpty && !isFinalPlannerResponse {
@@ -378,11 +411,11 @@ public struct EventClassifier: Sendable {
                 state = .idle
             }
         } else if isTurnActive && step.type == "GENERIC" && step.status != "RUNNING" {
-            // Preserve `.inspecting` / `.editing` right after their instant GENERIC DONE result so
-            // the Notch actually displays `Analyzed File.swift #L...` / `File.swift +N -M` instead
+            // Preserve `.inspecting` / `.editing` / `.toolActivity` right after their instant GENERIC DONE result so
+            // the Notch actually displays `Analyzed File.swift #L...` / `File.swift +N -M` / `Searching web` instead
             // of getting stomped in <1ms; for all other tool completions, transition to `.working`.
             switch state {
-            case .inspecting, .editing:
+            case .inspecting, .editing, .toolActivity:
                 break
             default:
                 state = .working(startedAt: stepDate)
@@ -496,8 +529,154 @@ public struct EventClassifier: Sendable {
                     into: &output
                 )
 
+            case "update_focus":
+                if let focus = call.stringArg("focus")?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !focus.isEmpty
+                {
+                    output.focusUpdate = focus
+                }
+
+            case "update_steps":
+                if let rawSteps = call.args?["steps"]?.unwrappedArray {
+                    let parsedItems: [AgentStepItem] = rawSteps.enumerated().compactMap { idx, entry in
+                        guard let dict = entry.unwrappedObject,
+                              let title = dict["title"]?.unwrappedString?.trimmingCharacters(in: .whitespacesAndNewlines),
+                              !title.isEmpty
+                        else { return nil }
+                        let rawStatus = dict["status"]?.unwrappedString ?? "pending"
+                        let status = AgentStepStatus(rawValue: rawStatus) ?? .pending
+                        return AgentStepItem(index: idx, title: title, status: status)
+                    }
+                    if !parsedItems.isEmpty {
+                        output.stepsProgress = AgentStepsProgress(
+                            stepIndex: step.stepIndex,
+                            updatedAt: stepDate,
+                            steps: parsedItems
+                        )
+                    }
+                }
+
             case "ask_question":
-                output.peekEvents.append(.needsInput("Antigravity needs your input"))
+                var firstQuestion: String?
+                if let questions = call.args?["questions"]?.unwrappedArray,
+                   let first = questions.first?.unwrappedObject
+                {
+                    firstQuestion = first["question"]?.unwrappedString
+                }
+                let prompt = firstQuestion?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let label = (prompt?.isEmpty == false) ? prompt! : "Antigravity needs your input"
+                output.toolActivities.append(
+                    AgentToolActivityEvent(
+                        id: "\(step.stepIndex)-\(index)-ask",
+                        stepIndex: step.stepIndex,
+                        kind: .waitingForInput,
+                        toolName: call.name,
+                        title: "Needs your answer",
+                        detail: label,
+                        timestamp: stepDate
+                    )
+                )
+                output.peekEvents.append(.needsInput(label))
+
+            case "search_web":
+                let query = call.stringArg("query", "Query") ?? ""
+                output.toolActivities.append(
+                    AgentToolActivityEvent(
+                        id: "\(step.stepIndex)-\(index)-web",
+                        stepIndex: step.stepIndex,
+                        kind: .searchWeb,
+                        toolName: call.name,
+                        title: query.isEmpty ? "Searching web" : "Searching \"\(query)\"",
+                        detail: call.stringArg("domain"),
+                        timestamp: stepDate
+                    )
+                )
+
+            case "call_mcp_tool", "list_resources", "read_resource":
+                let server = call.stringArg("ServerName") ?? "MCP"
+                let tool = call.stringArg("ToolName") ?? call.name
+                output.toolActivities.append(
+                    AgentToolActivityEvent(
+                        id: "\(step.stepIndex)-\(index)-mcp",
+                        stepIndex: step.stepIndex,
+                        kind: .mcpTool,
+                        toolName: call.name,
+                        title: "MCP \(server) · \(tool)",
+                        detail: call.stringArg("Uri"),
+                        timestamp: stepDate
+                    )
+                )
+
+            case "invoke_subagent":
+                let typeName = (call.stringArg("TypeName") ?? "").lowercased()
+                let role = call.stringArg("Role") ?? (typeName.isEmpty ? "Subagent" : typeName)
+                let kind: AgentToolActivityKind
+                let title: String
+                if typeName.contains("browser") {
+                    kind = .browser
+                    title = "Browsing · \(role)"
+                } else if typeName.contains("image") {
+                    kind = .imageGeneration
+                    title = "Generating image · \(role)"
+                } else {
+                    kind = .subagent
+                    title = "Subagent · \(role)"
+                }
+                output.toolActivities.append(
+                    AgentToolActivityEvent(
+                        id: "\(step.stepIndex)-\(index)-subagent",
+                        stepIndex: step.stepIndex,
+                        kind: kind,
+                        toolName: call.name,
+                        title: title,
+                        detail: call.stringArg("Prompt"),
+                        timestamp: stepDate
+                    )
+                )
+
+            case "run_workflow":
+                let desc = call.stringArg("Description") ?? "Workflow"
+                output.toolActivities.append(
+                    AgentToolActivityEvent(
+                        id: "\(step.stepIndex)-\(index)-workflow",
+                        stepIndex: step.stepIndex,
+                        kind: .workflow,
+                        toolName: call.name,
+                        title: "Workflow · \(desc)",
+                        detail: call.stringArg("ScriptPath"),
+                        timestamp: stepDate
+                    )
+                )
+
+            case "schedule":
+                let prompt = call.stringArg("Prompt") ?? "Scheduled task"
+                let cron = call.stringArg("CronExpression")
+                let dur = call.intArg("DurationSeconds").map { "\($0)s timer" }
+                output.toolActivities.append(
+                    AgentToolActivityEvent(
+                        id: "\(step.stepIndex)-\(index)-schedule",
+                        stepIndex: step.stepIndex,
+                        kind: .schedule,
+                        toolName: call.name,
+                        title: "Scheduled · \(cron ?? dur ?? "task")",
+                        detail: prompt,
+                        timestamp: stepDate
+                    )
+                )
+
+            case "search_marketplace":
+                let queries = call.args?["queries"]?.unwrappedArray?.compactMap(\.unwrappedString).joined(separator: ", ")
+                output.toolActivities.append(
+                    AgentToolActivityEvent(
+                        id: "\(step.stepIndex)-\(index)-market",
+                        stepIndex: step.stepIndex,
+                        kind: .marketplace,
+                        toolName: call.name,
+                        title: queries.map { "Marketplace · \($0)" } ?? "Searching Marketplace",
+                        detail: nil,
+                        timestamp: stepDate
+                    )
+                )
 
             default:
                 break

@@ -664,4 +664,79 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertFalse(reloaded.turboAuraLoopEnabled)
         XCTAssertEqual(reloaded.turboAuraTheme, .ultraInstinct)
     }
+
+    func testUpdateFocusStepsAndAllChatToolStatesClassification() {
+        var classifier = EventClassifier()
+
+        let userStep = TranscriptStep(
+            stepIndex: 1,
+            source: "USER_EXPLICIT",
+            type: "USER_INPUT",
+            status: "DONE",
+            createdAt: "2026-11-23T05:00:00Z",
+            content: "Build full realtime telemetry"
+        )
+        let userOut = classifier.process(step: userStep)
+        XCTAssertNotNil(userOut.turnStartedAt)
+        XCTAssertTrue(userOut.clearFocus)
+
+        let stepsJSON = """
+        [{"status":"done","title":"Reverse engineer app"},{"status":"in_progress","title":"Wire live focus & steps"},{"status":"pending","title":"Build Release"}]
+        """
+        let focusAndSteps = TranscriptStep(
+            stepIndex: 2,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T05:00:12Z",
+            toolCalls: [
+                ToolCall(name: "update_focus", args: ["focus": .string("\"Wiring multi-color Super Saiyan aura & audio into Notch HUD\"")]),
+                ToolCall(name: "update_steps", args: ["steps": .string(stepsJSON)]),
+                ToolCall(name: "search_web", args: ["query": .string("\"NotchKit SwiftUI\"")]),
+            ]
+        )
+        let out2 = classifier.process(step: focusAndSteps)
+        XCTAssertEqual(out2.focusUpdate, "Wiring multi-color Super Saiyan aura & audio into Notch HUD")
+        XCTAssertEqual(out2.stepsProgress?.completedCount, 1)
+        XCTAssertEqual(out2.stepsProgress?.totalCount, 3)
+        XCTAssertEqual(out2.stepsProgress?.ratioLabel, "1/3 steps")
+        XCTAssertEqual(out2.stepsProgress?.activeStep?.title, "Wire live focus & steps")
+        if case let .toolActivity(ev) = out2.state {
+            XCTAssertEqual(ev.kind, .searchWeb)
+            XCTAssertTrue(ev.title.contains("NotchKit SwiftUI"))
+        } else {
+            XCTFail("Expected .toolActivity(.searchWeb), got \(out2.state)")
+        }
+
+        let mcpAndAsk = TranscriptStep(
+            stepIndex: 3,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T05:01:00Z",
+            toolCalls: [
+                ToolCall(name: "call_mcp_tool", args: ["ServerName": .string("\"rea\""), "ToolName": .string("\"inspect_go_binary\"")]),
+                ToolCall(name: "ask_question", args: ["questions": .string("[{\"question\":\"Pick Super Saiyan color?\"}]")]),
+            ]
+        )
+        let out3 = classifier.process(step: mcpAndAsk)
+        if case let .waitingForInput(prompt) = out3.state {
+            XCTAssertEqual(prompt, "Pick Super Saiyan color?")
+        } else {
+            XCTFail("Expected .waitingForInput, got \(out3.state)")
+        }
+
+        let finalStep = TranscriptStep(
+            stepIndex: 4,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T05:09:00Z",
+            content: "All done!"
+        )
+        let out4 = classifier.process(step: finalStep)
+        XCTAssertEqual(out4.state, .idle)
+        XCTAssertTrue(out4.clearFocus)
+        XCTAssertEqual(Int((out4.lastTurnDuration ?? 0).rounded()), 540)
+    }
 }

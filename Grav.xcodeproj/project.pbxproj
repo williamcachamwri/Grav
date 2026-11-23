@@ -77,6 +77,7 @@
 		A96AECB5987FD2B690B30363 /* ResponseTelemetryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFB7B35F20C3023A4D53AA2D /* ResponseTelemetryTabView.swift */; };
 		AA9467D1F610664C47AD30AD /* GravOnboardingChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF72E703711EF7C02C996F6F /* GravOnboardingChrome.swift */; };
 		B6364C0B87177A4045319E2C /* TaskLogTailerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27BA097A7AA63BB6924CA2C9 /* TaskLogTailerTests.swift */; };
+		B92DE6AAE0187418B453176D /* ConversationSQLiteProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B6F9331B5887AA30D02286A /* ConversationSQLiteProbe.swift */; };
 		BB14A74A8328E1D5636BD5B4 /* GravOnboardingWelcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = F80A76ADD6985FC5058D991B /* GravOnboardingWelcome.swift */; };
 		C1C789EB92CD9CEDDBE8EC9E /* JSONValueAndDiffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0479E0BF3714DBC2D52D16F9 /* JSONValueAndDiffTests.swift */; };
 		C335C917DA0B3ED5100C98DD /* LiquidGlassContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA05462AA23FE2D576017E3 /* LiquidGlassContainer.swift */; };
@@ -154,6 +155,7 @@
 		78D5F95F5AD7C5A27385D1BF /* LiquidGlassWindowBackdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassWindowBackdrop.swift; sourceTree = "<group>"; };
 		7A88509B96DB07EB20A5B641 /* SwarmModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmModels.swift; sourceTree = "<group>"; };
 		7AF84ABC6939425A99D95535 /* GravOnboardingWelcomeAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingWelcomeAudio.swift; sourceTree = "<group>"; };
+		7B6F9331B5887AA30D02286A /* ConversationSQLiteProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationSQLiteProbe.swift; sourceTree = "<group>"; };
 		7ED4B2A0D94552FAB23AB341 /* GravTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravTokens.swift; sourceTree = "<group>"; };
 		7F1A494C81801D1F154CC3A9 /* RadiusTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadiusTokens.swift; sourceTree = "<group>"; };
 		7F8016017308216597D832BE /* NotchHUDCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchHUDCoordinator.swift; sourceTree = "<group>"; };
@@ -300,6 +302,7 @@
 				7374544BF8CD44B6A91F576D /* AntigravityAppDetector.swift */,
 				C2E730098AEB351C1ED95E3C /* AntigravityTelemetryStore.swift */,
 				3415985EECA17346AAFB0089 /* ConversationDiscovery.swift */,
+				7B6F9331B5887AA30D02286A /* ConversationSQLiteProbe.swift */,
 				CCF7798C42F0CFD0241053D9 /* DestructiveCommandParser.swift */,
 				0EAA8B09A6284B1B6BE9DC71 /* DiffComputer.swift */,
 				5D5D7A3171BFD3583CB88FEB /* EventClassifier.swift */,
@@ -545,6 +548,7 @@
 				8CA7E9A88CB1F1895C561CB7 /* AppDelegate.swift in Sources */,
 				F050502B2AE697B0E8640A73 /* CollapsedNotchView.swift in Sources */,
 				F0CA558E222110D05A0873EB /* ConversationDiscovery.swift in Sources */,
+				B92DE6AAE0187418B453176D /* ConversationSQLiteProbe.swift in Sources */,
 				32E53235DF117842E30B3DA4 /* DesignTokens.swift in Sources */,
 				4252B890306B307D9FEEC9D4 /* DestructiveCommandParser.swift in Sources */,
 				2296303BDAE924F5CE36F00D /* DiffComputer.swift in Sources */,

@@ -24,6 +24,10 @@ public enum SemanticDotTone: Sendable, Equatable {
             self = event.kind == .delete ? .error : .fileEdit
         case .runningCommand:
             self = .running
+        case .waitingForInput:
+            self = .fileEdit
+        case .toolActivity:
+            self = .thinking
         }
     }
 

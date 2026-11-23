@@ -319,6 +319,10 @@ private struct MenuBarStatusSnapshot: Sendable {
             return "\(verb) \(event.basename)"
         case let .runningCommand(event):
             return event.displayTitle
+        case let .waitingForInput(prompt):
+            return prompt
+        case let .toolActivity(event):
+            return event.title
         }
     }
 

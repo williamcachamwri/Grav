@@ -314,6 +314,10 @@ struct NotchHUDSettingsPane: View {
             return .orange
         case .runningCommand:
             return .green
+        case .waitingForInput:
+            return .yellow
+        case .toolActivity:
+            return .cyan
         }
     }
 

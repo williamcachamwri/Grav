@@ -759,118 +759,129 @@ private final class SuperSaiyanMetalRenderer: NSObject, MTKViewDelegate {
 
         float effSurge = clamp(surge + burstFlash * 0.65, 0.0, 1.35);
 
-        // Anisotropic upward-roaring Ki flame field (tall sharp licking spikes!)
-        float flowSpeed = mix(3.1, 6.2, min(1.0, effSurge));
-        float2 flameScale = collapsed ? float2(0.068, 0.026) : float2(0.036, 0.013);
+        // Anisotropic upward-roaring Ki flame field (tall sharp licking DBS: Broly flame spikes!)
+        float flowSpeed = mix(3.6, 7.2, min(1.0, effSurge));
+        float2 flameScale = collapsed ? float2(0.072, 0.024) : float2(0.038, 0.012);
         float2 p = pos * flameScale;
         p.y += time * flowSpeed;
 
-        // Triple-coupled domain warp creates fierce serrated DBS: Broly flame tongues
-        float w1 = ssjRidgedFBM(p * 1.05 + float2(0.0, time * 1.6));
-        float w2 = ssjRidgedFBM(p * 1.95 + float2((w1 - 0.5) * 2.1, time * 3.1));
-        float w3 = ssjNoise(float2(pos.x * (collapsed ? 0.14 : 0.075), pos.y * 0.018 + time * flowSpeed * 1.9));
+        // Triple-coupled domain warp creates fierce serrated anime flame sheets
+        float w1 = ssjRidgedFBM(p * 1.05 + float2(0.0, time * 1.9));
+        float w2 = ssjRidgedFBM(p * 2.05 + float2((w1 - 0.5) * 2.4, time * 3.6));
+        float w3 = ssjNoise(float2(pos.x * (collapsed ? 0.16 : 0.085), pos.y * 0.016 + time * flowSpeed * 2.2));
 
-        float flameSpikes = clamp(mix(w1, w2, 0.62) * 0.85 + w3 * 0.30, 0.0, 1.4);
+        // Razor-sharp serrated anime Super Saiyan flame teeth ("spiky Goku Ki tongues"!)
+        float toothFreq = collapsed ? 0.15 : 0.072;
+        float teethA = pow(1.0 - abs(sin(pos.x * toothFreq + w1 * 4.4 - time * 3.2)), 2.6);
+        float teethB = pow(1.0 - abs(sin(pos.x * (toothFreq * 1.85) - w2 * 3.8 + time * 4.7)), 3.0);
+        float jaggedTeeth = clamp(teethA * 0.65 + teethB * 0.50, 0.0, 1.0);
 
-        // Smooth top fade so flames erupt from the bottom & flanks and lick violently upward
-        float topFade = smoothstep(0.0, collapsed ? 4.0 : 22.0, pos.y);
-        float bottomWeight = 0.76 + 0.42 * smoothstep(size.y * 0.20, size.y, pos.y);
+        float flameSpikes = clamp(mix(w1, w2, 0.60) * 0.72 + jaggedTeeth * 0.44 + w3 * 0.22, 0.0, 1.55);
 
-        // Outer flame envelope reach (hugs the outer perimeter so center content remains 100% readable)
-        float outerBase = collapsed ? mix(10.5, 20.5, min(1.0, effSurge)) : mix(18.0, 42.0, min(1.0, effSurge));
-        float outerHeight = outerBase * (0.26 + 1.55 * pow(flameSpikes, 1.38)) * bottomWeight * (1.0 + burstFlash * 0.35);
+        // Smooth top fade + twin corner rocket-plume boost (iconic DBZ upward side eruptions!)
+        float topFade = smoothstep(0.0, collapsed ? 3.5 : 20.0, pos.y);
+        float bottomWeight = 0.78 + 0.46 * smoothstep(size.y * 0.18, size.y, pos.y);
+        float normX = abs((pos.x / max(1.0, size.x)) * 2.0 - 1.0); // 0 at center, 1 at left/right edge
+        float cornerPlumeBoost = 1.0 + smoothstep(0.55, 1.0, normX) * smoothstep(0.25, 1.0, pos.y / max(1.0, size.y)) * 0.48;
 
-        // Inner hyper-velocity white-hot flame core (moves 1.75x faster!)
-        float2 pInner = pos * (flameScale * 1.45) + float2((w2 - 0.5) * 0.9, time * flowSpeed * 1.75);
+        // Outer flame envelope reach (hugs the outer perimeter & flanks so center text stays 100% razor-clear)
+        float outerBase = collapsed ? mix(11.5, 22.0, min(1.0, effSurge)) : mix(20.0, 48.0, min(1.0, effSurge));
+        float outerHeight = outerBase * (0.24 + 1.62 * pow(flameSpikes, 1.32)) * bottomWeight * cornerPlumeBoost * (1.0 + burstFlash * 0.42);
+
+        // Inner hyper-velocity white-hot plasma flame core (roaring 1.9x faster upward!)
+        float2 pInner = pos * (flameScale * 1.55) + float2((w2 - 0.5) * 1.05, time * flowSpeed * 1.92);
         float innerTurb = ssjRidgedFBM(pInner);
-        float innerHeight = outerHeight * (0.34 + 0.38 * innerTurb);
+        float innerHeight = outerHeight * (0.36 + 0.40 * innerTurb);
 
-        // Sharp anime silhouette edges (NOT muddy Gaussian blobs!)
-        float outerMask = (1.0 - smoothstep(outerHeight * 0.56, max(2.2, outerHeight), edgeDist)) * topFade;
-        float innerMask = (1.0 - smoothstep(innerHeight * 0.25, max(1.4, innerHeight), edgeDist)) * topFade;
+        // High-contrast cel-shaded anime flame silhouettes (ZERO muddy Gaussian smoke!)
+        float outerMask = (1.0 - smoothstep(outerHeight * 0.64, max(2.0, outerHeight), edgeDist)) * topFade;
+        float midCelBand = (1.0 - smoothstep(outerHeight * 0.40, max(1.6, outerHeight * 0.74), edgeDist)) * topFade;
+        float innerMask = (1.0 - smoothstep(innerHeight * 0.26, max(1.2, innerHeight), edgeDist)) * topFade;
 
-        // Signature Dragon Ball Cel-Animated Luminous Aura Contour Outline right on the outer flame boundary!
-        float contourWidth = collapsed ? 1.8 : 2.9;
-        float contourDist = abs(edgeDist - outerHeight * 0.82);
+        // Signature Dragon Ball Cel-Animated Double-Wall Luminous Aura Outline right along the jagged tips!
+        float contourWidth = collapsed ? 1.6 : 2.6;
+        float contourDist = abs(edgeDist - outerHeight * 0.86);
         float celContour = exp(-pow(contourDist / contourWidth, 2.0))
-                         * smoothstep(0.32, 0.82, flameSpikes)
+                         * smoothstep(0.26, 0.80, flameSpikes)
                          * topFade
-                         * mix(0.42, 1.05, min(1.0, effSurge));
+                         * mix(0.52, 1.20, min(1.0, effSurge));
 
-        // Atmospheric Thermal Heat-Pressure Ripples pulsing inward from the bezel when surging
-        float rippleWave = 0.5 + 0.5 * sin(edgeDist * (collapsed ? 0.55 : 0.36) - time * 17.0 + w1 * 5.2);
-        float heatRipples = pow(rippleWave, 3.0)
-                          * exp(-edgeDist / (collapsed ? 14.0 : 32.0))
+        // High-frequency Ki vibration & atmospheric thermal pressure ripples pulsing off the bezel
+        float kiTremble = 0.88 + 0.12 * sin(time * 38.0 + pos.x * 0.11 + w2 * 8.0);
+        float rippleWave = 0.5 + 0.5 * sin(edgeDist * (collapsed ? 0.58 : 0.38) - time * 20.0 + w1 * 5.6);
+        float heatRipples = pow(rippleWave, 3.2)
+                          * exp(-edgeDist / (collapsed ? 15.0 : 36.0))
                           * topFade
-                          * mix(0.10, 0.48, min(1.0, effSurge));
+                          * mix(0.14, 0.56, min(1.0, effSurge));
 
-        // Dual-scale vertical Dragon Ball anime hurricane speed-line wind streaks along both walls
+        // Dual-scale vertical Dragon Ball anime hurricane speed-line wind streaks shooting up both walls
         float flankDist = min(pos.x, size.x - pos.x);
-        float flankMask = 1.0 - smoothstep(0.0, collapsed ? 26.0 : 58.0, flankDist);
-        float fineStreak = ssjNoise(float2(pos.x * (collapsed ? 0.58 : 0.36), pos.y * 0.013 + time * flowSpeed * 2.8));
-        float boldStreak = ssjNoise(float2(pos.x * (collapsed ? 0.28 : 0.17) + 4.2, pos.y * 0.009 + time * flowSpeed * 2.1));
-        float speedLines = (smoothstep(0.70, 0.94, fineStreak) * 0.72 + smoothstep(0.74, 0.95, boldStreak) * 0.55)
-                         * flankMask * topFade * mix(0.28, 0.95, min(1.0, effSurge));
+        float flankMask = 1.0 - smoothstep(0.0, collapsed ? 28.0 : 66.0, flankDist);
+        float fineStreak = ssjNoise(float2(pos.x * (collapsed ? 0.62 : 0.38), pos.y * 0.011 + time * flowSpeed * 3.1));
+        float boldStreak = ssjNoise(float2(pos.x * (collapsed ? 0.30 : 0.18) + 4.2, pos.y * 0.008 + time * flowSpeed * 2.3));
+        float speedLines = (smoothstep(0.68, 0.93, fineStreak) * 0.80 + smoothstep(0.72, 0.94, boldStreak) * 0.62)
+                         * flankMask * topFade * mix(0.32, 1.05, min(1.0, effSurge));
 
         // Blinding white-hot ionized Ki filament locked 0.0px flush to the outer U-bezel
-        float rimPulse = 0.84 + 0.16 * sin(time * 13.5 + pos.x * 0.075 + w1 * 7.0);
-        float outerRim = exp(-edgeDist / mix(1.7, 3.3, min(1.0, effSurge))) * topFade * rimPulse;
-        float razorCore = exp(-edgeDist / mix(0.75, 1.55, min(1.0, effSurge))) * topFade;
+        float outerRim = exp(-edgeDist / mix(1.9, 3.6, min(1.0, effSurge))) * topFade * kiTremble;
+        float razorCore = exp(-edgeDist / mix(0.85, 1.65, min(1.0, effSurge))) * topFade;
 
         // Ultra Instinct Cosmic Prismatic Heat-Shimmer & Glittering Silver Stardust
         float uiShimmer = 0.0;
         if (isUI > 0.5) {
-            float2 starCell = floor(pos * float2(0.14, 0.14) + float2(0.0, time * 2.6));
+            float2 starCell = floor(pos * float2(0.14, 0.14) + float2(0.0, time * 2.8));
             float starRand = ssjHash(starCell);
-            float twinkle = 0.5 + 0.5 * sin(time * 9.0 + starRand * 40.0);
-            float starDot = step(0.955, starRand) * twinkle * outerMask;
-            uiShimmer = starDot * 1.15;
+            float twinkle = 0.5 + 0.5 * sin(time * 10.5 + starRand * 40.0);
+            float starDot = step(0.950, starRand) * twinkle * outerMask;
+            uiShimmer = starDot * 1.25;
         }
 
-        // Composite total thermal Ki energy
+        // Composite total thermal Ki energy with crisp anime tonal separation
         float energy = clamp(
-            outerMask * (0.48 + 0.72 * w2) +
-            innerMask * 0.58 +
-            celContour * 0.82 +
-            outerRim * 1.12 +
-            heatRipples * 0.45 +
-            speedLines * 0.62 +
-            shockRing * 1.15 +
+            outerMask * (0.44 + 0.64 * w2) +
+            midCelBand * 0.36 +
+            innerMask * 0.64 +
+            celContour * 0.92 +
+            outerRim * 1.18 +
+            heatRipples * 0.48 +
+            speedLines * 0.68 +
+            shockRing * 1.25 +
             uiShimmer,
-            0.0, 2.4
+            0.0, 2.6
         );
 
-        // Dynamic 4-stop Super Saiyan Theme Color Ramp (ZERO muddy darkness!)
+        // Dynamic 4-stop Super Saiyan Theme Color Ramp (High-Luminance Anime Cel Saturation, ZERO muddy brown!)
         float3 cOuter = u.outerColor.xyz;
         float3 cPrimary = u.primaryColor.xyz;
         float3 cInner = u.innerColor.xyz;
         float3 cCore = u.coreColor.xyz;
         float3 cLightning = u.lightningColor.xyz;
 
-        // In Ultra Instinct, shift outer corona slightly toward cosmic indigo-cyan shimmer
+        // In Ultra Instinct, shift outer corona dynamically across cosmic indigo-cyan-silver heat waves
         if (isUI > 0.5) {
-            float iridescence = 0.5 + 0.5 * sin(pos.x * 0.045 - time * 4.5 + w1 * 4.0);
-            cOuter = mix(cOuter, cLightning, iridescence * 0.48);
+            float iridescence = 0.5 + 0.5 * sin(pos.x * 0.048 - time * 5.2 + w1 * 4.2);
+            cOuter = mix(cOuter, cLightning, iridescence * 0.54);
         }
 
-        float3 col = mix(cOuter, cPrimary, smoothstep(0.10, 0.44, energy));
-        col = mix(col, cInner, smoothstep(0.44, 0.88, energy));
-        col = mix(col, cCore, clamp(smoothstep(0.86, 1.42, energy) + razorCore * 0.92 + burstFlash * 0.35, 0.0, 1.0));
+        float3 col = mix(cOuter, cPrimary, smoothstep(0.08, 0.40, energy));
+        col = mix(col, cInner, smoothstep(0.42, 0.84, energy));
+        col = mix(col, cCore, clamp(smoothstep(0.84, 1.38, energy) + razorCore * 0.94 + burstFlash * 0.38, 0.0, 1.0));
 
-        // Subtle electric fringe tint along the cel contour & shockwave ring for hyper-authentic SSJ2 / UI energy
-        col = mix(col, mix(cInner, cLightning, 0.42), clamp(celContour * 0.40 + shockRing * 0.55, 0.0, 0.65));
+        // Crisp electric fringe along the anime cel contour & shockwave ring
+        col = mix(col, mix(cInner, cLightning, 0.45), clamp(celContour * 0.44 + shockRing * 0.58, 0.0, 0.68));
 
-        float master = collapsed ? mix(0.80, 1.0, min(1.0, effSurge)) : mix(0.76, 1.0, min(1.0, effSurge));
+        float master = collapsed ? mix(0.84, 1.0, min(1.0, effSurge)) : mix(0.80, 1.0, min(1.0, effSurge));
         float alpha = clamp(
-            (outerMask * 0.60 +
-             innerMask * 0.38 +
-             celContour * 0.62 +
-             outerRim * 0.94 +
-             razorCore * 0.68 +
-             heatRipples * 0.32 +
-             speedLines * 0.54 +
-             shockRing * 0.72 +
-             uiShimmer * 0.85) * master,
+            (outerMask * 0.62 +
+             midCelBand * 0.22 +
+             innerMask * 0.42 +
+             celContour * 0.68 +
+             outerRim * 0.96 +
+             razorCore * 0.72 +
+             heatRipples * 0.34 +
+             speedLines * 0.58 +
+             shockRing * 0.76 +
+             uiShimmer * 0.90) * master,
             0.0, 1.0
         );
 

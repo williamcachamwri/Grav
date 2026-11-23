@@ -938,6 +938,22 @@ public struct SwarmTelemetryTabView: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4.5)
+
+            case let .toolActivity(event):
+                HStack(spacing: 7) {
+                    Image(systemName: event.kind.symbolName)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(event.kind == .waitingForInput ? GravPalette.fileEdit : GravPalette.glacialCyan)
+                        .frame(width: 13.5)
+                    Text(event.title)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.84))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 6)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4.5)
             }
         }
 

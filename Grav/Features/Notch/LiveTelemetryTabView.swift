@@ -11,6 +11,7 @@ public struct LiveTelemetryTabView: View {
     @Namespace private var activityHoverNamespace
 
     @State private var isThinkingExpanded: Bool = true
+    @State private var isStepsExpanded: Bool = false
     @State private var selectedThoughtIndex: Int = 0
     @State private var hoveredActivityID: String?
     @State private var isHoveringThinkingHeader: Bool = false
@@ -45,7 +46,10 @@ public struct LiveTelemetryTabView: View {
     }
 
     private var hasAnyTelemetry: Bool {
-        displayedThinking != nil || !store.recentActivity.isEmpty
+        displayedThinking != nil
+            || !store.recentActivity.isEmpty
+            || store.stepsProgress != nil
+            || store.currentFocus != nil
     }
 
     public var body: some View {
@@ -53,7 +57,11 @@ public struct LiveTelemetryTabView: View {
             if !hasAnyTelemetry {
                 quietEmptyState
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: 7) {
+                    if store.stepsProgress != nil || (store.currentFocus != nil && !store.isPaused) {
+                        antigravityStepsAndFocusStrip
+                    }
+
                     if let snapshot = displayedThinking {
                         thinkingEditorialSheet(for: snapshot)
                     }
@@ -61,12 +69,185 @@ public struct LiveTelemetryTabView: View {
                     activityFeedSection
                 }
                 .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: store.recentActivity.first?.id)
+                .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: isStepsExpanded)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: store.thinkingHistory.first?.stepIndex) { _, _ in
             // Auto-snap back to the freshest streaming thought whenever a new step arrives
             selectedThoughtIndex = 0
+        }
+    }
+
+    // MARK: - 1:1 Antigravity `Worked for Nm › ◔ X/Y steps` & Live Focus Strip
+
+    private var antigravityStepsAndFocusStrip: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let steps = store.stepsProgress {
+                HStack(spacing: 7) {
+                    workedDurationLabel
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.32))
+                        .rotationEffect(.degrees(isStepsExpanded ? 90 : 0))
+
+                    Button {
+                        GravOnboardingWelcomeAudio.shared.playTabSwitch()
+                        withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.08)) {
+                            isStepsExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            ZStack {
+                                Circle()
+                                    .stroke(Color.white.opacity(0.18), lineWidth: 1.5)
+                                Circle()
+                                    .trim(from: 0, to: CGFloat(max(0.06, steps.fraction)))
+                                    .stroke(
+                                        steps.isAllDone ? GravPalette.emerald : Color.white.opacity(0.90),
+                                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
+                                    )
+                                    .rotationEffect(.degrees(-90))
+                            }
+                            .frame(width: 10, height: 10)
+
+                            Text(steps.ratioLabel)
+                                .font(.system(size: 10.5, weight: .medium))
+                                .monospacedDigit()
+                                .foregroundStyle(Color.white.opacity(0.86))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3.5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color.white.opacity(isStepsExpanded ? 0.09 : 0.045))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .strokeBorder(
+                                            isStepsExpanded ? GravPalette.glacialCyan.opacity(0.55) : Color.white.opacity(0.10),
+                                            lineWidth: 0.75
+                                        )
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer(minLength: 6)
+
+                    if let activeTitle = steps.activeStep?.title, !isStepsExpanded {
+                        Text(activeTitle)
+                            .font(.system(size: 10.5, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.46))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+
+                if isStepsExpanded {
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(steps.steps) { item in
+                            HStack(spacing: 7) {
+                                stepStatusGlyph(item.status)
+                                Text(item.title)
+                                    .font(.system(size: 11, weight: item.status == .inProgress ? .semibold : .regular))
+                                    .foregroundStyle(stepTextColor(item.status))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .notchGlassSurface(.subtle, cornerRadius: 9)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+
+            if let focus = store.currentFocus, !focus.isEmpty, !store.isPaused {
+                HStack(spacing: 6) {
+                    NotchSemanticDot(color: GravPalette.glacialCyan, size: 4.5, isPulsing: store.state.isActive)
+                    NotchShimmerText(
+                        text: focus,
+                        font: .system(size: 11, weight: .medium),
+                        tracking: -0.1,
+                        baseOpacity: 0.56,
+                        peakOpacity: 0.96,
+                        period: 1.9,
+                        reduceMotion: reduceMotion
+                    )
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var workedDurationLabel: some View {
+        if store.state.isActive, let started = store.turnStartedAt {
+            TimelineView(.periodic(from: started, by: 1.0)) { context in
+                let elapsed = max(1, Int(context.date.timeIntervalSince(started)))
+                Text("Worked for \(formatCompactDuration(elapsed))")
+                    .font(.system(size: 11, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.56))
+            }
+        } else if let finalDur = store.lastTurnDuration {
+            Text("Worked for \(formatCompactDuration(Int(finalDur.rounded())))")
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(Color.white.opacity(0.56))
+        } else {
+            Text("Progress")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.56))
+        }
+    }
+
+    private func formatCompactDuration(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s" }
+        let mins = seconds / 60
+        let secs = seconds % 60
+        if mins >= 5 || secs == 0 { return "\(mins)m" }
+        return "\(mins)m \(secs)s"
+    }
+
+    @ViewBuilder
+    private func stepStatusGlyph(_ status: AgentStepStatus) -> some View {
+        switch status {
+        case .done:
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.46))
+        case .inProgress:
+            Image(systemName: "pause.circle")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.92))
+        case .pending:
+            Image(systemName: "circle")
+                .font(.system(size: 10.5, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.28))
+        case .skipped:
+            Image(systemName: "circle.dashed")
+                .font(.system(size: 10.5, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.28))
+        case .failed:
+            Image(systemName: "xmark.circle")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(GravPalette.coral)
+        }
+    }
+
+    private func stepTextColor(_ status: AgentStepStatus) -> Color {
+        switch status {
+        case .inProgress: return Color.white.opacity(0.96)
+        case .done: return Color.white.opacity(0.52)
+        case .pending, .skipped: return Color.white.opacity(0.38)
+        case .failed: return GravPalette.coral.opacity(0.92)
         }
     }
 
@@ -560,6 +741,9 @@ public struct LiveTelemetryTabView: View {
             case .succeeded: return ("terminal", Color.white.opacity(0.54))
             case .failed: return ("exclamationmark.triangle", GravPalette.coral)
             }
+        case let .toolActivity(event):
+            let color: Color = event.kind == .waitingForInput ? GravPalette.fileEdit : GravPalette.glacialCyan
+            return (event.kind.symbolName, color)
         }
     }
 
@@ -640,6 +824,14 @@ public struct LiveTelemetryTabView: View {
                 .foregroundStyle(Color.white.opacity(0.90))
                 .lineLimit(1)
                 .truncationMode(.tail)
+
+        case let .toolActivity(event):
+            Text(event.title)
+                .font(.system(size: 11.5, weight: .medium))
+                .tracking(-0.15)
+                .foregroundStyle(event.kind == .waitingForInput ? GravPalette.fileEdit : Color.white.opacity(0.86))
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 
@@ -702,6 +894,11 @@ public struct LiveTelemetryTabView: View {
                     color: command.status == .running ? GravPalette.glacialCyan : Color.white.opacity(0.40)
                 )
             }
+
+        case let .toolActivity(event):
+            Text(event.kind.shortLabel)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.36))
         }
     }
 
@@ -722,6 +919,8 @@ public struct LiveTelemetryTabView: View {
             onInspectFile(event)
         case let .command(command):
             onInspectCommand(command)
+        case .toolActivity:
+            store.activateAntigravityApp()
         }
     }
 
@@ -767,6 +966,15 @@ public struct LiveTelemetryTabView: View {
         case let .thinking(snapshot):
             Button("Copy Reasoning") {
                 NotchTelemetryHelpers.copyToPasteboard(snapshot.text)
+            }
+
+        case let .toolActivity(event):
+            Button("Focus Antigravity") {
+                store.activateAntigravityApp()
+            }
+            Button("Copy Details") {
+                let text = [event.title, event.detail].compactMap { $0 }.joined(separator: "\n")
+                NotchTelemetryHelpers.copyToPasteboard(text)
             }
 
         case .compaction:

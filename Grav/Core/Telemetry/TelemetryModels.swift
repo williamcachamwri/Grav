@@ -577,6 +577,138 @@ public struct CompactionEvent: Sendable, Equatable, Identifiable {
     }
 }
 
+// MARK: - Live Agent Steps Checklist (`update_steps`) & Tool Activity Events
+
+public enum AgentStepStatus: String, Sendable, Equatable, Codable {
+    case pending
+    case inProgress = "in_progress"
+    case done
+    case skipped
+    case failed
+}
+
+public struct AgentStepItem: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let index: Int
+    public let title: String
+    public let status: AgentStepStatus
+
+    public init(index: Int, title: String, status: AgentStepStatus) {
+        self.id = "step-\(index)-\(title)"
+        self.index = index
+        self.title = title
+        self.status = status
+    }
+}
+
+public struct AgentStepsProgress: Sendable, Equatable {
+    public let stepIndex: Int
+    public let updatedAt: Date
+    public let steps: [AgentStepItem]
+
+    public init(stepIndex: Int, updatedAt: Date = Date(), steps: [AgentStepItem]) {
+        self.stepIndex = stepIndex
+        self.updatedAt = updatedAt
+        self.steps = steps
+    }
+
+    public var completedCount: Int {
+        steps.filter { $0.status == .done }.count
+    }
+
+    public var totalCount: Int {
+        steps.count
+    }
+
+    public var fraction: Double {
+        guard totalCount > 0 else { return 0 }
+        return Double(completedCount) / Double(totalCount)
+    }
+
+    public var activeStep: AgentStepItem? {
+        steps.first { $0.status == .inProgress }
+    }
+
+    public var isAllDone: Bool {
+        totalCount > 0 && steps.allSatisfy { $0.status == .done || $0.status == .skipped }
+    }
+
+    public var ratioLabel: String {
+        "\(completedCount)/\(totalCount) steps"
+    }
+}
+
+public enum AgentToolActivityKind: String, Sendable, Equatable {
+    case searchWeb
+    case mcpTool
+    case browser
+    case imageGeneration
+    case subagent
+    case workflow
+    case schedule
+    case marketplace
+    case waitingForInput
+    case genericTool
+
+    public var symbolName: String {
+        switch self {
+        case .searchWeb: return "globe"
+        case .mcpTool: return "puzzlepiece.extension"
+        case .browser: return "safari"
+        case .imageGeneration: return "wand.and.stars"
+        case .subagent: return "person.2.wave.2"
+        case .workflow: return "flowchart"
+        case .schedule: return "clock.badge.checkmark"
+        case .marketplace: return "bag"
+        case .waitingForInput: return "questionmark.bubble"
+        case .genericTool: return "wrench.and.screwdriver"
+        }
+    }
+
+    public var shortLabel: String {
+        switch self {
+        case .searchWeb: return "Searching"
+        case .mcpTool: return "MCP Tool"
+        case .browser: return "Browsing"
+        case .imageGeneration: return "Generating"
+        case .subagent: return "Subagent"
+        case .workflow: return "Workflow"
+        case .schedule: return "Schedule"
+        case .marketplace: return "Marketplace"
+        case .waitingForInput: return "Waiting"
+        case .genericTool: return "Tool"
+        }
+    }
+}
+
+public struct AgentToolActivityEvent: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let stepIndex: Int
+    public let kind: AgentToolActivityKind
+    public let toolName: String
+    public let title: String
+    public let detail: String?
+    public let timestamp: Date
+
+    public init(
+        id: String,
+        stepIndex: Int,
+        kind: AgentToolActivityKind,
+        toolName: String,
+        title: String,
+        detail: String? = nil,
+        timestamp: Date = Date()
+    ) {
+        self.id = id
+        self.stepIndex = stepIndex
+        self.kind = kind
+        self.toolName = toolName
+        self.title = title
+        self.detail = detail
+        self.timestamp = timestamp
+    }
+}
+
 // MARK: - Unified Activity Feed & High-Level Telemetry State
 
 public enum TelemetryActivityItem: Sendable, Equatable, Identifiable {
@@ -585,6 +717,7 @@ public enum TelemetryActivityItem: Sendable, Equatable, Identifiable {
     case fileInspection(FileInspectionEvent)
     case fileChange(FileChangeEvent)
     case command(CommandExecutionEvent)
+    case toolActivity(AgentToolActivityEvent)
 
     public var id: String {
         switch self {
@@ -593,6 +726,7 @@ public enum TelemetryActivityItem: Sendable, Equatable, Identifiable {
         case let .fileInspection(event): return "inspect-\(event.id)"
         case let .fileChange(event): return "file-\(event.id)"
         case let .command(event): return "cmd-\(event.id)"
+        case let .toolActivity(event): return "tool-\(event.id)"
         }
     }
 
@@ -603,6 +737,7 @@ public enum TelemetryActivityItem: Sendable, Equatable, Identifiable {
         case let .fileInspection(event): return event.timestamp
         case let .fileChange(event): return event.timestamp
         case let .command(event): return event.startedAt
+        case let .toolActivity(event): return event.timestamp
         }
     }
 }
@@ -616,6 +751,8 @@ public enum TelemetryState: Sendable, Equatable {
     case inspecting(FileInspectionEvent)
     case editing(FileChangeEvent)
     case runningCommand(CommandExecutionEvent)
+    case waitingForInput(String)
+    case toolActivity(AgentToolActivityEvent)
 
     public var isActive: Bool {
         if case .idle = self { return false }
@@ -633,6 +770,8 @@ public enum TelemetryState: Sendable, Equatable {
         case let .editing(event):
             return event.kind == .delete ? "Deleting" : "Editing"
         case .runningCommand: return "Running"
+        case .waitingForInput: return "Needs Input"
+        case let .toolActivity(event): return event.kind.shortLabel
         }
     }
 }

@@ -1,38 +1,29 @@
 import AVFoundation
 import Foundation
+import os
 
-/// Procedural 44.1 kHz stereo DSP Super Saiyan Turbo Audio Engine.
+/// Real-time, 100% gapless CoreAudio (`AVAudioEngine` + `AVAudioSourceNode`) Super Saiyan Ki Synthesizer.
 ///
-/// Synthesizes cinematic, physically-modeled Dragon Ball Super Saiyan soundscapes off the main actor
-/// with zero external audio files:
-/// - **Power-Up Eruption** (`playPowerUpEruption`): Sub-bass seismic Ki drop, sweeping 31Hz-fluttering
-///   roaring plasma flame turbine, form-specific harmonic resonance (SSJ / God / Blue / Rosé / Ultra
-///   Instinct / Legendary), and stereo SSJ2 high-voltage bio-electric lightning crackles.
-/// - **Lightning Surge** (`playLightningSurge`): Crisp ionized arc snap + tight Ki burst on streaming /
-///   command surges and transformation color switches.
-/// - **Living Aura Loop** (`setAuraLoopActive`): Seamless looping atmospheric Ki resonance hum while
-///   Antigravity is actively executing in Turbo mode, with smooth exponential fade-in/out.
-/// - **Power-Down Settle** (`playPowerDownSettle`): Descending Ki dispersion whoosh when a turn completes.
+/// Zero pre-rendered loop seams, zero `AVAudioPlayer` cut-outs, zero clicks:
+/// - **Authentic DBZ Flanged Jet-Flame Roar**: Pink-brown plasma turbulence swept through resonant
+///   state-variable bandpass filters + stereo modulated comb/flanger delay lines (`2.8ms–8.2ms`) with
+///   coupled organic 11.7 Hz + 17.3 Hz flame-flap modulation — the unmistakable hollow roaring
+///   *"FWOOOOOSH-SHWOOOOSH"* Super Saiyan Ki sound.
+/// - **Seismic Ignition Eruption**: Deep ground-shaking sub-bass drop (`108 Hz → 32 Hz`) + roaring
+///   upward jet-plasma sweep seamlessly melting directly into the live burning aura with zero seam.
+/// - **Live SSJ2 Bio-Electric Arcs**: Real-time stereo high-voltage plasma whips (`KZZT-KRAAK!`)
+///   firing both on surges and organically while powering up.
+/// - **Auto-Idle Engine Sleep**: Smoothly ramps to silence and stops `AVAudioEngine` when idle
+///   (0.0% idle CPU).
 @MainActor
 public final class SuperSaiyanAudioEngine {
     public static let shared = SuperSaiyanAudioEngine()
 
-    private enum CueKind: Hashable, Sendable {
-        case eruption(SuperSaiyanAuraTheme)
-        case surge(SuperSaiyanAuraTheme)
-        case settle(SuperSaiyanAuraTheme)
-        case auraLoop(SuperSaiyanAuraTheme)
-    }
+    private var engine: AVAudioEngine?
+    private var sourceNode: AVAudioSourceNode?
+    private let dsp = RealTimeSuperSaiyanDSPState()
 
-    private var cachedWAVs: [CueKind: Data] = [:]
-    private let effectPool = TurboEffectVoicePool()
-
-    private var loopPlayer: AVAudioPlayer?
-    private var loopTheme: SuperSaiyanAuraTheme?
-    private var loopTargetActive: Bool = false
-    private var loopFadeTask: Task<Void, Never>?
-    private var loopSynthTask: Task<Void, Never>?
-
+    private var idleSleepTask: Task<Void, Never>?
     private var lastEruptionAt: Date = .distantPast
     private var lastSurgeAt: Date = .distantPast
     private var lastSettleAt: Date = .distantPast
@@ -45,10 +36,10 @@ public final class SuperSaiyanAudioEngine {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
-    /// Plays the full seismic Super Saiyan power-up eruption roar (throttled unless `force` is true).
+    /// Triggers a seismic Super Saiyan Power-Up Eruption (sub-bass drop + roaring jet sweep + triple SSJ2 arcs).
     public func playPowerUpEruption(
         theme: SuperSaiyanAuraTheme,
-        volume: Float = 0.78,
+        volume: Float = 0.85,
         force: Bool = false
     ) {
         guard !isTestEnvironment else { return }
@@ -58,723 +49,511 @@ public final class SuperSaiyanAudioEngine {
         }
         lastEruptionAt = now
 
-        playCue(.eruption(theme), volume: volume) {
-            SuperSaiyanDSP.renderPowerUpEruptionWAV(theme: theme)
-        }
+        ensureEngineRunning()
+        dsp.applyTheme(theme)
+        dsp.triggerEruption(gain: Double(volume))
+        scheduleSleepCheckIfNotLooping()
     }
 
-    /// Plays a razor-sharp SSJ2 bio-electric lightning crackle & Ki surge.
+    /// Triggers a crisp SSJ2 bio-electric lightning whip + tight Ki flare.
     public func playLightningSurge(
         theme: SuperSaiyanAuraTheme,
-        volume: Float = 0.62,
+        volume: Float = 0.68,
         force: Bool = false
     ) {
         guard !isTestEnvironment else { return }
         let now = Date()
-        if !force, now.timeIntervalSince(lastSurgeAt) < 3.2 {
+        if !force, now.timeIntervalSince(lastSurgeAt) < 2.4 {
             return
         }
         lastSurgeAt = now
 
-        playCue(.surge(theme), volume: volume) {
-            SuperSaiyanDSP.renderLightningSurgeWAV(theme: theme)
-        }
+        ensureEngineRunning()
+        dsp.applyTheme(theme)
+        dsp.triggerLightningBurst(gain: Double(volume), withWhoosh: true)
+        scheduleSleepCheckIfNotLooping()
     }
 
-    /// Plays a smooth descending Ki dispersion whoosh when a Turbo turn finishes.
+    /// Smoothly disperses Ki downward when a Turbo chat turn completes.
     public func playPowerDownSettle(
         theme: SuperSaiyanAuraTheme,
-        volume: Float = 0.50
+        volume: Float = 0.56
     ) {
         guard !isTestEnvironment else { return }
         let now = Date()
-        guard now.timeIntervalSince(lastSettleAt) >= 1.8 else { return }
+        guard now.timeIntervalSince(lastSettleAt) >= 1.6 else { return }
         lastSettleAt = now
 
-        playCue(.settle(theme), volume: volume) {
-            SuperSaiyanDSP.renderPowerDownSettleWAV(theme: theme)
-        }
+        ensureEngineRunning()
+        dsp.applyTheme(theme)
+        dsp.triggerPowerDownSettle(gain: Double(volume))
+        scheduleSleepCheckIfNotLooping()
     }
 
-    /// Smoothly fades in or out the continuous living Super Saiyan Ki hum while Turbo is actively working.
+    /// Smoothly engages or releases the continuous gapless Super Saiyan burning aura stream.
     public func setAuraLoopActive(_ active: Bool, theme: SuperSaiyanAuraTheme) {
         guard !isTestEnvironment else { return }
-        let themeChanged = loopTheme != theme
-        loopTargetActive = active
+        dsp.applyTheme(theme)
+        dsp.setContinuousAura(active: active, targetLevel: active ? 0.44 : 0.0)
 
-        if !active {
-            loopSynthTask?.cancel()
-            loopSynthTask = nil
-            fadeOutAndStopLoop(duration: 0.75)
-            return
-        }
-
-        if let player = loopPlayer, player.isPlaying, !themeChanged {
-            fadeLoop(player: player, to: 0.24, duration: 0.35, stopOnComplete: false)
-            return
-        }
-
-        if themeChanged {
-            fadeOutAndStopLoop(duration: 0.30)
-        }
-
-        loopTheme = theme
-        let key = CueKind.auraLoop(theme)
-        if let wav = cachedWAVs[key] {
-            startLoopPlayer(with: wav, targetVolume: 0.24)
-            return
-        }
-
-        loopSynthTask?.cancel()
-        loopSynthTask = Task { [weak self] in
-            let wav = await Task.detached(priority: .utility) {
-                SuperSaiyanDSP.renderSeamlessAuraLoopWAV(theme: theme)
-            }.value
-            guard !Task.isCancelled, let self else { return }
-            self.cachedWAVs[key] = wav
-            guard self.loopTargetActive, self.loopTheme == theme else { return }
-            self.startLoopPlayer(with: wav, targetVolume: 0.24)
+        if active {
+            idleSleepTask?.cancel()
+            idleSleepTask = nil
+            ensureEngineRunning()
+        } else {
+            scheduleSleepCheckIfNotLooping()
         }
     }
 
-    /// Immediately fades out any active continuous Turbo aura loop.
+    /// Immediately fades out continuous aura and sleeps the audio engine cleanly.
     public func stopAllLoops() {
-        loopTargetActive = false
-        loopSynthTask?.cancel()
-        loopSynthTask = nil
-        fadeOutAndStopLoop(duration: 0.35)
+        dsp.setContinuousAura(active: false, targetLevel: 0.0)
+        scheduleSleepCheckIfNotLooping()
     }
 
-    // MARK: - Internal Playback
+    // MARK: - CoreAudio Engine Lifecycle
 
-    private func playCue(
-        _ key: CueKind,
-        volume: Float,
-        render: @escaping @Sendable () -> Data
-    ) {
-        if let cached = cachedWAVs[key] {
-            effectPool.play(key: key, data: cached, volume: volume)
+    private func ensureEngineRunning() {
+        if let engine, engine.isRunning {
             return
         }
 
-        Task { [weak self] in
-            let wav = await Task.detached(priority: .userInitiated) {
-                render()
-            }.value
-            guard let self else { return }
-            self.cachedWAVs[key] = wav
-            self.effectPool.play(key: key, data: wav, volume: volume)
+        let audioEngine = engine ?? AVAudioEngine()
+        let mixer = audioEngine.mainMixerNode
+        let hwFormat = audioEngine.outputNode.outputFormat(forBus: 0)
+        let sampleRate = hwFormat.sampleRate > 8000 ? hwFormat.sampleRate : 44_100.0
+        guard let renderFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else {
+            return
         }
-    }
 
-    private func startLoopPlayer(with data: Data, targetVolume: Float) {
-        loopFadeTask?.cancel()
-        loopPlayer?.stop()
+        if sourceNode == nil {
+            let dspRef = dsp
+            dspRef.setSampleRate(sampleRate)
+            let node = AVAudioSourceNode(format: renderFormat) { _, _, frameCount, audioBufferList -> OSStatus in
+                dspRef.render(frameCount: Int(frameCount), audioBufferList: audioBufferList)
+                return noErr
+            }
+            audioEngine.attach(node)
+            audioEngine.connect(node, to: mixer, format: renderFormat)
+            mixer.outputVolume = 1.0
+            self.sourceNode = node
+        } else {
+            dsp.setSampleRate(sampleRate)
+        }
+
+        self.engine = audioEngine
         do {
-            let player = try AVAudioPlayer(data: data, fileTypeHint: AVFileType.wav.rawValue)
-            player.numberOfLoops = -1
-            player.volume = 0.0
-            player.prepareToPlay()
-            player.play()
-            loopPlayer = player
-            fadeLoop(player: player, to: targetVolume, duration: 0.55, stopOnComplete: false)
+            try audioEngine.start()
         } catch {
-            loopPlayer = nil
+            // Silently ignore unavailable audio hardware
         }
     }
 
-    private func fadeOutAndStopLoop(duration: TimeInterval) {
-        guard let player = loopPlayer else { return }
-        fadeLoop(player: player, to: 0.0, duration: duration, stopOnComplete: true)
-    }
-
-    private func fadeLoop(
-        player: AVAudioPlayer,
-        to targetVolume: Float,
-        duration: TimeInterval,
-        stopOnComplete: Bool
-    ) {
-        loopFadeTask?.cancel()
-        let startVol = player.volume
-        let steps = max(12, Int(duration * 60.0))
-        let stepNs = UInt64((duration / Double(steps)) * 1_000_000_000)
-
-        loopFadeTask = Task { @MainActor [weak self] in
-            for step in 1...steps {
-                try? await Task.sleep(nanoseconds: stepNs)
-                guard !Task.isCancelled else { return }
-                let u = Double(step) / Double(steps)
-                let eased = u * u * (3.0 - 2.0 * u)
-                player.volume = startVol + (targetVolume - startVol) * Float(eased)
-            }
-            player.volume = targetVolume
-            if stopOnComplete {
-                player.stop()
-                if self?.loopPlayer === player {
-                    self?.loopPlayer = nil
-                }
+    private func scheduleSleepCheckIfNotLooping() {
+        idleSleepTask?.cancel()
+        idleSleepTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3.6))
+            guard !Task.isCancelled, let self else { return }
+            if self.dsp.canSleepEngine() {
+                self.engine?.pause()
             }
         }
     }
 }
 
-// MARK: - Dedicated Turbo Voice Pool
+// MARK: - Real-Time Lock-Free CoreAudio Super Saiyan DSP Kernel
 
-private final class TurboEffectVoicePool: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "com.grav.turbo.audio", qos: .userInteractive)
-    private var voices: [AnyHashable: [AVAudioPlayer]] = [:]
-    private var releaseWork: DispatchWorkItem?
-    private let maxVoicesPerCue = 2
-    private let idleRelease: TimeInterval = 14
+/// Thread-safe real-time DSP kernel running directly inside `AVAudioSourceNode`'s render callback.
+/// Uses `OSAllocatedUnfairLock` strictly for tiny control-message swaps (nanoseconds) so the audio
+/// render loop never allocates memory or blocks.
+private final class RealTimeSuperSaiyanDSPState: @unchecked Sendable {
+    private struct ControlState {
+        var continuousActive: Bool = false
+        var continuousTarget: Double = 0.0
+        var pendingEruptionGain: Double = 0.0
+        var pendingLightningGain: Double = 0.0
+        var pendingLightningWhoosh: Bool = false
+        var pendingSettleGain: Double = 0.0
+        var theme: SuperSaiyanAuraTheme = .superSaiyan
+        var sampleRate: Double = 44_100.0
+    }
 
-    func play(key: AnyHashable, data: Data, volume: Float) {
-        queue.async { [self] in
-            var pool = voices[key] ?? []
-            let player: AVAudioPlayer
-            if let idle = pool.first(where: { !$0.isPlaying }) {
-                player = idle
-            } else if pool.count >= maxVoicesPerCue {
-                player = pool.removeFirst()
-                pool.append(player)
-                voices[key] = pool
-            } else {
-                do {
-                    let created = try AVAudioPlayer(data: data, fileTypeHint: AVFileType.wav.rawValue)
-                    created.prepareToPlay()
-                    player = created
-                    pool.append(created)
-                    voices[key] = pool
-                } catch {
-                    return
-                }
-            }
-            player.currentTime = 0
-            player.volume = volume
-            player.play()
-            scheduleRelease()
+    private let lock = OSAllocatedUnfairLock(initialState: ControlState())
+
+    // Audio-thread-owned DSP state (never touched outside render thread)
+    private var sr: Double = 44_100.0
+    private var timeSec: Double = 0.0
+    private var rngL: UInt64 = 0x9E37_79B9_7F4A_7C15
+    private var rngR: UInt64 = 0xBF58_476D_1CE4_E5B9
+
+    // Smoothed energy & continuous burning aura envelope
+    private var auraEnv: Double = 0.0
+    private var eruptionAge: Double = 10.0
+    private var eruptionGain: Double = 0.0
+    private var settleAge: Double = 10.0
+    private var settleGain: Double = 0.0
+    private var subPhase: Double = 0.0
+    private var uiPhase1: Double = 0.0
+    private var uiPhase2: Double = 0.0
+    private var uiPhase3: Double = 0.0
+
+    // Pink-noise / brown-fire accumulators
+    private var pinkL0 = 0.0, pinkL1 = 0.0, pinkL2 = 0.0
+    private var pinkR0 = 0.0, pinkR1 = 0.0, pinkR2 = 0.0
+
+    // State-variable bandpass resonators (L/R) for blazing flame roar
+    private var svfLowL = 0.0, svfBandL = 0.0
+    private var svfLowR = 0.0, svfBandR = 0.0
+    private var sweepLowL = 0.0, sweepBandL = 0.0
+    private var sweepLowR = 0.0, sweepBandR = 0.0
+
+    // Stereo modulated jet-flanger / comb delay lines (THE secret of authentic DBZ Ki roar!)
+    private static let delayBufSize = 2048
+    private var delayL = [Double](repeating: 0, count: delayBufSize)
+    private var delayR = [Double](repeating: 0, count: delayBufSize)
+    private var delayWriteIdx: Int = 0
+
+    // Real-time SSJ2 bio-electric lightning voice
+    private var zapAge: Double = 10.0
+    private var zapDuration: Double = 0.16
+    private var zapGain: Double = 0.0
+    private var zapPan: Double = 0.0
+    private var zapPhase: Double = 0.0
+    private var zapBp: Double = 0.0
+    private var zapHp: Double = 0.0
+    private var nextAutoZapTimer: Double = 1.2
+
+    // Smoothed theme parameters
+    private var flangerBaseMs: Double = 4.6
+    private var roarCenterHz: Double = 440.0
+    private var flutterRateHz: Double = 13.5
+    private var uiShimmerMix: Double = 0.0
+    private var subBoost: Double = 1.0
+    private var rootHz: Double = 73.42
+
+    func setSampleRate(_ sampleRate: Double) {
+        lock.withLock { $0.sampleRate = max(8000.0, sampleRate) }
+    }
+
+    func applyTheme(_ theme: SuperSaiyanAuraTheme) {
+        lock.withLock { $0.theme = theme }
+    }
+
+    func setContinuousAura(active: Bool, targetLevel: Double) {
+        lock.withLock {
+            $0.continuousActive = active
+            $0.continuousTarget = active ? targetLevel : 0.0
         }
     }
 
-    private func scheduleRelease() {
-        releaseWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.voices = self.voices.compactMapValues { pool in
-                let active = pool.filter(\.isPlaying)
-                return active.isEmpty ? nil : active
-            }
-            if !self.voices.isEmpty { self.scheduleRelease() }
+    func triggerEruption(gain: Double) {
+        lock.withLock {
+            $0.pendingEruptionGain = max($0.pendingEruptionGain, gain)
         }
-        releaseWork = work
-        queue.asyncAfter(deadline: .now() + idleRelease, execute: work)
     }
-}
 
-// MARK: - Procedural Stereo Super Saiyan DSP Synthesizer (44.1 kHz 16-bit PCM)
+    func triggerLightningBurst(gain: Double, withWhoosh: Bool) {
+        lock.withLock {
+            $0.pendingLightningGain = max($0.pendingLightningGain, gain)
+            $0.pendingLightningWhoosh = $0.pendingLightningWhoosh || withWhoosh
+        }
+    }
 
-private enum SuperSaiyanDSP {
-    private static let sampleRate: Double = 44_100
-    private static let twoPi: Double = 2.0 * Double.pi
+    func triggerPowerDownSettle(gain: Double) {
+        lock.withLock {
+            $0.pendingSettleGain = max($0.pendingSettleGain, gain)
+        }
+    }
 
-    // MARK: - 1. Seismic Power-Up Eruption (~2.40s)
+    func canSleepEngine() -> Bool {
+        let ctrl = lock.withLock { $0 }
+        return !ctrl.continuousActive && auraEnv < 0.002 && eruptionAge > 2.8 && settleAge > 1.4 && zapAge > 0.4
+    }
 
-    static func renderPowerUpEruptionWAV(theme: SuperSaiyanAuraTheme) -> Data {
-        let duration = 2.40
-        let count = Int(duration * sampleRate)
-        var left = [Double](repeating: 0, count: count)
-        var right = [Double](repeating: 0, count: count)
+    // MARK: - CoreAudio Real-Time Render Loop (Zero Heap Allocations)
 
-        let root = theme.audioRootHz
-        let isBroly = theme == .legendary
-        let isUI = theme == .ultraInstinct
-
-        // Layer A: Seismic Sub-Bass Ki Ignition Impact (0.00s - 0.58s)
-        // Chest-thumping drop that announces raw Super Saiyan pressure
-        var subPhase = 0.0
-        let impactFrames = min(count, Int(0.62 * sampleRate))
-        for i in 0..<impactFrames {
-            let t = Double(i) / sampleRate
-            let attack = min(1.0, t / 0.008)
-            let decay = exp(-t * (isBroly ? 4.4 : 5.8))
-            let startHz = isBroly ? 132.0 : 118.0
-            let endHz = isBroly ? 29.0 : 36.0
-            let freq = endHz + (startHz - endHz) * exp(-t * 14.0)
-            subPhase += twoPi * freq / sampleRate
-
-            let punch = tanh((sin(subPhase) * 1.45 + 0.35 * sin(2.0 * subPhase)) * (isBroly ? 1.55 : 1.25))
-            let s = punch * attack * decay * (isBroly ? 0.68 : 0.56)
-            left[i] += s
-            right[i] += s
+    func render(frameCount: Int, audioBufferList: UnsafeMutablePointer<AudioBufferList>) {
+        // Snapshot & consume control triggers in a single tiny lock
+        let ctrl: ControlState = lock.withLock { state in
+            let copy = state
+            state.pendingEruptionGain = 0.0
+            state.pendingLightningGain = 0.0
+            state.pendingLightningWhoosh = false
+            state.pendingSettleGain = 0.0
+            return copy
         }
 
-        // Layer B: Iconic Dragon Ball Roaring Plasma Ki Flame Whoosh (0.02s - 2.35s)
-        // Resonant sweeping dual-bandpass flame wind + 31Hz anime aura throb flutter!
-        var rngL: UInt64 = 0x9E37_79B9_7F4A_7C15 ^ UInt64(theme.rawValue.hashValue & 0xFFFF)
-        var rngR: UInt64 = 0xBF58_476D_1CE4_E5B9 ^ UInt64(theme.rawValue.hashValue & 0xFFFF)
-        var lp1L = 0.0, lp2L = 0.0, hpL = 0.0
-        var lp1R = 0.0, lp2R = 0.0, hpR = 0.0
+        sr = ctrl.sampleRate
+        let invSR = 1.0 / sr
+        let twoPi = 2.0 * Double.pi
 
-        for i in 0..<count {
-            let t = Double(i) / sampleRate
-            let env: Double
-            if t < 0.14 {
-                let u = t / 0.14
-                env = u * u * (3.0 - 2.0 * u)
-            } else if t < 1.25 {
-                env = 1.0 - 0.14 * ((t - 0.14) / 1.11)
-            } else {
-                let u = min(1.0, (t - 1.25) / 1.12)
-                env = 0.86 * pow(1.0 - u, 1.9)
+        // Trigger one-shot events smoothly inside the continuous stream
+        if ctrl.pendingEruptionGain > 0.01 {
+            eruptionAge = 0.0
+            eruptionGain = ctrl.pendingEruptionGain
+            subPhase = 0.0
+            spawnZap(gain: ctrl.pendingEruptionGain * 0.85, pan: -0.52, duration: 0.22)
+        }
+        if ctrl.pendingLightningGain > 0.01 {
+            let randPan = (nextNoise(&rngL) * 0.72)
+            spawnZap(gain: ctrl.pendingLightningGain, pan: randPan, duration: 0.17)
+            if ctrl.pendingLightningWhoosh && eruptionAge > 1.0 {
+                // Short punchy Ki flare without interrupting continuous burn
+                eruptionAge = 0.18
+                eruptionGain = max(eruptionGain * 0.5, ctrl.pendingLightningGain * 0.55)
             }
-
-            // Iconic DBZ rising roar pitch sweep: surges sharply upward then stabilizes into roaring wind
-            let sweepPeak = exp(-pow((t - 0.34) / 0.36, 2.0))
-            let cutoff = (isUI ? 520.0 : 340.0) + (isUI ? 2700.0 : 2150.0) * sweepPeak + 480.0 * env
-            let alpha = min(0.55, (twoPi * cutoff) / sampleRate)
-
-            let nL = nextNoise(&rngL)
-            let nR = nextNoise(&rngR)
-
-            // 2-pole resonant low-pass + high-pass shapes raw wind into fiery roaring plasma
-            lp1L += alpha * (nL - lp1L)
-            lp2L += alpha * (lp1L - lp2L)
-            hpL += 0.028 * (lp2L - hpL)
-
-            lp1R += alpha * (nR - lp1R)
-            lp2R += alpha * (lp1R - lp2R)
-            hpR += 0.028 * (lp2R - hpR)
-
-            // Signature Dragon Ball 28-36 Hz undulating Ki flame throb!
-            let flutterRate = isBroly ? 24.0 : (isUI ? 34.0 : 31.0)
-            let flutterL = 0.72 + 0.28 * sin(twoPi * flutterRate * t)
-            let flutterR = 0.72 + 0.28 * sin(twoPi * (flutterRate + 1.4) * t + 0.9)
-
-            let roarGain = isUI ? 0.38 : 0.48
-            left[i] += (lp2L - hpL) * env * flutterL * roarGain
-            right[i] += (lp2R - hpR) * env * flutterR * roarGain
+        }
+        if ctrl.pendingSettleGain > 0.01 {
+            settleAge = 0.0
+            settleGain = ctrl.pendingSettleGain
         }
 
-        // Layer C: Harmonic Ki Turbine Power Chord (Detuned FM / Overdriven Brass-Plasma Swell)
-        // Gives each Super Saiyan form its unmistakable musical energy signature
-        let ratios: [Double]
-        switch theme {
+        // Theme acoustic character targets
+        let targetFlangerMs: Double
+        let targetRoarHz: Double
+        let targetFlutterHz: Double
+        let targetUIMix: Double
+        let targetSubBoost: Double
+        switch ctrl.theme {
         case .superSaiyan:
-            ratios = [1.0, 1.5, 2.0, 3.0, 4.0] // Fierce golden power fifth + octaves
+            targetFlangerMs = 4.6; targetRoarHz = 460.0; targetFlutterHz = 13.8; targetUIMix = 0.0; targetSubBoost = 1.05
         case .god:
-            ratios = [1.0, 1.5, 2.0, 2.5, 4.0] // Fiery major divine blaze
+            targetFlangerMs = 3.8; targetRoarHz = 540.0; targetFlutterHz = 16.2; targetUIMix = 0.08; targetSubBoost = 0.95
         case .blue:
-            ratios = [1.0, 1.5, 2.0, 3.0, 4.5] // Glacial godly maj9 resonance
+            targetFlangerMs = 5.4; targetRoarHz = 390.0; targetFlutterHz = 12.4; targetUIMix = 0.14; targetSubBoost = 1.15
         case .rose:
-            ratios = [1.0, 1.5, 2.0, 2.4, 3.6] // Regal dark crimson minor-9th
+            targetFlangerMs = 4.2; targetRoarHz = 510.0; targetFlutterHz = 14.6; targetUIMix = 0.18; targetSubBoost = 1.00
         case .ultraInstinct:
-            ratios = [1.0, 1.5, 2.0, 3.0, 4.5, 6.0, 8.0] // Iconic shimmering transcendent UI harmonic halo!
+            targetFlangerMs = 6.2; targetRoarHz = 620.0; targetFlutterHz = 10.5; targetUIMix = 0.52; targetSubBoost = 0.88
         case .legendary:
-            ratios = [1.0, 1.414, 2.0, 2.5, 3.0] // Ferocious Broly tension sub-power
+            targetFlangerMs = 5.8; targetRoarHz = 330.0; targetFlutterHz = 15.5; targetUIMix = 0.0; targetSubBoost = 1.48
+        }
+        let targetRoot = ctrl.theme.audioRootHz
+
+        let abl = UnsafeMutableAudioBufferListPointer(audioBufferList)
+        guard abl.count >= 2,
+              let outL = abl[0].mData?.assumingMemoryBound(to: Float.self),
+              let outR = abl[1].mData?.assumingMemoryBound(to: Float.self)
+        else {
+            return
         }
 
-        for (idx, ratio) in ratios.enumerated() {
-            let baseFreq = root * ratio
-            let pan = (idx % 2 == 0 ? -1.0 : 1.0) * min(0.55, 0.12 + Double(idx) * 0.09)
-            let panL = sqrt(0.5 * (1.0 - pan))
-            let panR = sqrt(0.5 * (1.0 + pan))
-            let weight = (isUI && idx >= 4 ? 0.14 : 0.20) / sqrt(Double(idx + 1))
+        let bufMask = Self.delayBufSize - 1
 
-            var ph1 = Double(idx) * 1.13
-            var ph2 = Double(idx) * 2.41
-            for i in 0..<count {
-                let t = Double(i) / sampleRate
-                let attack = min(1.0, t / (0.12 + Double(idx) * 0.025))
-                let release = t > 1.10 ? pow(max(0.0, 1.0 - (t - 1.10) / 1.28), 1.85) : 1.0
-                // Rising Ki pitch surge right at transformation peak!
-                let pitchLift = 1.0 + 0.08 * exp(-pow((t - 0.30) / 0.25, 2.0)) - 0.04 * exp(-t * 7.5)
-                let f1 = baseFreq * pitchLift * 0.996
-                let f2 = baseFreq * pitchLift * 1.005
+        for frame in 0..<frameCount {
+            timeSec += invSR
 
-                ph1 += twoPi * f1 / sampleRate
-                ph2 += twoPi * f2 / sampleRate
+            // Per-sample smooth parameter slewing (ZERO zipper noise or clicks!)
+            let auraSlew = ctrl.continuousTarget > auraEnv ? 0.00016 : 0.000055
+            auraEnv += (ctrl.continuousTarget - auraEnv) * auraSlew
+            flangerBaseMs += (targetFlangerMs - flangerBaseMs) * 0.0003
+            roarCenterHz += (targetRoarHz - roarCenterHz) * 0.0003
+            flutterRateHz += (targetFlutterHz - flutterRateHz) * 0.0003
+            uiShimmerMix += (targetUIMix - uiShimmerMix) * 0.0003
+            subBoost += (targetSubBoost - subBoost) * 0.0003
+            rootHz += (targetRoot - rootHz) * 0.0003
 
-                let mod = sin(ph1 * 2.0) * (isUI ? 0.18 : 0.42) * exp(-t * 0.8)
-                let osc = tanh((sin(ph1 + mod) + sin(ph2 - mod * 0.6)) * (isUI ? 0.85 : 1.35))
-                let throb = 0.84 + 0.16 * sin(twoPi * 18.0 * t + Double(idx))
-                let sample = osc * attack * release * throb * weight
+            // Eruption & Settle kinetic envelopes
+            var eruptionRoarBoost = 0.0
+            var subImpact = 0.0
+            var sweepJetL = 0.0
+            var sweepJetR = 0.0
 
-                left[i] += sample * panL
-                right[i] += sample * panR
+            if eruptionAge < 2.65 {
+                let t = eruptionAge
+                eruptionAge += invSR
+
+                // 1. Seismic DBZ sub-bass ignition boom (0.00s - 0.55s)
+                if t < 0.60 {
+                    let attack = min(1.0, t / 0.009)
+                    let decay = exp(-t * 5.2)
+                    let freq = 32.0 + 78.0 * exp(-t * 13.5)
+                    subPhase += twoPi * freq * invSR
+                    subImpact = tanh((sin(subPhase) * 1.45 + 0.35 * sin(2.0 * subPhase)) * 1.3)
+                        * attack * decay * eruptionGain * 0.58 * subBoost
+                }
+
+                // 2. Massive upward roaring plasma surge ("BWOOOOOOSH-SHWEEEEE!")
+                let attack = min(1.0, t / 0.08)
+                let decay = t < 0.55 ? 1.0 : exp(-(t - 0.55) * 1.65)
+                eruptionRoarBoost = attack * decay * eruptionGain * 0.92
+
+                // Re-strike 2nd and 3rd SSJ2 bio-electric lightning arcs during eruption!
+                if t > 0.38 && t - invSR <= 0.38 {
+                    spawnZap(gain: eruptionGain * 0.78, pan: 0.58, duration: 0.19)
+                } else if t > 0.88 && t - invSR <= 0.88 {
+                    spawnZap(gain: eruptionGain * 0.56, pan: -0.30, duration: 0.15)
+                }
             }
-        }
 
-        // Layer D: Stereo SSJ2 High-Voltage Bio-Electric Lightning Crackles (3 jagged discharges!)
-        addElectricCrackle(at: 0.16, duration: 0.24, pan: -0.58, gain: 0.56, seed: 0x11A4_8921, left: &left, right: &right)
-        addElectricCrackle(at: 0.52, duration: 0.28, pan: 0.64, gain: 0.64, seed: 0x77C2_301F, left: &left, right: &right)
-        addElectricCrackle(at: 1.02, duration: 0.22, pan: -0.32, gain: 0.46, seed: 0x45E9_BB12, left: &left, right: &right)
-
-        applyCinemaSpaceReverb(left: &left, right: &right, wetMix: isUI ? 0.34 : 0.24, feedback: isUI ? 0.52 : 0.42)
-        applyMasterLimiter(left: &left, right: &right, targetPeak: 0.86, tailFadeSeconds: 0.35)
-        return encodeStereoWAV(left: left, right: right)
-    }
-
-    // MARK: - 2. SSJ2 Lightning Surge (~0.62s)
-
-    static func renderLightningSurgeWAV(theme: SuperSaiyanAuraTheme) -> Data {
-        let duration = 0.64
-        let count = Int(duration * sampleRate)
-        var left = [Double](repeating: 0, count: count)
-        var right = [Double](repeating: 0, count: count)
-
-        let root = theme.audioRootHz
-
-        // Punchy short Ki burst whoosh
-        var rng: UInt64 = 0x51A7_E012_4491_C38B
-        var lpL = 0.0, lpR = 0.0, hpL = 0.0, hpR = 0.0
-        for i in 0..<count {
-            let t = Double(i) / sampleRate
-            let env = min(1.0, t / 0.015) * exp(-t * 6.4)
-            let cutoff = 420.0 + 2400.0 * exp(-t * 8.0)
-            let alpha = min(0.5, (twoPi * cutoff) / sampleRate)
-            let nL = nextNoise(&rng)
-            let nR = nextNoise(&rng)
-            lpL += alpha * (nL - lpL); hpL += 0.04 * (lpL - hpL)
-            lpR += alpha * (nR - lpR); hpR += 0.04 * (lpR - hpR)
-
-            left[i] += (lpL - hpL) * env * 0.42
-            right[i] += (lpR - hpR) * env * 0.42
-        }
-
-        // Crisp harmonic Ki flash tuned to the selected form
-        var ph = 0.0
-        for i in 0..<count {
-            let t = Double(i) / sampleRate
-            let env = min(1.0, t / 0.006) * exp(-t * 7.5)
-            let f = root * 4.0 * (1.0 + 0.14 * exp(-t * 16.0))
-            ph += twoPi * f / sampleRate
-            let s = (sin(ph) * 0.65 + sin(ph * 1.5) * 0.35) * env * 0.24
-            left[i] += s
-            right[i] += s
-        }
-
-        // Double stereo high-voltage SSJ2 arc crackle
-        addElectricCrackle(at: 0.005, duration: 0.22, pan: -0.45, gain: 0.66, seed: 0xA812_9F40, left: &left, right: &right)
-        addElectricCrackle(at: 0.14, duration: 0.18, pan: 0.52, gain: 0.48, seed: 0x33D0_771E, left: &left, right: &right)
-
-        applyCinemaSpaceReverb(left: &left, right: &right, wetMix: 0.22, feedback: 0.36)
-        applyMasterLimiter(left: &left, right: &right, targetPeak: 0.80, tailFadeSeconds: 0.12)
-        return encodeStereoWAV(left: left, right: right)
-    }
-
-    // MARK: - 3. Power-Down Ki Settle (~0.92s)
-
-    static func renderPowerDownSettleWAV(theme: SuperSaiyanAuraTheme) -> Data {
-        let duration = 0.92
-        let count = Int(duration * sampleRate)
-        var left = [Double](repeating: 0, count: count)
-        var right = [Double](repeating: 0, count: count)
-
-        let root = theme.audioRootHz
-        var rng: UInt64 = 0x229A_4F10_8C1E_67D1
-        var lpL = 0.0, lpR = 0.0, hpL = 0.0, hpR = 0.0
-
-        for i in 0..<count {
-            let t = Double(i) / sampleRate
-            let env = min(1.0, t / 0.04) * pow(max(0.0, 1.0 - t / duration), 1.8)
-            // Descending warm air-dispersion sweep
-            let cutoff = 220.0 + 1850.0 * pow(max(0.0, 1.0 - t / duration), 2.1)
-            let alpha = min(0.48, (twoPi * cutoff) / sampleRate)
-            lpL += alpha * (nextNoise(&rng) - lpL); hpL += 0.03 * (lpL - hpL)
-            lpR += alpha * (nextNoise(&rng) - lpR); hpR += 0.03 * (lpR - hpR)
-
-            left[i] += (lpL - hpL) * env * 0.34
-            right[i] += (lpR - hpR) * env * 0.34
-        }
-
-        // Resolving warm harmonic chime
-        let notes = [root * 4.0, root * 6.0, root * 8.0]
-        for (idx, freq) in notes.enumerated() {
-            let start = Double(idx) * 0.035
-            let startIdx = Int(start * sampleRate)
-            let pan = Double(idx - 1) * 0.25
-            let panL = sqrt(0.5 * (1.0 - pan))
-            let panR = sqrt(0.5 * (1.0 + pan))
-            for i in startIdx..<count {
-                let t = Double(i - startIdx) / sampleRate
-                let env = min(1.0, t / 0.012) * exp(-t * 4.2)
-                let s = (sin(twoPi * freq * t) + 0.22 * sin(twoPi * freq * 2.0 * t)) * env * 0.16
-                left[i] += s * panL
-                right[i] += s * panR
+            var settleWhoosh = 0.0
+            if settleAge < 1.10 {
+                let t = settleAge
+                settleAge += invSR
+                let u = t / 1.10
+                settleWhoosh = min(1.0, t / 0.05) * pow(max(0.0, 1.0 - u), 2.1) * settleGain * 0.55
             }
-        }
 
-        applyCinemaSpaceReverb(left: &left, right: &right, wetMix: 0.28, feedback: 0.44)
-        applyMasterLimiter(left: &left, right: &right, targetPeak: 0.72, tailFadeSeconds: 0.22)
-        return encodeStereoWAV(left: left, right: right)
-    }
+            let totalFlameEnergy = min(1.45, auraEnv + eruptionRoarBoost + settleWhoosh)
 
-    // MARK: - 4. Seamless Living Super Saiyan Aura Hum Loop (~3.20s)
+            // Fast silence short-circuit when completely quiet
+            if totalFlameEnergy < 0.0004 && zapAge >= zapDuration && abs(subImpact) < 0.0001 {
+                outL[frame] = 0
+                outR[frame] = 0
+                continue
+            }
 
-    static func renderSeamlessAuraLoopWAV(theme: SuperSaiyanAuraTheme) -> Data {
-        let duration = 3.20
-        let count = Int(duration * sampleRate)
-        var rawL = [Double](repeating: 0, count: count)
-        var rawR = [Double](repeating: 0, count: count)
+            // Generate stereo pink-brown fire turbulence noise
+            let wL = nextNoise(&rngL)
+            let wR = nextNoise(&rngR)
+            pinkL0 = 0.997 * pinkL0 + wL * 0.048
+            pinkL1 = 0.965 * pinkL1 + wL * 0.165
+            pinkL2 = 0.820 * pinkL2 + wL * 0.340
+            let fireL = pinkL0 + pinkL1 + pinkL2
 
-        let root = theme.audioRootHz
-        let isUI = theme == .ultraInstinct
+            pinkR0 = 0.997 * pinkR0 + wR * 0.048
+            pinkR1 = 0.965 * pinkR1 + wR * 0.165
+            pinkR2 = 0.820 * pinkR2 + wR * 0.340
+            let fireR = pinkR0 + pinkR1 + pinkR2
 
-        // Quantize frequencies to exact integer cycles over `duration` so loop wrap is 100% clickless!
-        func quantize(_ hz: Double) -> Double {
-            max(1.0, (hz * duration).rounded()) / duration
-        }
+            // Organic coupled anime flame-flap modulation (NOT robotic single sine!)
+            let flap1L = sin(twoPi * flutterRateHz * timeSec)
+            let flap2L = sin(twoPi * (flutterRateHz * 1.49) * timeSec + 1.1)
+            let flapL = 0.68 + 0.22 * flap1L + 0.10 * flap2L
 
-        let f1 = quantize(root)
-        let f2 = quantize(root * 1.5)
-        let f3 = quantize(root * 2.0)
-        let f4 = quantize(root * (isUI ? 6.0 : 3.0))
-        let throbHz = quantize(isUI ? 22.0 : 26.0)
-        let slowBreathHz = quantize(0.625) // exactly 2 cycles per 3.2s
+            let flap1R = sin(twoPi * (flutterRateHz + 0.65) * timeSec + 0.8)
+            let flap2R = sin(twoPi * (flutterRateHz * 1.47) * timeSec + 2.3)
+            let flapR = 0.68 + 0.22 * flap1R + 0.10 * flap2R
 
-        var rng: UInt64 = 0x77C1_9402_5E3B_A110
-        var lpL = 0.0, lpR = 0.0, hpL = 0.0, hpR = 0.0
+            // State-Variable Bandpass Filter (shapes raw noise into raging Super Saiyan fire column)
+            let eruptionPitchLift = eruptionAge < 2.65 ? exp(-pow((eruptionAge - 0.26) / 0.32, 2.0)) * 780.0 : 0.0
+            let settleDrop = settleAge < 1.10 ? (1.0 - settleAge / 1.10) * 520.0 - 220.0 : 0.0
+            let fc = max(140.0, min(2600.0, roarCenterHz + eruptionPitchLift + settleDrop + 110.0 * flap1L))
+            let fCoeff = min(0.45, 2.0 * sin(Double.pi * fc * invSR))
+            let qDamp = 0.56 // warm resonant flame roar
 
-        for i in 0..<count {
-            let t = Double(i) / sampleRate
-            let breath = 0.80 + 0.20 * sin(twoPi * slowBreathHz * t)
-            let throbL = 0.74 + 0.26 * sin(twoPi * throbHz * t)
-            let throbR = 0.74 + 0.26 * sin(twoPi * throbHz * t + 0.7)
+            let hpL = fireL - svfLowL - qDamp * svfBandL
+            svfBandL += fCoeff * hpL
+            svfLowL += fCoeff * svfBandL
 
-            let drone =
-                0.38 * sin(twoPi * f1 * t) +
-                0.24 * sin(twoPi * f2 * t + 0.4) +
-                0.18 * sin(twoPi * f3 * t + 1.1) +
-                (isUI ? 0.14 : 0.08) * sin(twoPi * f4 * t + 2.0)
+            let hpR = fireR - svfLowR - qDamp * svfBandR
+            svfBandR += fCoeff * hpR
+            svfLowR += fCoeff * svfBandR
 
-            let cutoff = (isUI ? 780.0 : 560.0) + 280.0 * breath
-            let alpha = min(0.35, (twoPi * cutoff) / sampleRate)
-            lpL += alpha * (nextNoise(&rng) - lpL); hpL += 0.025 * (lpL - hpL)
-            lpR += alpha * (nextNoise(&rng) - lpR); hpR += 0.025 * (lpR - hpR)
+            // Secondary high-pressure screaming air vortex during power-up burst!
+            if eruptionRoarBoost > 0.01 {
+                let jetHz = 420.0 + 1950.0 * exp(-pow((eruptionAge - 0.24) / 0.28, 2.0))
+                let jf = min(0.55, 2.0 * sin(Double.pi * jetHz * invSR))
+                let jhpL = wL - sweepLowL - 0.28 * sweepBandL
+                sweepBandL += jf * jhpL; sweepLowL += jf * sweepBandL
+                let jhpR = wR - sweepLowR - 0.28 * sweepBandR
+                sweepBandR += jf * jhpR; sweepLowR += jf * sweepBandR
+                sweepJetL = sweepBandL * eruptionRoarBoost * 0.42
+                sweepJetR = sweepBandR * eruptionRoarBoost * 0.42
+            }
 
-            rawL[i] = (drone * 0.42 + (lpL - hpL) * 0.58) * throbL * breath
-            rawR[i] = (drone * 0.42 + (lpR - hpR) * 0.58) * throbR * breath
-        }
+            // THE ICONIC DBZ COMB / JET-FLANGER RESONATOR:
+            // Swirling delay time creates the authentic metallic/windy Super Saiyan aura roar!
+            let swirlL = sin(twoPi * 2.15 * timeSec) * 1.8 + sin(twoPi * 6.4 * timeSec) * 0.45
+            let swirlR = sin(twoPi * 2.28 * timeSec + 1.4) * 1.8 + sin(twoPi * 6.1 * timeSec + 0.7) * 0.45
+            let delaySamplesL = max(8.0, min(Double(Self.delayBufSize - 4), (flangerBaseMs + swirlL) * 0.001 * sr))
+            let delaySamplesR = max(8.0, min(Double(Self.delayBufSize - 4), (flangerBaseMs + swirlR) * 0.001 * sr))
 
-        // Subtle periodic electric plasma micro-sparks inside the loop
-        addElectricCrackle(at: 0.72, duration: 0.14, pan: -0.50, gain: 0.22, seed: 0x9103_44A1, left: &rawL, right: &rawR)
-        addElectricCrackle(at: 2.18, duration: 0.15, pan: 0.48, gain: 0.20, seed: 0x3F82_C019, left: &rawL, right: &rawR)
+            let readL = readDelayLinear(delayL, writeIdx: delayWriteIdx, delaySamples: delaySamplesL, mask: bufMask)
+            let readR = readDelayLinear(delayR, writeIdx: delayWriteIdx, delaySamples: delaySamplesR, mask: bufMask)
 
-        // Seamless overlap-add crossfade over the last 0.25s onto the first 0.25s
-        let xfade = Int(0.25 * sampleRate)
-        var outL = rawL
-        var outR = rawR
-        for i in 0..<xfade {
-            let u = Double(i) / Double(xfade)
-            let fadeIn = sin(u * Double.pi * 0.5)
-            let fadeOut = cos(u * Double.pi * 0.5)
-            let tailIdx = count - xfade + i
-            outL[i] = rawL[i] * fadeIn + rawL[tailIdx] * fadeOut
-            outR[i] = rawR[i] * fadeIn + rawR[tailIdx] * fadeOut
-        }
-        let loopCount = count - xfade
-        var finalL = Array(outL.prefix(loopCount))
-        var finalR = Array(outR.prefix(loopCount))
+            let inL = (svfBandL * 0.85 + svfLowL * 0.42) * flapL + sweepJetL
+            let inR = (svfBandR * 0.85 + svfLowR * 0.42) * flapR + sweepJetR
 
-        // Normalize gently without end-fading (so loop stays seamless!)
-        var peak = 0.001
-        for i in 0..<loopCount {
-            finalL[i] = tanh(finalL[i] * 1.15)
-            finalR[i] = tanh(finalR[i] * 1.15)
-            peak = max(peak, max(abs(finalL[i]), abs(finalR[i])))
-        }
-        let scale = 0.65 / peak
-        for i in 0..<loopCount {
-            finalL[i] *= scale
-            finalR[i] *= scale
-        }
+            let feedback = 0.56
+            delayL[delayWriteIdx] = tanh(inL + readL * feedback)
+            delayR[delayWriteIdx] = tanh(inR + readR * feedback)
+            delayWriteIdx = (delayWriteIdx + 1) & bufMask
 
-        return encodeStereoWAV(left: finalL, right: finalR)
-    }
+            var mixL = (inL * 0.62 + readL * 0.58) * totalFlameEnergy + subImpact
+            var mixR = (inR * 0.62 + readR * 0.58) * totalFlameEnergy + subImpact
 
-    // MARK: - Physically-Modeled High-Voltage SSJ2 Electric Crackle Generator
+            // Ultra Instinct / Divine Form subtle crystalline heat-shimmer overtone (never organ-like)
+            if uiShimmerMix > 0.01 && totalFlameEnergy > 0.02 {
+                uiPhase1 += twoPi * (rootHz * 4.0) * invSR
+                uiPhase2 += twoPi * (rootHz * 6.004) * invSR
+                uiPhase3 += twoPi * (rootHz * 9.009) * invSR
+                let shimmer = (sin(uiPhase1) * 0.42 + sin(uiPhase2) * 0.34 + sin(uiPhase3) * 0.24)
+                    * (0.75 + 0.25 * sin(twoPi * 5.2 * timeSec))
+                let uiLevel = shimmer * uiShimmerMix * totalFlameEnergy * 0.22
+                mixL += uiLevel
+                mixR += uiLevel * 0.94
+            }
 
-    private static func addElectricCrackle(
-        at start: Double,
-        duration: Double,
-        pan: Double,
-        gain: Double,
-        seed: UInt64,
-        left: inout [Double],
-        right: inout [Double]
-    ) {
-        let startIdx = max(0, Int(start * sampleRate))
-        let endIdx = min(left.count, startIdx + Int(duration * sampleRate))
-        guard endIdx > startIdx else { return }
+            // Organic live SSJ2 bio-electric lightning cracks while actively burning in Turbo!
+            if auraEnv > 0.16 {
+                nextAutoZapTimer -= invSR
+                if nextAutoZapTimer <= 0 {
+                    let r1 = abs(nextNoise(&rngL))
+                    let r2 = nextNoise(&rngR)
+                    nextAutoZapTimer = 1.15 + r1 * 1.95
+                    spawnZap(gain: 0.26 + r1 * 0.22, pan: r2 * 0.68, duration: 0.11 + r1 * 0.08)
+                }
+            }
 
-        var rng = seed ^ 0xA5A5_1234_5678_9ABC
-        let panL = sqrt(0.5 * (1.0 - pan))
-        let panR = sqrt(0.5 * (1.0 + pan))
+            // Synthesize active SSJ2 lightning crackle voice
+            if zapAge < zapDuration {
+                let zt = zapAge
+                zapAge += invSR
+                let norm = zt / max(0.02, zapDuration)
+                let b1 = exp(-zt * 32.0)
+                let b2 = zt > 0.036 ? exp(-(zt - 0.036) * 38.0) * 0.82 : 0.0
+                let b3 = zt > 0.082 ? exp(-(zt - 0.082) * 44.0) * 0.55 : 0.0
+                let stutter = b1 + b2 + b3
 
-        // 3 micro-arcs per lightning discharge ("BZZ-KRAAK!")
-        var bp = 0.0
-        var hp = 0.0
-        var zapPhase = 0.0
+                let zn = nextNoise(&rngL)
+                let spike = abs(zn) > 0.72 ? zn * 2.5 : zn * 0.42
+                zapBp += 0.48 * (spike - zapBp)
+                zapHp += 0.24 * (zapBp - zapHp)
+                let crackle = zapBp - zapHp
 
-        for i in startIdx..<endIdx {
-            let t = Double(i - startIdx) / sampleRate
-            let norm = t / max(0.01, duration)
+                let zapHz = 560.0 + 1650.0 * (1.0 - norm)
+                zapPhase += twoPi * zapHz * invSR
+                let buzz = tanh(sin(zapPhase) * 2.4) * 0.22
 
-            // Rapid jagged stutter envelope simulating real electrical arc re-strikes
-            let burst1 = exp(-t * 28.0)
-            let burst2 = t > 0.042 ? exp(-(t - 0.042) * 34.0) * 0.85 : 0.0
-            let burst3 = t > 0.095 ? exp(-(t - 0.095) * 40.0) * 0.60 : 0.0
-            let stutter = burst1 + burst2 + burst3
-            guard stutter > 0.002 else { continue }
+                let zapOut = (crackle * 0.88 + buzz) * stutter * zapGain * 0.68
+                let panL = sqrt(0.5 * (1.0 - zapPan))
+                let panR = sqrt(0.5 * (1.0 + zapPan))
+                mixL += zapOut * panL
+                mixR += zapOut * panR
+            }
 
-            let n = nextNoise(&rng)
-            // High-frequency crisp electric spark impulse (3.4kHz - 6.8kHz)
-            let sparkSpike = abs(n) > 0.74 ? n * 2.4 : n * 0.45
-            bp += 0.46 * (sparkSpike - bp)
-            hp += 0.22 * (bp - hp)
-            let crackle = bp - hp
-
-            // Metallic ionized buzz pitch-sweep (1.9kHz -> 620Hz)
-            let zapHz = 620.0 + 1450.0 * (1.0 - norm)
-            zapPhase += twoPi * zapHz / sampleRate
-            let buzz = tanh(sin(zapPhase) * 2.2) * 0.24
-
-            let out = (crackle * 0.85 + buzz) * stutter * gain
-            left[i] += out * panL
-            right[i] += out * panR
+            // Warm analog soft-clipping limiter — punchy, full, zero digital harshness
+            outL[frame] = Float(tanh(mixL * 1.18) * 0.82)
+            outR[frame] = Float(tanh(mixR * 1.18) * 0.82)
         }
     }
-
-    // MARK: - Spatial Reverb, Master Limiter & WAV Encoder
 
     @inline(__always)
-    private static func nextNoise(_ state: inout UInt64) -> Double {
+    private func spawnZap(gain: Double, pan: Double, duration: Double) {
+        zapAge = 0.0
+        zapGain = gain
+        zapPan = max(-0.85, min(0.85, pan))
+        zapDuration = duration
+        zapPhase = 0.0
+    }
+
+    @inline(__always)
+    private func readDelayLinear(_ buf: [Double], writeIdx: Int, delaySamples: Double, mask: Int) -> Double {
+        let i0 = Int(delaySamples)
+        let frac = delaySamples - Double(i0)
+        let idx0 = (writeIdx - i0) & mask
+        let idx1 = (idx0 - 1) & mask
+        return buf[idx0] * (1.0 - frac) + buf[idx1] * frac
+    }
+
+    @inline(__always)
+    private func nextNoise(_ state: inout UInt64) -> Double {
         state &+= 0x9E37_79B9_7F4A_7C15
         var z = state
         z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
         z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
         z = z ^ (z >> 31)
         return (Double(z & 0xFFFF) / 32768.0) - 1.0
-    }
-
-    private static func applyCinemaSpaceReverb(
-        left: inout [Double],
-        right: inout [Double],
-        wetMix: Double,
-        feedback: Double
-    ) {
-        let count = left.count
-        let delaysL = [1129, 1481, 1877]
-        let delaysR = [1187, 1543, 1931]
-        var wetL = [Double](repeating: 0, count: count)
-        var wetR = [Double](repeating: 0, count: count)
-
-        for c in 0..<delaysL.count {
-            let dL = delaysL[c]
-            let dR = delaysR[c]
-            var bufL = [Double](repeating: 0, count: dL)
-            var bufR = [Double](repeating: 0, count: dR)
-            var idxL = 0, idxR = 0
-            var dampL = 0.0, dampR = 0.0
-
-            for i in 0..<count {
-                let oL = bufL[idxL]
-                let oR = bufR[idxR]
-                dampL = oL * 0.68 + dampL * 0.32
-                dampR = oR * 0.68 + dampR * 0.32
-
-                bufL[idxL] = left[i] * 0.78 + right[i] * 0.22 + dampL * feedback
-                bufR[idxR] = right[i] * 0.78 + left[i] * 0.22 + dampR * feedback
-
-                wetL[i] += oL * 0.33
-                wetR[i] += oR * 0.33
-
-                idxL += 1; if idxL == dL { idxL = 0 }
-                idxR += 1; if idxR == dR { idxR = 0 }
-            }
-        }
-
-        let dry = 1.0 - wetMix * 0.35
-        for i in 0..<count {
-            left[i] = left[i] * dry + wetL[i] * wetMix
-            right[i] = right[i] * dry + wetR[i] * wetMix
-        }
-    }
-
-    private static func applyMasterLimiter(
-        left: inout [Double],
-        right: inout [Double],
-        targetPeak: Double,
-        tailFadeSeconds: Double
-    ) {
-        let count = left.count
-        guard count > 0 else { return }
-
-        var peak = 0.0001
-        for i in 0..<count {
-            let l = tanh(left[i] * 1.18)
-            let r = tanh(right[i] * 1.18)
-            left[i] = l
-            right[i] = r
-            peak = max(peak, max(abs(l), abs(r)))
-        }
-
-        let scale = targetPeak / peak
-        let fadeIn = min(count / 8, Int(0.006 * sampleRate))
-        let fadeOut = min(count / 2, Int(tailFadeSeconds * sampleRate))
-
-        for i in 0..<count {
-            var env = 1.0
-            if i < fadeIn {
-                let u = Double(i) / Double(max(1, fadeIn))
-                env *= 0.5 - 0.5 * cos(Double.pi * u)
-            }
-            let fromEnd = count - 1 - i
-            if fromEnd < fadeOut {
-                let u = Double(fromEnd) / Double(max(1, fadeOut))
-                let raised = 0.5 - 0.5 * cos(Double.pi * u)
-                env *= raised * raised
-            }
-            left[i] *= scale * env
-            right[i] *= scale * env
-        }
-    }
-
-    private static func encodeStereoWAV(left: [Double], right: [Double]) -> Data {
-        let frameCount = min(left.count, right.count)
-        let channels: UInt16 = 2
-        let bitsPerSample: UInt16 = 16
-        let sr = UInt32(sampleRate)
-        let byteRate = sr * UInt32(channels) * UInt32(bitsPerSample / 8)
-        let blockAlign = channels * (bitsPerSample / 8)
-        let dataSize = UInt32(frameCount * Int(blockAlign))
-        let chunkSize = 36 + dataSize
-
-        var data = Data(capacity: 44 + Int(dataSize))
-        func appendASCII(_ str: String) { data.append(contentsOf: str.utf8) }
-        func appendLE(_ value: UInt32) {
-            var v = value.littleEndian
-            withUnsafeBytes(of: &v) { data.append(contentsOf: $0) }
-        }
-        func appendLE(_ value: UInt16) {
-            var v = value.littleEndian
-            withUnsafeBytes(of: &v) { data.append(contentsOf: $0) }
-        }
-
-        appendASCII("RIFF"); appendLE(chunkSize); appendASCII("WAVE")
-        appendASCII("fmt "); appendLE(UInt32(16)); appendLE(UInt16(1))
-        appendLE(channels); appendLE(sr); appendLE(byteRate)
-        appendLE(blockAlign); appendLE(bitsPerSample)
-        appendASCII("data"); appendLE(dataSize)
-
-        for i in 0..<frameCount {
-            let lInt = Int16(max(-32_767, min(32_767, Int((left[i] * 32_767.0).rounded()))))
-            let rInt = Int16(max(-32_767, min(32_767, Int((right[i] * 32_767.0).rounded()))))
-            var lLE = lInt.littleEndian
-            var rLE = rInt.littleEndian
-            withUnsafeBytes(of: &lLE) { data.append(contentsOf: $0) }
-            withUnsafeBytes(of: &rLE) { data.append(contentsOf: $0) }
-        }
-
-        return data
     }
 }

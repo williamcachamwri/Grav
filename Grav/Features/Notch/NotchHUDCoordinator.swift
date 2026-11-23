@@ -33,6 +33,7 @@ public final class NotchHUDCoordinator {
     @ObservationIgnored private var lastObservedTurboMode: Bool = false
     @ObservationIgnored private var lastObservedTurboBusy: Bool = false
     @ObservationIgnored private var lastObservedTurboPhaseKind: Int = 0
+    @ObservationIgnored private var turboIdleHoldTask: Task<Void, Never>?
     @ObservationIgnored private var accessibilityObserver: NSObjectProtocol?
 
     // MARK: - Init
@@ -116,6 +117,8 @@ public final class NotchHUDCoordinator {
 
         isObservingPreferences = false
         isObservingTurboAudio = false
+        turboIdleHoldTask?.cancel()
+        turboIdleHoldTask = nil
         SuperSaiyanAudioEngine.shared.stopAllLoops()
         store.onPeekRequested = nil
 
@@ -325,6 +328,8 @@ public final class NotchHUDCoordinator {
         case .editing: return 5
         case .runningCommand: return 6
         case .compacting: return 7
+        case .waitingForInput: return 8
+        case .toolActivity: return 9
         }
     }
 
@@ -346,27 +351,44 @@ public final class NotchHUDCoordinator {
         lastObservedTurboPhaseKind = phaseKind
 
         guard turboAudioAllowed else {
+            turboIdleHoldTask?.cancel()
+            turboIdleHoldTask = nil
             SuperSaiyanAudioEngine.shared.setAuraLoopActive(false, theme: theme)
             return
         }
 
-        // 1. Seismic Power-Up Eruption when a new chat turn begins in Turbo OR Turbo activates mid-turn
-        let justIgnitedTurn = !wasBusy && busyNow
-        let justActivatedTurbo = !wasTurbo && store.isTurboMode
-        if justIgnitedTurn || justActivatedTurbo {
-            SuperSaiyanAudioEngine.shared.playPowerUpEruption(theme: theme)
-        } else if phaseKind != prevPhase && (phaseKind == 3 || phaseKind == 6) {
-            // 2. Crisp SSJ2 Bio-Electric Lightning Surge when entering live Reply streaming or shell execution
-            SuperSaiyanAudioEngine.shared.playLightningSurge(theme: theme)
-        }
+        if busyNow {
+            // Cancel any pending idle power-down so rapid inter-tool gaps NEVER stutter the Super Saiyan aura!
+            let wasHoldingIdle = turboIdleHoldTask != nil
+            turboIdleHoldTask?.cancel()
+            turboIdleHoldTask = nil
 
-        // 3. Seamless living Super Saiyan Ki Aura Hum while actively thinking/working/streaming
-        let shouldLoop = busyNow && preferences.turboAuraLoopEnabled
-        SuperSaiyanAudioEngine.shared.setAuraLoopActive(shouldLoop, theme: theme)
+            let justIgnitedTurn = !wasBusy && !wasHoldingIdle
+            let justActivatedTurbo = !wasTurbo && store.isTurboMode
+            if justIgnitedTurn || justActivatedTurbo {
+                SuperSaiyanAudioEngine.shared.playPowerUpEruption(theme: theme)
+            } else if phaseKind != prevPhase && (phaseKind == 3 || phaseKind == 6) {
+                SuperSaiyanAudioEngine.shared.playLightningSurge(theme: theme)
+            }
 
-        // 4. Satisfying descending Ki dispersion whoosh when a Turbo turn finishes
-        if wasBusy && !busyNow {
-            SuperSaiyanAudioEngine.shared.playPowerDownSettle(theme: theme)
+            SuperSaiyanAudioEngine.shared.setAuraLoopActive(preferences.turboAuraLoopEnabled, theme: theme)
+        } else {
+            // 2.6s smooth hysteresis before settling down so brief micro-pauses between steps stay silky continuous
+            if wasBusy && turboIdleHoldTask == nil {
+                turboIdleHoldTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(2.6))
+                    guard !Task.isCancelled, let self else { return }
+                    self.turboIdleHoldTask = nil
+                    guard !self.isTurboBusyNow() else { return }
+                    let currentTheme = self.preferences.turboAuraTheme
+                    SuperSaiyanAudioEngine.shared.setAuraLoopActive(false, theme: currentTheme)
+                    if self.store.isTurboMode && !self.store.isPaused && self.preferences.playSounds && self.preferences.turboAudioEnabled {
+                        SuperSaiyanAudioEngine.shared.playPowerDownSettle(theme: currentTheme)
+                    }
+                }
+            } else if !wasBusy && turboIdleHoldTask == nil {
+                SuperSaiyanAudioEngine.shared.setAuraLoopActive(false, theme: theme)
+            }
         }
     }
 

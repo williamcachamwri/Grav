@@ -237,6 +237,10 @@ enum NotchTelemetryHelpers {
             return event.kind == .delete ? GravPalette.coral : GravPalette.fileEdit
         case .runningCommand:
             return GravPalette.glacialCyan
+        case .waitingForInput:
+            return GravPalette.fileEdit
+        case .toolActivity:
+            return GravPalette.glacialCyan
         }
     }
 }

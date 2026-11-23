@@ -192,6 +192,18 @@ public struct CollapsedNotchView: View {
                 NotchBars(commandWaveStyle)
                     .transition(signalTransition)
 
+            case .waitingForInput:
+                Image(systemName: "questionmark.bubble.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(GravPalette.fileEdit)
+                    .transition(signalTransition)
+
+            case let .toolActivity(event):
+                Image(systemName: event.kind.symbolName)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(isTurbo ? turboTheme.primaryColor : GravPalette.glacialCyan)
+                    .transition(signalTransition)
+
             case .idle:
                 if !compact {
                     Text("Grav")
@@ -260,6 +272,16 @@ public struct CollapsedNotchView: View {
                             .transition(signalTransition)
                     }
 
+                case let .waitingForInput(prompt):
+                    waitingTrailingSignal(prompt: prompt, compact: compact)
+                        .id("collapsed-waiting")
+                        .transition(signalTransition)
+
+                case let .toolActivity(event):
+                    toolActivityTrailingSignal(for: event, compact: compact)
+                        .id("collapsed-tool-\(event.id)")
+                        .transition(signalTransition)
+
                 case .idle:
                     idleTrailingSignal(compact: compact)
                         .id("collapsed-idle")
@@ -321,16 +343,28 @@ public struct CollapsedNotchView: View {
 
     private func workingTrailingSignal(startedAt: Date, compact: Bool) -> some View {
         HStack(alignment: .center, spacing: 5) {
-            NotchWorkingThinkingShimmerLabel(
-                startDate: startedAt,
-                compact: compact,
-                font: .system(size: compact ? 11 : 11.5, weight: .medium),
-                turboMode: isTurbo,
-                turboTheme: turboTheme,
-                reduceMotion: reduceMotion
-            )
+            if !compact, let focus = store.currentFocus, !focus.isEmpty {
+                NotchPingPongMarqueeText(
+                    text: focus,
+                    font: .system(size: 11.5, weight: .medium),
+                    color: isTurbo ? turboTheme.coreColor : Color.white.opacity(0.88),
+                    alignment: .trailing,
+                    reduceMotion: reduceMotion
+                )
+            } else {
+                NotchWorkingThinkingShimmerLabel(
+                    startDate: startedAt,
+                    compact: compact,
+                    font: .system(size: compact ? 11 : 11.5, weight: .medium),
+                    turboMode: isTurbo,
+                    turboTheme: turboTheme,
+                    reduceMotion: reduceMotion
+                )
+            }
 
-            if !compact && store.runningTaskCount > 0 {
+            if let steps = store.stepsProgress, !steps.isAllDone {
+                miniStepsProgressBadge(steps, compact: compact)
+            } else if !compact && store.runningTaskCount > 0 {
                 Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .monospacedDigit()
@@ -356,16 +390,28 @@ public struct CollapsedNotchView: View {
 
     private func thinkingTrailingSignal(compact: Bool) -> some View {
         HStack(alignment: .center, spacing: 5) {
-            NotchThinkingShimmerLabel(
-                startDate: store.currentPhaseStartedAt,
-                compact: compact,
-                font: .system(size: compact ? 11 : 11.5, weight: .medium),
-                turboMode: isTurbo,
-                turboTheme: turboTheme,
-                reduceMotion: reduceMotion
-            )
+            if !compact, let focus = store.currentFocus, !focus.isEmpty {
+                NotchPingPongMarqueeText(
+                    text: focus,
+                    font: .system(size: 11.5, weight: .medium),
+                    color: isTurbo ? turboTheme.coreColor : Color.white.opacity(0.86),
+                    alignment: .trailing,
+                    reduceMotion: reduceMotion
+                )
+            } else {
+                NotchThinkingShimmerLabel(
+                    startDate: store.currentPhaseStartedAt,
+                    compact: compact,
+                    font: .system(size: compact ? 11 : 11.5, weight: .medium),
+                    turboMode: isTurbo,
+                    turboTheme: turboTheme,
+                    reduceMotion: reduceMotion
+                )
+            }
 
-            if !compact && store.runningTaskCount > 0 {
+            if let steps = store.stepsProgress, !steps.isAllDone {
+                miniStepsProgressBadge(steps, compact: compact)
+            } else if !compact && store.runningTaskCount > 0 {
                 Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .monospacedDigit()
@@ -373,6 +419,72 @@ public struct CollapsedNotchView: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
         }
+    }
+
+    private func waitingTrailingSignal(prompt: String, compact: Bool) -> some View {
+        if compact {
+            return AnyView(
+                NotchShimmerText(
+                    text: "Needs input",
+                    font: .system(size: 11, weight: .semibold),
+                    tracking: -0.15,
+                    baseOpacity: 0.60,
+                    peakOpacity: 1.0,
+                    period: 1.35,
+                    turboMode: isTurbo,
+                    turboTheme: turboTheme,
+                    reduceMotion: reduceMotion
+                )
+            )
+        }
+        return AnyView(
+            NotchPingPongMarqueeText(
+                text: prompt,
+                font: .system(size: 11.5, weight: .medium),
+                color: GravPalette.fileEdit.opacity(0.95),
+                alignment: .trailing,
+                reduceMotion: reduceMotion
+            )
+        )
+    }
+
+    private func toolActivityTrailingSignal(for event: AgentToolActivityEvent, compact: Bool) -> some View {
+        HStack(alignment: .center, spacing: 5) {
+            NotchPingPongMarqueeText(
+                text: compact ? event.kind.shortLabel : event.title,
+                font: .system(size: compact ? 11 : 11.5, weight: .medium),
+                color: isTurbo ? turboTheme.coreColor : Color.white.opacity(0.88),
+                alignment: .trailing,
+                reduceMotion: reduceMotion
+            )
+
+            if let steps = store.stepsProgress, !steps.isAllDone, !compact {
+                miniStepsProgressBadge(steps, compact: true)
+            }
+        }
+    }
+
+    private func miniStepsProgressBadge(_ steps: AgentStepsProgress, compact: Bool) -> some View {
+        HStack(spacing: 3.5) {
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.18), lineWidth: 1.4)
+                Circle()
+                    .trim(from: 0, to: CGFloat(max(0.08, steps.fraction)))
+                    .stroke(
+                        isTurbo ? turboTheme.primaryColor : Color.white.opacity(0.86),
+                        style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 9, height: 9)
+
+            Text(verbatim: "\(steps.completedCount)/\(steps.totalCount)")
+                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle((isTurbo ? turboTheme.innerColor : Color.white.opacity(0.68)))
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func replyingTrailingSignal(compact: Bool) -> some View {
@@ -620,6 +732,10 @@ public struct CollapsedNotchView: View {
                 : "Editing \(event.basename), +\(event.addedLines) -\(event.removedLines)"
         case let .runningCommand(command):
             return "Running \(command.displayTitle)"
+        case let .waitingForInput(prompt):
+            return "Needs input: \(prompt)"
+        case let .toolActivity(event):
+            return event.title
         }
     }
 }

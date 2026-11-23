@@ -32,6 +32,10 @@ public final class AntigravityTelemetryStore {
     public internal(set) var activeModel: String?
     public internal(set) var swarmSnapshot: SwarmSnapshot?
     public internal(set) var subagents: [SubagentRecord] = []
+    public internal(set) var currentFocus: String?
+    public internal(set) var stepsProgress: AgentStepsProgress?
+    public internal(set) var turnStartedAt: Date?
+    public internal(set) var lastTurnDuration: TimeInterval?
     public internal(set) var currentPhaseStartedAt: Date = Date()
     public internal(set) var executionMode: AntigravityExecutionMode = .defaultMode
 
@@ -64,6 +68,8 @@ public final class AntigravityTelemetryStore {
     private var hydratedTruncatedFileSteps: Set<Int> = []
     private var pendingTruncatedHydrationSteps: [Int] = []
     private var truncatedHydrationTask: Task<Void, Never>?
+    private var sqliteProbeTask: Task<Void, Never>?
+    private var lastSQLiteProbeAt: Date = .distantPast
     private var hydratedFileContents: [String: String] = [:]
     private var lastFinalIdleAt: Date = .distantPast
     private var isSpeculativeWALWorking: Bool = false
@@ -506,6 +512,12 @@ public final class AntigravityTelemetryStore {
         activeModel = nil
         swarmSnapshot = nil
         subagents = []
+        currentFocus = nil
+        stepsProgress = nil
+        turnStartedAt = nil
+        lastTurnDuration = nil
+        sqliteProbeTask?.cancel()
+        sqliteProbeTask = nil
 
         let tailer = TranscriptTailer(transcriptURL: session.transcriptURL, initialOffset: 0)
         activeTailer = tailer
@@ -652,6 +664,8 @@ public final class AntigravityTelemetryStore {
         activeAnnotationWatcher = nil
         truncatedHydrationTask?.cancel()
         truncatedHydrationTask = nil
+        sqliteProbeTask?.cancel()
+        sqliteProbeTask = nil
         let logTailer = taskLogTailer
 
         activeSession = nil
@@ -672,6 +686,12 @@ public final class AntigravityTelemetryStore {
         activeModel = nil
         swarmSnapshot = nil
         subagents = []
+        currentFocus = nil
+        stepsProgress = nil
+        turnStartedAt = nil
+        lastTurnDuration = nil
+        sqliteProbeTask?.cancel()
+        sqliteProbeTask = nil
 
         Task {
             await previousTailer?.stopWatching()
@@ -700,40 +720,318 @@ public final class AntigravityTelemetryStore {
     }
 
     private func handleLiveConversationWALActivity(pulse: WALActivityPulse) {
-        guard !isHydratingActiveSession, !isPaused, pulse.deltaBytes >= 4096 else { return }
-        // Ignore post-completion SQLite housekeeping / diff-review writes right after a turn finishes
-        if Date().timeIntervalSince(lastFinalIdleAt) < 5.0 {
-            return
+        guard !isHydratingActiveSession, !isPaused, let session = activeSession else { return }
+
+        // Throttle read-only SQLite WAL probes to at most once every 220ms (< 0.4ms each)
+        let now = Date()
+        guard now.timeIntervalSince(lastSQLiteProbeAt) >= 0.22 else { return }
+        lastSQLiteProbeAt = now
+
+        let generation = sessionGeneration
+        let dbURL = session.directoryURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("conversations", isDirectory: true)
+            .appendingPathComponent("\(session.id).db")
+
+        sqliteProbeTask?.cancel()
+        sqliteProbeTask = Task { [weak self] in
+            let snapshot = await Task.detached(priority: .userInitiated) {
+                ConversationSQLiteProbe.readLiveSnapshot(dbURL: dbURL)
+            }.value
+            guard !Task.isCancelled, let self, self.sessionGeneration == generation, !self.isPaused else { return }
+            if let snapshot {
+                self.applySQLiteLiveSnapshot(snapshot)
+            } else {
+                // Fallback for isolated unit-test environments without a conversations/*.db file
+                self.applyFallbackWALPulse(pulse)
+            }
+        }
+    }
+
+    private func applySQLiteLiveSnapshot(_ snapshot: ConversationSQLiteLiveSnapshot) {
+        let now = Date()
+        if let focus = snapshot.latestFocus, !focus.isEmpty {
+            currentFocus = focus
+        }
+        if let steps = snapshot.latestSteps,
+           stepsProgress == nil || steps.stepIndex >= (stepsProgress?.stepIndex ?? -1)
+        {
+            stepsProgress = steps
         }
 
+        let setState: (TelemetryState) -> Void = { newState in
+            if GravMotionPreferences.shared.reduceMotion {
+                self.state = newState
+            } else {
+                withAnimation(GravMotionSpec.settle.animation) {
+                    self.state = newState
+                }
+            }
+        }
+
+        switch snapshot.phase {
+        case .idle:
+            // Ground-truth SQLite confirms final reply is DONE with zero pending/running/waiting steps!
+            if state != .idle && commands.allSatisfy({ $0.status != .running }) {
+                isSpeculativeWALWorking = false
+                lastFinalIdleAt = now
+                currentFocus = nil
+                if let started = turnStartedAt, lastTurnDuration == nil {
+                    lastTurnDuration = max(1, now.timeIntervalSince(started))
+                }
+                settleToIdle()
+            }
+
+        case .working:
+            isSpeculativeWALWorking = false
+            if state == .idle {
+                currentPhaseStartedAt = now
+                if turnStartedAt == nil { turnStartedAt = now }
+                setState(.working(startedAt: now))
+            }
+            scheduleIdleDecayIfNeeded()
+
+        case let .thinking(liveText):
+            isSpeculativeWALWorking = false
+            if state != .thinking {
+                currentPhaseStartedAt = now
+                if turnStartedAt == nil { turnStartedAt = now }
+                setState(.thinking)
+            }
+            if let liveText, !liveText.isEmpty {
+                let liveSnap = ThinkingSnapshot(
+                    stepIndex: snapshot.latestStepIndex,
+                    text: liveText,
+                    isTruncated: false,
+                    isFullTextLoaded: true,
+                    model: activeModel,
+                    startedAt: currentThinking?.stepIndex == snapshot.latestStepIndex
+                        ? (currentThinking?.startedAt ?? now)
+                        : now,
+                    completedAt: nil,
+                    isActive: true
+                )
+                currentThinking = liveSnap
+                if let idx = thinkingHistory.firstIndex(where: { $0.stepIndex == liveSnap.stepIndex }) {
+                    thinkingHistory[idx] = liveSnap
+                } else {
+                    thinkingHistory.insert(liveSnap, at: 0)
+                }
+            }
+            scheduleIdleDecayIfNeeded()
+
+        case let .replying(liveReply):
+            isSpeculativeWALWorking = false
+            let liveSnap = AssistantResponseSnapshot(
+                stepIndex: snapshot.latestStepIndex,
+                promptPreview: latestResponse?.promptPreview,
+                text: liveReply,
+                isTruncated: false,
+                isFullTextLoaded: true,
+                model: activeModel,
+                timestamp: now,
+                isStreaming: true
+            )
+            latestResponse = liveSnap
+            if let idx = responses.firstIndex(where: { $0.stepIndex == liveSnap.stepIndex }) {
+                responses[idx] = liveSnap
+            } else {
+                responses.insert(liveSnap, at: 0)
+            }
+            if case .replying = state {
+                state = .replying(liveSnap)
+            } else {
+                currentPhaseStartedAt = now
+                setState(.replying(liveSnap))
+            }
+            scheduleIdleDecayIfNeeded()
+
+        case .compacting:
+            isSpeculativeWALWorking = false
+            let event = CompactionEvent(stepIndex: snapshot.latestStepIndex, startedAt: now, isActive: true)
+            if case .compacting = state {
+                // Already showing compacting
+            } else {
+                currentPhaseStartedAt = now
+                setState(.compacting(event))
+            }
+            scheduleIdleDecayIfNeeded()
+
+        case let .waitingForInput(prompt):
+            isSpeculativeWALWorking = false
+            if case .waitingForInput = state {
+                state = .waitingForInput(prompt)
+            } else {
+                currentPhaseStartedAt = now
+                setState(.waitingForInput(prompt))
+                onPeekRequested?(.needsInput(prompt))
+            }
+            cancelIdleDecayTimer()
+
+        case let .runningTool(name, argsJSON):
+            isSpeculativeWALWorking = false
+            if turnStartedAt == nil { turnStartedAt = now }
+            applyLiveSQLiteTool(name: name, argsJSON: argsJSON, stepIndex: snapshot.latestStepIndex, now: now, setState: setState)
+            scheduleIdleDecayIfNeeded()
+        }
+    }
+
+    private func applyLiveSQLiteTool(
+        name: String,
+        argsJSON: String?,
+        stepIndex: Int,
+        now: Date,
+        setState: (TelemetryState) -> Void
+    ) {
+        let dict: [String: Any]? = argsJSON
+            .flatMap { $0.data(using: .utf8) }
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+
+        switch name {
+        case "update_focus":
+            if let focus = dict?["focus"] as? String, !focus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                currentFocus = focus.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+
+        case "update_steps":
+            if let steps = ConversationSQLiteProbe.parseStepsFromArgsJSON(argsJSON, stepIndex: stepIndex) {
+                stepsProgress = steps
+            }
+
+        case "read_file", "view_file", "view_file_outline", "view_code_item":
+            if let path = (dict?["Path"] as? String) ?? (dict?["AbsolutePath"] as? String) ?? (dict?["TargetFile"] as? String),
+               !path.isEmpty
+            {
+                let startLine = dict?["StartLine"] as? Int
+                let endLine = dict?["EndLine"] as? Int
+                let ev = FileInspectionEvent(
+                    id: "live-\(stepIndex)-\(path)",
+                    stepIndex: stepIndex,
+                    path: path,
+                    startLine: startLine,
+                    endLine: endLine,
+                    timestamp: now,
+                    toolName: name
+                )
+                currentPhaseStartedAt = now
+                setState(.inspecting(ev))
+            }
+
+        case "run_command":
+            if case .runningCommand = state { return }
+            let cmdLine = (dict?["CommandLine"] as? String) ?? ""
+            let summary = (dict?["toolSummary"] as? String) ?? ""
+            let cmd = CommandExecutionEvent(
+                id: "live-cmd-\(stepIndex)",
+                stepIndex: stepIndex,
+                commandLine: cmdLine,
+                summary: summary,
+                status: .running,
+                startedAt: now
+            )
+            currentPhaseStartedAt = now
+            setState(.runningCommand(cmd))
+
+        case "search_web":
+            let q = (dict?["query"] as? String) ?? ""
+            let ev = AgentToolActivityEvent(
+                id: "live-web-\(stepIndex)",
+                stepIndex: stepIndex,
+                kind: .searchWeb,
+                toolName: name,
+                title: q.isEmpty ? "Searching web" : "Searching \"\(q)\"",
+                detail: dict?["domain"] as? String,
+                timestamp: now
+            )
+            currentPhaseStartedAt = now
+            setState(.toolActivity(ev))
+
+        case "call_mcp_tool", "list_resources", "read_resource":
+            let server = (dict?["ServerName"] as? String) ?? "MCP"
+            let tool = (dict?["ToolName"] as? String) ?? name
+            let ev = AgentToolActivityEvent(
+                id: "live-mcp-\(stepIndex)",
+                stepIndex: stepIndex,
+                kind: .mcpTool,
+                toolName: name,
+                title: "MCP \(server) · \(tool)",
+                detail: nil,
+                timestamp: now
+            )
+            currentPhaseStartedAt = now
+            setState(.toolActivity(ev))
+
+        case "invoke_subagent":
+            let typeName = ((dict?["TypeName"] as? String) ?? "").lowercased()
+            let role = (dict?["Role"] as? String) ?? (typeName.isEmpty ? "Subagent" : typeName)
+            let kind: AgentToolActivityKind = typeName.contains("browser")
+                ? .browser
+                : (typeName.contains("image") ? .imageGeneration : .subagent)
+            let prefix = kind == .browser ? "Browsing" : (kind == .imageGeneration ? "Generating image" : "Subagent")
+            let ev = AgentToolActivityEvent(
+                id: "live-sub-\(stepIndex)",
+                stepIndex: stepIndex,
+                kind: kind,
+                toolName: name,
+                title: "\(prefix) · \(role)",
+                detail: dict?["Prompt"] as? String,
+                timestamp: now
+            )
+            currentPhaseStartedAt = now
+            setState(.toolActivity(ev))
+
+        case "run_workflow":
+            let desc = (dict?["Description"] as? String) ?? "Workflow"
+            let ev = AgentToolActivityEvent(
+                id: "live-wf-\(stepIndex)",
+                stepIndex: stepIndex,
+                kind: .workflow,
+                toolName: name,
+                title: "Workflow · \(desc)",
+                detail: nil,
+                timestamp: now
+            )
+            currentPhaseStartedAt = now
+            setState(.toolActivity(ev))
+
+        case "schedule":
+            let ev = AgentToolActivityEvent(
+                id: "live-sched-\(stepIndex)",
+                stepIndex: stepIndex,
+                kind: .schedule,
+                toolName: name,
+                title: "Scheduling task",
+                detail: dict?["Prompt"] as? String,
+                timestamp: now
+            )
+            currentPhaseStartedAt = now
+            setState(.toolActivity(ev))
+
+        default:
+            if state == .idle {
+                currentPhaseStartedAt = now
+                setState(.working(startedAt: now))
+            }
+        }
+    }
+
+    private func applyFallbackWALPulse(_ pulse: WALActivityPulse) {
+        guard pulse.deltaBytes >= 4096 else { return }
+        if Date().timeIntervalSince(lastFinalIdleAt) < 5.0 { return }
         let now = Date()
         switch state {
         case .idle:
             currentPhaseStartedAt = now
             isSpeculativeWALWorking = true
-            if GravMotionPreferences.shared.reduceMotion {
-                state = .working(startedAt: now)
-            } else {
-                withAnimation(GravMotionSpec.settle.animation) {
-                    state = .working(startedAt: now)
-                }
-            }
+            state = .working(startedAt: now)
             scheduleIdleDecayIfNeeded()
-
         case .working, .thinking:
-            // Rapid continuous WAL streaming bursts after >= 3s into a turn signal live token-by-token Reply streaming
             if pulse.isRapidStreamingBurst && now.timeIntervalSince(currentPhaseStartedAt) >= 3.0 {
-                if GravMotionPreferences.shared.reduceMotion {
-                    state = .replying(latestResponse)
-                } else {
-                    withAnimation(GravMotionSpec.settle.animation) {
-                        state = .replying(latestResponse)
-                    }
-                }
+                state = .replying(latestResponse)
             }
             scheduleIdleDecayIfNeeded()
-
-        case .replying, .inspecting, .editing, .compacting, .runningCommand:
+        default:
             scheduleIdleDecayIfNeeded()
         }
     }
@@ -805,6 +1103,30 @@ public final class AntigravityTelemetryStore {
             upsertActivity(.compaction(compaction))
         }
 
+        if let focus = output.focusUpdate, !focus.isEmpty {
+            currentFocus = focus
+        } else if output.clearFocus {
+            currentFocus = nil
+        }
+
+        if let steps = output.stepsProgress {
+            stepsProgress = steps
+        }
+
+        if let turnStart = output.turnStartedAt {
+            turnStartedAt = turnStart
+            lastTurnDuration = nil
+        }
+        if let turnDur = output.lastTurnDuration {
+            lastTurnDuration = turnDur
+        }
+
+        if !output.toolActivities.isEmpty {
+            for activity in output.toolActivities {
+                upsertActivity(.toolActivity(activity))
+            }
+        }
+
         if !output.fileInspections.isEmpty {
             for inspection in output.fileInspections {
                 upsertActivity(.fileInspection(inspection))
@@ -872,6 +1194,10 @@ public final class AntigravityTelemetryStore {
                 currentPhaseStartedAt = suppressPeeks ? event.timestamp : Date()
             case let .runningCommand(cmd):
                 currentPhaseStartedAt = cmd.startedAt
+            case .waitingForInput:
+                currentPhaseStartedAt = Date()
+            case let .toolActivity(event):
+                currentPhaseStartedAt = suppressPeeks ? event.timestamp : Date()
             case .idle:
                 break
             }
