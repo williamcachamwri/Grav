@@ -152,12 +152,20 @@ struct NotchChromeButtonStyle: ButtonStyle {
 
 /// Formatting and clipboard utilities shared across Notch HUD views.
 enum NotchTelemetryHelpers {
+    private static let cachedHomeDirectoryPath: String = {
+        FileManager.default.homeDirectoryForCurrentUser.path
+    }()
+
     /// Returns the full home-relative parent directory path (`~/Grav/Grav/Core/Telemetry`)
     /// so users see the complete path without artificial mid-path truncation.
     static func compactParentPath(for fullPath: String) -> String {
-        let url = URL(fileURLWithPath: fullPath)
-        let parent = url.deletingLastPathComponent().path
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let parent: String
+        if let lastSlash = fullPath.lastIndex(of: "/") {
+            parent = lastSlash == fullPath.startIndex ? "/" : String(fullPath[..<lastSlash])
+        } else {
+            parent = ""
+        }
+        let home = cachedHomeDirectoryPath
         if parent.hasPrefix(home) {
             return "~" + parent.dropFirst(home.count)
         }
@@ -281,7 +289,7 @@ struct NotchShimmerText: View {
                 .foregroundStyle(Color.white.opacity(0.78))
                 .lineLimit(1)
         } else {
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            TimelineView(.animation) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 let rawPhase = (t.truncatingRemainder(dividingBy: period)) / period
                 let phase = rawPhase < 0 ? rawPhase + 1.0 : rawPhase

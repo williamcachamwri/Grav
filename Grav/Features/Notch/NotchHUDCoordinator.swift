@@ -429,6 +429,18 @@ public final class NotchHUDCoordinator {
         "png", "jpg", "jpeg", "webp", "gif", "heic", "tiff", "bmp",
     ]
 
+    nonisolated private static func runOnMainActorZeroAlloc(_ action: @MainActor @escaping () -> Void) {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                action()
+            }
+        } else {
+            Task { @MainActor in
+                action()
+            }
+        }
+    }
+
     private func startGlobalDragMonitor() {
         stopGlobalDragMonitor()
 
@@ -437,16 +449,17 @@ public final class NotchHUDCoordinator {
         globalMouseDownMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown]
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            Self.runOnMainActorZeroAlloc {
                 self?.handleDragMouseDown()
             }
         }
 
         // 2. Track global drag movement & check intersection with the FULL expanded Notch region (564×324pt).
+        //    Runs synchronously on MainActor (zero Task heap allocation at 120Hz mouse drag rate).
         globalDragMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDragged]
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            Self.runOnMainActorZeroAlloc {
                 self?.handleDragMouseMoved()
             }
         }
@@ -455,7 +468,7 @@ public final class NotchHUDCoordinator {
         globalMouseUpMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseUp]
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            Self.runOnMainActorZeroAlloc {
                 self?.handleDragMouseUp()
             }
         }
@@ -464,8 +477,9 @@ public final class NotchHUDCoordinator {
         localDragMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
         ) { [weak self] event in
-            Task { @MainActor [weak self] in
-                switch event.type {
+            let eventType = event.type
+            Self.runOnMainActorZeroAlloc {
+                switch eventType {
                 case .leftMouseDown: self?.handleDragMouseDown()
                 case .leftMouseDragged: self?.handleDragMouseMoved()
                 case .leftMouseUp: self?.handleDragMouseUp()

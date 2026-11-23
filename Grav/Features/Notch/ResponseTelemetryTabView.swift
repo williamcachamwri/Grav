@@ -151,7 +151,7 @@ public struct ResponseTelemetryTabView: View {
             // Smoothly streaming structured Markdown viewport
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 8) {
+                    LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
                             MaterializingResponseBlock(
                                 staggerIndex: min(index, 6),
@@ -365,13 +365,7 @@ public struct ResponseTelemetryTabView: View {
     // MARK: - Actions & Markdown Helper
 
     private func inlineMarkdown(_ text: String) -> AttributedString {
-        if let parsed = try? AttributedString(
-            markdown: text,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        ) {
-            return parsed
-        }
-        return AttributedString(text)
+        MarkdownResponseParser.cachedInlineMarkdown(text)
     }
 
     private func stepReply(by delta: Int) {
@@ -499,8 +493,54 @@ private struct MarkdownResponseBlock: Identifiable, Equatable {
 }
 
 private enum MarkdownResponseParser {
+    @MainActor private static var blockCache: [String: [MarkdownResponseBlock]] = [:]
+    @MainActor private static var blockCacheOrder: [String] = []
+    private static let maxBlockCacheEntries = 32
+
+    @MainActor private static var inlineCache: [String: AttributedString] = [:]
+    @MainActor private static var inlineCacheOrder: [String] = []
+    private static let maxInlineCacheEntries = 160
+
+    @MainActor
+    static func cachedInlineMarkdown(_ text: String) -> AttributedString {
+        if let cached = inlineCache[text] {
+            return cached
+        }
+        let parsed: AttributedString
+        if let md = try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        ) {
+            parsed = md
+        } else {
+            parsed = AttributedString(text)
+        }
+        inlineCache[text] = parsed
+        inlineCacheOrder.append(text)
+        if inlineCacheOrder.count > maxInlineCacheEntries {
+            let evicted = inlineCacheOrder.removeFirst()
+            inlineCache.removeValue(forKey: evicted)
+        }
+        return parsed
+    }
+
+    @MainActor
     static func parse(_ input: String) -> [MarkdownResponseBlock] {
         guard !input.isEmpty else { return [] }
+        if let cached = blockCache[input] {
+            return cached
+        }
+        let parsed = parseUncached(input)
+        blockCache[input] = parsed
+        blockCacheOrder.append(input)
+        if blockCacheOrder.count > maxBlockCacheEntries {
+            let evicted = blockCacheOrder.removeFirst()
+            blockCache.removeValue(forKey: evicted)
+        }
+        return parsed
+    }
+
+    private static func parseUncached(_ input: String) -> [MarkdownResponseBlock] {
         let lines = input.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         var blocks: [MarkdownResponseBlock] = []
         var paragraphBuffer: [String] = []

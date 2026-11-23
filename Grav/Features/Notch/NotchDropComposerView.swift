@@ -375,6 +375,23 @@ public struct NotchDropComposerView: View {
             : "Release to stage file"
     }
 
+    @MainActor private static var fileIconCache: [String: NSImage] = [:]
+
+    @MainActor
+    private static func cachedFileIcon(for url: URL) -> NSImage {
+        let ext = url.pathExtension.lowercased()
+        let key = (ext.isEmpty || ext == "app" || ext == "bundle") ? url.path : "ext:\(ext)"
+        if let cached = fileIconCache[key] {
+            return cached
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        if fileIconCache.count >= 64 {
+            fileIconCache.removeAll(keepingCapacity: true)
+        }
+        fileIconCache[key] = icon
+        return icon
+    }
+
     /// Clean `boring.notch` `ShelfItemView`-inspired rounded tile (`50×50` thumbnail + centered filename + native drag-out).
     private func shelfItemTile(_ item: StagedDropItem) -> some View {
         let isHovered = hoveredItemID == item.id
@@ -387,7 +404,7 @@ public struct NotchDropComposerView: View {
                             .interpolation(.high)
                             .scaledToFill()
                     } else {
-                        Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
+                        Image(nsImage: Self.cachedFileIcon(for: item.url))
                             .resizable()
                             .interpolation(.high)
                             .scaledToFit()

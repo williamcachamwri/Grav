@@ -1294,7 +1294,7 @@ private struct AntigravityToolProgressBar: View {
                 .fill(accent.opacity(0.85))
                 .frame(height: 1.8)
         } else {
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            TimelineView(.animation) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 let period = 1.45
                 let phase = (t.truncatingRemainder(dividingBy: period)) / period
@@ -1335,13 +1335,32 @@ private struct SyntaxHighlightedJSONText: View {
     private static let literalColor = Color(red: 0.39, green: 0.82, blue: 1.00)
     private static let punctColor = Color.white.opacity(0.68)
 
+    @MainActor private static var highlightCache: [String: AttributedString] = [:]
+    @MainActor private static var highlightCacheOrder: [String] = []
+    private static let maxCacheEntries = 48
+
     var body: some View {
-        Text(attributedJSON)
+        Text(Self.cachedAttributedJSON(for: json))
             .font(.system(size: 10.5, weight: .regular, design: .monospaced))
             .lineSpacing(2.5)
     }
 
-    private var attributedJSON: AttributedString {
+    @MainActor
+    private static func cachedAttributedJSON(for json: String) -> AttributedString {
+        if let cached = highlightCache[json] {
+            return cached
+        }
+        let built = buildAttributedJSON(for: json)
+        highlightCache[json] = built
+        highlightCacheOrder.append(json)
+        if highlightCacheOrder.count > maxCacheEntries {
+            let evicted = highlightCacheOrder.removeFirst()
+            highlightCache.removeValue(forKey: evicted)
+        }
+        return built
+    }
+
+    private static func buildAttributedJSON(for json: String) -> AttributedString {
         var result = AttributedString()
         let lines = json.split(separator: "\n", omittingEmptySubsequences: false)
         for (idx, rawLine) in lines.enumerated() {
@@ -1353,7 +1372,7 @@ private struct SyntaxHighlightedJSONText: View {
         return result
     }
 
-    private func highlightLine(_ line: String) -> AttributedString {
+    private static func highlightLine(_ line: String) -> AttributedString {
         // Match `"key": value`
         if let colonRange = findTopLevelKeyColon(in: line) {
             let keyPart = String(line[..<colonRange.lowerBound])
@@ -1366,7 +1385,7 @@ private struct SyntaxHighlightedJSONText: View {
         return styleValue(line)
     }
 
-    private func findTopLevelKeyColon(in line: String) -> Range<String.Index>? {
+    private static func findTopLevelKeyColon(in line: String) -> Range<String.Index>? {
         var inQuotes = false
         var escaped = false
         var sawClosingQuote = false
@@ -1394,7 +1413,7 @@ private struct SyntaxHighlightedJSONText: View {
         return nil
     }
 
-    private func styleValue(_ value: String) -> AttributedString {
+    private static func styleValue(_ value: String) -> AttributedString {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
         let leadingSpaces = String(value.prefix { $0 == " " || $0 == "\t" })
         var trailingComma = ""
@@ -1421,7 +1440,7 @@ private struct SyntaxHighlightedJSONText: View {
         return out
     }
 
-    private func styled(_ text: String, color: Color) -> AttributedString {
+    private static func styled(_ text: String, color: Color) -> AttributedString {
         var a = AttributedString(text)
         a.foregroundColor = color
         return a

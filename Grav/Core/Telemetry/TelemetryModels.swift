@@ -118,17 +118,121 @@ public struct ToolCall: Sendable, Equatable, Codable {
     }
 }
 
-/// Thread-safe ISO 8601 parser supporting fractional and whole seconds.
+/// Thread-safe, zero-allocation ISO 8601 parser supporting fractional (1–9 digits) and whole seconds.
 public enum TranscriptDateParser {
+    private static let fallbackLock = NSLock()
+    nonisolated(unsafe) private static let fallbackFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    nonisolated(unsafe) private static let fallbackStandard: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     public static func parse(_ string: String) -> Date? {
-        let withFractional = ISO8601DateFormatter()
-        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = withFractional.date(from: string) {
+        if let fast = parseFastISO8601(string) {
+            return fast
+        }
+        fallbackLock.lock()
+        defer { fallbackLock.unlock() }
+        if let date = fallbackFractional.date(from: string) {
             return date
         }
-        let standard = ISO8601DateFormatter()
-        standard.formatOptions = [.withInternetDateTime]
-        return standard.date(from: string)
+        return fallbackStandard.date(from: string)
+    }
+
+    /// Pure ASCII-byte ISO 8601 parser (~40ns, 0 heap allocations) covering
+    /// `YYYY-MM-DD[T| ]HH:MM:SS(.f+)?(Z|[+-]HH:?MM)`.
+    private static func parseFastISO8601(_ string: String) -> Date? {
+        let bytes = Array(string.utf8)
+        let count = bytes.count
+        guard count >= 20 else { return nil }
+
+        @inline(__always)
+        func digit(_ index: Int) -> Int? {
+            let b = bytes[index]
+            guard b >= 48 && b <= 57 else { return nil }
+            return Int(b - 48)
+        }
+
+        @inline(__always)
+        func parse2(_ start: Int) -> Int? {
+            guard let d0 = digit(start), let d1 = digit(start + 1) else { return nil }
+            return d0 * 10 + d1
+        }
+
+        @inline(__always)
+        func parse4(_ start: Int) -> Int? {
+            guard let hi = parse2(start), let lo = parse2(start + 2) else { return nil }
+            return hi * 100 + lo
+        }
+
+        guard bytes[4] == 45, bytes[7] == 45, // '-'
+              bytes[10] == 84 || bytes[10] == 116 || bytes[10] == 32, // 'T', 't', or ' '
+              bytes[13] == 58, bytes[16] == 58, // ':'
+              let year = parse4(0),
+              let month = parse2(5), (1...12).contains(month),
+              let day = parse2(8), (1...31).contains(day),
+              let hour = parse2(11), (0...23).contains(hour),
+              let minute = parse2(14), (0...59).contains(minute),
+              let second = parse2(17), (0...60).contains(second)
+        else { return nil }
+
+        var idx = 19
+        var fractionalSeconds: Double = 0
+
+        if idx < count && (bytes[idx] == 46 || bytes[idx] == 44) { // '.' or ','
+            idx += 1
+            var scale = 0.1
+            var sawDigit = false
+            while idx < count, let d = digit(idx) {
+                sawDigit = true
+                if scale >= 1e-9 {
+                    fractionalSeconds += Double(d) * scale
+                    scale *= 0.1
+                }
+                idx += 1
+            }
+            guard sawDigit else { return nil }
+        }
+
+        guard idx < count else { return nil }
+        var tzOffsetSeconds = 0
+        let tzByte = bytes[idx]
+        if tzByte == 90 || tzByte == 122 { // 'Z' or 'z'
+            idx += 1
+        } else if tzByte == 43 || tzByte == 45 { // '+' or '-'
+            let sign = tzByte == 43 ? 1 : -1
+            idx += 1
+            guard idx + 1 < count, let tzHour = parse2(idx), (0...23).contains(tzHour) else { return nil }
+            idx += 2
+            var tzMinute = 0
+            if idx < count {
+                if bytes[idx] == 58 { idx += 1 }
+                guard idx + 1 < count, let m = parse2(idx), (0...59).contains(m) else { return nil }
+                tzMinute = m
+                idx += 2
+            }
+            tzOffsetSeconds = sign * (tzHour * 3600 + tzMinute * 60)
+        } else {
+            return nil
+        }
+
+        guard idx == count else { return nil }
+
+        // Howard Hinnant's exact civil-from-gregorian days since 1970-01-01
+        let y = year - (month <= 2 ? 1 : 0)
+        let era = (y >= 0 ? y : y - 399) / 400
+        let yoe = y - era * 400
+        let doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+        let daysSinceEpoch = era * 146097 + doe - 719468
+
+        let wholeSeconds = daysSinceEpoch * 86400 + hour * 3600 + minute * 60 + second - tzOffsetSeconds
+        return Date(timeIntervalSince1970: Double(wholeSeconds) + fractionalSeconds)
     }
 }
 

@@ -40,19 +40,54 @@ public struct FilesTelemetryTabView: View {
     @State private var copiedPathFileID: String?
     @State private var copyFeedbackTask: Task<Void, Never>?
 
-    private var filteredFileChanges: [FileChangeEvent] {
-        store.fileChanges.filter { activeFilter.matches($0) }
+    private struct FileFilterSummary {
+        let all: Int
+        let edited: Int
+        let created: Int
+        let deleted: Int
+
+        var shouldShowBar: Bool {
+            var distinctKinds = 0
+            if edited > 0 { distinctKinds += 1 }
+            if created > 0 { distinctKinds += 1 }
+            if deleted > 0 { distinctKinds += 1 }
+            return distinctKinds >= 2
+        }
+
+        func count(for filter: FileFilter) -> Int {
+            switch filter {
+            case .all: return all
+            case .edited: return edited
+            case .created: return created
+            case .deleted: return deleted
+            }
+        }
     }
 
-    private var shouldShowFilterBar: Bool {
-        let kinds = Set(store.fileChanges.map { event -> FileFilter in
+    private func computeFilterSummary(for changes: [FileChangeEvent]) -> FileFilterSummary {
+        var edited = 0
+        var created = 0
+        var deleted = 0
+        for event in changes {
             switch event.kind {
-            case .create: return .created
-            case .delete: return .deleted
-            case .edit, .overwrite: return .edited
+            case .create: created += 1
+            case .delete: deleted += 1
+            case .edit, .overwrite: edited += 1
             }
-        })
-        return kinds.count >= 2
+        }
+        return FileFilterSummary(
+            all: changes.count,
+            edited: edited,
+            created: created,
+            deleted: deleted
+        )
+    }
+
+    private func filteredChanges(from changes: [FileChangeEvent]) -> [FileChangeEvent] {
+        if activeFilter == .all {
+            return changes
+        }
+        return changes.filter { activeFilter.matches($0) }
     }
 
     public init(
@@ -72,12 +107,16 @@ public struct FilesTelemetryTabView: View {
             } else if store.fileChanges.isEmpty {
                 emptyState
             } else {
+                let allChanges = store.fileChanges
+                let summary = computeFilterSummary(for: allChanges)
+                let visibleChanges = filteredChanges(from: allChanges)
+
                 VStack(spacing: 4) {
-                    if shouldShowFilterBar {
+                    if summary.shouldShowBar {
                         HStack(spacing: 10) {
                             ForEach(FileFilter.allCases) { filter in
                                 let isSelected = activeFilter == filter
-                                let count = store.fileChanges.filter { filter.matches($0) }.count
+                                let count = summary.count(for: filter)
                                 if filter == .all || count > 0 {
                                     Button {
                                         if reduceMotion {
@@ -109,7 +148,7 @@ public struct FilesTelemetryTabView: View {
 
                     ScrollView(.vertical, showsIndicators: false) {
                         LazyVStack(spacing: 2) {
-                            ForEach(filteredFileChanges) { event in
+                            ForEach(visibleChanges) { event in
                                 fileRowCard(for: event)
                                     .transition(
                                         reduceMotion

@@ -1303,4 +1303,119 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(openedDuringActive, 0)
         XCTAssertTrue(reloaded.draftPrompt.isEmpty)
     }
+
+    func testFastISO8601DateParserAccuracy() throws {
+        // Exact epoch
+        let epoch = try XCTUnwrap(TranscriptDateParser.parse("1970-01-01T00:00:00Z"))
+        XCTAssertEqual(epoch.timeIntervalSince1970, 0, accuracy: 0.0001)
+
+        // Milliseconds + Z vs reference ISO8601DateFormatter
+        let refFormatter = ISO8601DateFormatter()
+        refFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let samples = [
+            "2026-11-23T17:33:44.125Z",
+            "2024-02-29T23:59:59.500Z", // Leap year
+            "2026-11-23T17:33:44.250+07:00",
+            "2026-01-01T00:00:00.000-05:00",
+        ]
+        for sample in samples {
+            let expected = try XCTUnwrap(refFormatter.date(from: sample))
+            let actual = try XCTUnwrap(TranscriptDateParser.parse(sample))
+            XCTAssertEqual(actual.timeIntervalSince1970, expected.timeIntervalSince1970, accuracy: 0.0005, "Mismatch for \(sample)")
+        }
+
+        // Microseconds (6 fractional digits) + whole seconds without fractional part
+        let micro = try XCTUnwrap(TranscriptDateParser.parse("2026-11-23T10:00:00.123456Z"))
+        let whole = try XCTUnwrap(TranscriptDateParser.parse("2026-11-23T10:00:00Z"))
+        XCTAssertEqual(micro.timeIntervalSince(whole), 0.123456, accuracy: 0.00001)
+
+        // Invalid string returns nil
+        XCTAssertNil(TranscriptDateParser.parse("not-a-date"))
+    }
+
+    func testBatchFullStepStreamingLookup() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("grav-batch-steps-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let fullURL = tmpDir.appendingPathComponent("transcript_full.jsonl")
+        let lines = (1...25).map { idx in
+            """
+            {"step_index":\(idx),"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-11-23T10:00:\(String(format: "%02d", idx))Z","content":"Full body for step \(idx)"}
+            """
+        }
+        try lines.joined(separator: "\n").write(to: fullURL, atomically: true, encoding: .utf8)
+
+        let wanted: Set<Int> = [2, 13, 25, 999]
+        let found = TranscriptTailer.readFullSteps(stepIndices: wanted, from: fullURL)
+
+        XCTAssertEqual(found.count, 3)
+        XCTAssertEqual(found[2]?.content, "Full body for step 2")
+        XCTAssertEqual(found[13]?.content, "Full body for step 13")
+        XCTAssertEqual(found[25]?.content, "Full body for step 25")
+        XCTAssertNil(found[999])
+        XCTAssertTrue(TranscriptTailer.readFullSteps(stepIndices: [], from: fullURL).isEmpty)
+    }
+
+    @MainActor
+    func testInstantCachedSessionSwitchingPreservesState() async throws {
+        let tmpRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("grav-switch-cache-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmpRoot) }
+
+        func makeSession(id: String, title: String, reply: String) throws -> ConversationSession {
+            let dir = tmpRoot.appendingPathComponent(id, isDirectory: true)
+            let logs = dir.appendingPathComponent(".system_generated/logs", isDirectory: true)
+            try FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
+            let transcript = """
+            {"step_index":1,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-11-23T10:00:00Z","content":"<USER_REQUEST>\\n\(title)\\n</USER_REQUEST>"}
+            {"step_index":2,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-11-23T10:00:03Z","model":"gemini-4-neon-high","input_tokens":1500,"output_tokens":250,"content":"\(reply)"}
+            """
+            try transcript.write(
+                to: logs.appendingPathComponent("transcript.jsonl"),
+                atomically: true,
+                encoding: .utf8
+            )
+            return ConversationSession(id: id, directoryURL: dir, title: title)
+        }
+
+        let sessionA = try makeSession(id: "sess-a", title: "Session Alpha", reply: "Alpha answer complete")
+        let sessionB = try makeSession(id: "sess-b", title: "Session Beta", reply: "Beta answer complete")
+
+        let detector = AntigravityAppDetector(brainDirectoryURL: tmpRoot)
+        let store = AntigravityTelemetryStore(appDetector: detector)
+        store.start()
+        defer { store.stop() }
+
+        // First cold load of Session A (runs hydration off main actor)
+        store.selectSession(sessionA)
+        for _ in 0..<50 {
+            if store.latestResponse?.text == "Alpha answer complete" { break }
+            try await Task.sleep(for: .milliseconds(15))
+        }
+        XCTAssertEqual(store.activeSession?.id, "sess-a")
+        XCTAssertEqual(store.latestResponse?.text, "Alpha answer complete")
+        XCTAssertEqual(store.tokenMetrics.outputTokens, 250)
+
+        // Cold load of Session B (snapshots A into RAM cache)
+        store.selectSession(sessionB)
+        for _ in 0..<50 {
+            if store.latestResponse?.text == "Beta answer complete" { break }
+            try await Task.sleep(for: .milliseconds(15))
+        }
+        XCTAssertEqual(store.activeSession?.id, "sess-b")
+        XCTAssertEqual(store.latestResponse?.text, "Beta answer complete")
+
+        // Instant cached switch back to Session A — must restore synchronously on the SAME main-actor tick!
+        let switchStart = CFAbsoluteTimeGetCurrent()
+        store.selectSession(sessionA)
+        let switchElapsedMs = (CFAbsoluteTimeGetCurrent() - switchStart) * 1000.0
+
+        XCTAssertEqual(store.activeSession?.id, "sess-a")
+        XCTAssertEqual(store.latestResponse?.text, "Alpha answer complete")
+        XCTAssertEqual(store.tokenMetrics.outputTokens, 250)
+        XCTAssertLessThan(switchElapsedMs, 25.0, "Cached chat switch should be near-instant (< 25ms), took \(switchElapsedMs)ms")
+    }
 }
