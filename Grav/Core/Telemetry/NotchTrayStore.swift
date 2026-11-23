@@ -109,14 +109,20 @@ public final class NotchTrayStore {
 
     /// True while any macOS drag carrying files/images is active anywhere on screen.
     public var isGlobalDragActive: Bool = false
-    /// True while a drag cursor carrying files/images is inside the Notch magnetic catch zone.
+    /// True while a drag cursor carrying files/images is inside the expanded Notch capture region (`564×324`).
     public var isGlobalDragNearNotch: Bool = false
+    /// Observable request flag so `ExpandedNotchView` mounts directly onto the Drop Shelf with zero notification race.
+    public var isTrayOpenRequested: Bool = false
     /// True while a drag cursor is directly hovering inside the Notch drop surface.
     public var isDropTargeted: Bool = false
+    /// True while hovering specifically over the left Instant-Send drop pod.
+    public var isQuickSendDropTargeted: Bool = false
     /// True when the active macOS drag pasteboard contains at least one image.
     public var globalDragHasImage: Bool = false
     /// Approximate item count on the active macOS drag pasteboard.
     public var globalDragItemCount: Int = 0
+    /// Timestamp of the most recent completed drop (keeps the Notch open after drop, matching `boring.notch`'s `dropEvent`).
+    public var lastDropCompletedAt: Date = .distantPast
     /// Incremented whenever an image/file is absorbed into the Notch (drives optical capture pulse).
     public private(set) var lastCapturePulseToken: Int = 0
 
@@ -195,6 +201,7 @@ public final class NotchTrayStore {
         }
         if added > 0 {
             lastCapturePulseToken += 1
+            lastDropCompletedAt = Date()
         }
         return added
     }

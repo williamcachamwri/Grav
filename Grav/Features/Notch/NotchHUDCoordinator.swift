@@ -3,6 +3,7 @@ import Foundation
 import NotchKit
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Coordinates Grav's NotchKit 1.3.0 interactive HUD lifecycle, display-adaptive geometry,
 /// `PreferencesStore` synchronization, and telemetry-driven peeks.
@@ -32,13 +33,20 @@ public final class NotchHUDCoordinator {
     @ObservationIgnored private var accessibilityObserver: NSObjectProtocol?
     @ObservationIgnored private var spotlightObserver: NSObjectProtocol?
     @ObservationIgnored private var trayObserver: NSObjectProtocol?
+    @ObservationIgnored private var globalMouseDownMonitor: Any?
     @ObservationIgnored private var globalDragMonitor: Any?
+    @ObservationIgnored private var globalMouseUpMonitor: Any?
     @ObservationIgnored private var localDragMonitor: Any?
-    @ObservationIgnored private var lastDragPasteboardChangeCount: Int = -1
-    @ObservationIgnored private var cachedDragHasPayload: Bool = false
+    @ObservationIgnored private var dragMouseDownChangeCount: Int = -1
+    @ObservationIgnored private var lastObservedDragChangeCount: Int = -1
+    @ObservationIgnored private var isMouseDragging: Bool = false
+    @ObservationIgnored private var isContentDragging: Bool = false
+    @ObservationIgnored private var hasEnteredNotchRegion: Bool = false
+    @ObservationIgnored private var openedByDragDetector: Bool = false
     @ObservationIgnored private var cachedDragHasImage: Bool = false
     @ObservationIgnored private var cachedDragItemCount: Int = 0
     @ObservationIgnored private var dragAutoCollapsePauseActive: Bool = false
+    @ObservationIgnored private var dragExitDebounceTask: Task<Void, Never>?
     @ObservationIgnored private var dragCleanupTask: Task<Void, Never>?
 
     // MARK: - Init
@@ -401,12 +409,13 @@ public final class NotchHUDCoordinator {
         }
     }
 
-    // MARK: - Global Drag-to-Notch Magnetic Image Capture Monitor
+    // MARK: - Global Drag-to-Notch Detector (Modeled on boring.notch's DragDetector)
 
     private static let supportedDragTypes: Set<NSPasteboard.PasteboardType> = [
         .fileURL,
         .png,
         .tiff,
+        NSPasteboard.PasteboardType(UTType.url.identifier),
         NSPasteboard.PasteboardType("NSFilenamesPboardType"),
         NSPasteboard.PasteboardType("public.image"),
         NSPasteboard.PasteboardType("public.jpeg"),
@@ -423,125 +432,243 @@ public final class NotchHUDCoordinator {
     private func startGlobalDragMonitor() {
         stopGlobalDragMonitor()
 
-        globalDragMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDragged, .leftMouseUp]
-        ) { [weak self] event in
+        // 1. Snapshot NSPasteboard(name: .drag).changeCount on every mouse-down (exact boring.notch pattern)
+        //    so normal window drags / text highlights never false-trigger from a stale drag pasteboard.
+        globalMouseDownMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown]
+        ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.handleSystemDragEvent(type: event.type)
+                self?.handleDragMouseDown()
             }
         }
 
+        // 2. Track global drag movement & check intersection with the FULL expanded Notch region (564×324pt).
+        globalDragMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDragged]
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleDragMouseMoved()
+            }
+        }
+
+        // 3. Clean up drag session on global mouse-up (keeping Notch open if a drop landed).
+        globalMouseUpMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseUp]
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleDragMouseUp()
+            }
+        }
+
+        // 4. Mirror locally so drags that enter our own window also settle cleanly on mouse-up.
         localDragMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.leftMouseDragged, .leftMouseUp]
+            matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
         ) { [weak self] event in
             Task { @MainActor [weak self] in
-                self?.handleSystemDragEvent(type: event.type)
+                switch event.type {
+                case .leftMouseDown: self?.handleDragMouseDown()
+                case .leftMouseDragged: self?.handleDragMouseMoved()
+                case .leftMouseUp: self?.handleDragMouseUp()
+                default: break
+                }
             }
             return event
         }
     }
 
     private func stopGlobalDragMonitor() {
+        dragExitDebounceTask?.cancel()
+        dragExitDebounceTask = nil
         dragCleanupTask?.cancel()
         dragCleanupTask = nil
-        if let globalDragMonitor {
-            NSEvent.removeMonitor(globalDragMonitor)
-            self.globalDragMonitor = nil
+        for monitor in [globalMouseDownMonitor, globalDragMonitor, globalMouseUpMonitor, localDragMonitor] {
+            if let monitor { NSEvent.removeMonitor(monitor) }
         }
-        if let localDragMonitor {
-            NSEvent.removeMonitor(localDragMonitor)
-            self.localDragMonitor = nil
-        }
+        globalMouseDownMonitor = nil
+        globalDragMonitor = nil
+        globalMouseUpMonitor = nil
+        localDragMonitor = nil
+        isMouseDragging = false
+        isContentDragging = false
+        hasEnteredNotchRegion = false
+        openedByDragDetector = false
         dragAutoCollapsePauseActive = false
-        NotchTrayStore.shared.isGlobalDragActive = false
-        NotchTrayStore.shared.isGlobalDragNearNotch = false
+        let tray = NotchTrayStore.shared
+        tray.isGlobalDragActive = false
+        tray.isGlobalDragNearNotch = false
     }
 
-    private func handleSystemDragEvent(type: NSEvent.EventType) {
+    private func handleDragMouseDown() {
+        let dragPB = NSPasteboard(name: .drag)
+        dragMouseDownChangeCount = dragPB.changeCount
+        isMouseDragging = true
+        isContentDragging = false
+        hasEnteredNotchRegion = false
+    }
+
+    private func handleDragMouseMoved() {
         guard isInstalled else { return }
         let tray = NotchTrayStore.shared
-
-        if type == .leftMouseUp {
-            guard tray.isGlobalDragActive || tray.isGlobalDragNearNotch || dragAutoCollapsePauseActive else { return }
-            dragCleanupTask?.cancel()
-            dragCleanupTask = Task { @MainActor [weak self] in
-                // Brief grace window so AppKit `performDragOperation` completes before hit-testing yields back.
-                try? await Task.sleep(for: .milliseconds(220))
-                guard !Task.isCancelled, let self else { return }
-                tray.isGlobalDragActive = false
-                tray.isGlobalDragNearNotch = false
-                tray.isDropTargeted = false
-                if self.dragAutoCollapsePauseActive {
-                    self.dragAutoCollapsePauseActive = false
-                    self.syncPreferences()
-                }
-            }
-            return
-        }
-
-        // Only inspect drag pasteboard contents when `changeCount` advances (O(1) hot path).
         let dragPB = NSPasteboard(name: .drag)
-        if dragPB.changeCount != lastDragPasteboardChangeCount {
-            lastDragPasteboardChangeCount = dragPB.changeCount
-            inspectDragPasteboard(dragPB)
+        let currentChangeCount = dragPB.changeCount
+
+        // Detect new drag content (works both when mouseDown was observed AND when drag originated in a sandboxed app).
+        let pasteboardAdvanced: Bool = {
+            if isMouseDragging {
+                return currentChangeCount != dragMouseDownChangeCount
+            }
+            return currentChangeCount != lastObservedDragChangeCount
+        }()
+
+        if pasteboardAdvanced && !isContentDragging {
+            lastObservedDragChangeCount = currentChangeCount
+            if inspectDragPasteboard(dragPB) {
+                isMouseDragging = true
+                isContentDragging = true
+                dragCleanupTask?.cancel()
+                tray.isGlobalDragActive = true
+                tray.globalDragHasImage = cachedDragHasImage
+                tray.globalDragItemCount = cachedDragItemCount
+            }
         }
 
-        guard cachedDragHasPayload else { return }
+        guard isContentDragging else { return }
 
-        dragCleanupTask?.cancel()
-        if !tray.isGlobalDragActive {
-            tray.isGlobalDragActive = true
-            tray.globalDragHasImage = cachedDragHasImage
-            tray.globalDragItemCount = cachedDragItemCount
-        }
+        // Exact boring.notch region geometry: the FULL expanded Notch footprint at top-center of screen!
+        let notchRegion = expandedNotchDragCaptureRegion()
+        guard notchRegion != .zero else { return }
 
         let mouse = NSEvent.mouseLocation
+        let containsMouse = notchRegion.contains(mouse)
+
+        if containsMouse && !hasEnteredNotchRegion {
+            hasEnteredNotchRegion = true
+            dragExitDebounceTask?.cancel()
+            handleDragEnteredNotchRegion()
+        } else if !containsMouse && hasEnteredNotchRegion {
+            hasEnteredNotchRegion = false
+            handleDragExitedNotchRegion()
+        }
+    }
+
+    private func handleDragEnteredNotchRegion() {
+        let tray = NotchTrayStore.shared
+        tray.isGlobalDragNearNotch = true
+        tray.isTrayOpenRequested = true
+
+        if !dragAutoCollapsePauseActive {
+            dragAutoCollapsePauseActive = true
+            syncPreferences()
+        }
+
+        if preferences.hapticsEnabled {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
+
+        if presenter.phase != .expanded {
+            openedByDragDetector = true
+            presenter.expand(reason: .programmatic)
+        }
+        NotificationCenter.default.post(name: .gravOpenNotchTray, object: self)
+    }
+
+    private func handleDragExitedNotchRegion() {
+        let tray = NotchTrayStore.shared
+        tray.isGlobalDragNearNotch = false
+        tray.isDropTargeted = false
+        tray.isQuickSendDropTargeted = false
+
+        // Smooth 480ms debounce just like boring.notch (`anyDropDebounceTask`) before collapsing.
+        dragExitDebounceTask?.cancel()
+        dragExitDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(480))
+            guard !Task.isCancelled, let self else { return }
+            let tray = NotchTrayStore.shared
+            guard !self.hasEnteredNotchRegion,
+                  !tray.isDropTargeted,
+                  !tray.isQuickSendDropTargeted
+            else { return }
+
+            let justDropped = Date().timeIntervalSince(tray.lastDropCompletedAt) < 1.5
+            if !justDropped && self.openedByDragDetector && !self.preferences.isNotchPinned {
+                self.openedByDragDetector = false
+                self.dragAutoCollapsePauseActive = false
+                self.syncPreferences()
+                self.presenter.collapse()
+            }
+        }
+    }
+
+    private func handleDragMouseUp() {
+        let wasActive = isMouseDragging || isContentDragging || hasEnteredNotchRegion || dragAutoCollapsePauseActive
+        isMouseDragging = false
+        isContentDragging = false
+        hasEnteredNotchRegion = false
+        dragMouseDownChangeCount = -1
+
+        guard wasActive else { return }
+
+        dragCleanupTask?.cancel()
+        dragCleanupTask = Task { @MainActor [weak self] in
+            // Allow AppKit `performDragOperation` to finish cleanly before releasing drag state.
+            try? await Task.sleep(for: .milliseconds(260))
+            guard !Task.isCancelled, let self else { return }
+            let tray = NotchTrayStore.shared
+            tray.isGlobalDragActive = false
+            tray.isGlobalDragNearNotch = false
+            tray.isDropTargeted = false
+            tray.isQuickSendDropTargeted = false
+
+            if self.dragAutoCollapsePauseActive {
+                self.dragAutoCollapsePauseActive = false
+                self.syncPreferences()
+            }
+
+            let justDropped = Date().timeIntervalSince(tray.lastDropCompletedAt) < 1.5
+            if justDropped {
+                // Keep Notch open on the Drop Shelf + Composer so user can type or send immediately!
+                self.openedByDragDetector = false
+            } else if self.openedByDragDetector && !self.preferences.isNotchPinned {
+                // User released mouse outside the Notch without dropping -> gracefully collapse.
+                self.openedByDragDetector = false
+                self.presenter.collapse()
+            }
+        }
+    }
+
+    /// Computes the top-center expanded Notch region (`564 × 324pt` + generous horizontal shoulder padding)
+    /// on the Notch's display, matching `boring.notch`'s `setupDragDetectorForScreen`.
+    private func expandedNotchDragCaptureRegion() -> CGRect {
         let screenFrame: NSRect = {
             if presenter.geometry.screenFrame != .zero {
                 return presenter.geometry.screenFrame
             }
             return (NSScreen.main ?? NSScreen.screens.first)?.frame ?? .zero
         }()
-        guard screenFrame != .zero else { return }
+        guard screenFrame != .zero else { return .zero }
 
-        let notchCenterX = presenter.geometry.notchRect != .zero
+        let captureWidth = Self.expandedPanelSize.width + 64
+        let captureHeight = Self.expandedPanelSize.height + 24
+        let centerX = presenter.geometry.notchRect != .zero
             ? presenter.geometry.notchRect.midX
             : screenFrame.midX
-        let withinCatchHorizontal = abs(mouse.x - notchCenterX) <= 340
-        let withinTopCatchZone = mouse.y >= screenFrame.maxY - 132
 
-        if withinTopCatchZone && withinCatchHorizontal {
-            if !tray.isGlobalDragNearNotch {
-                tray.isGlobalDragNearNotch = true
-                if !dragAutoCollapsePauseActive {
-                    dragAutoCollapsePauseActive = true
-                    syncPreferences()
-                }
-                if preferences.hapticsEnabled {
-                    NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-                }
-                if presenter.phase != .expanded {
-                    presenter.expand(reason: .programmatic)
-                }
-                NotificationCenter.default.post(name: .gravOpenNotchTray, object: self)
-            }
-        } else if tray.isGlobalDragNearNotch && mouse.y < screenFrame.maxY - 380 {
-            tray.isGlobalDragNearNotch = false
-            if dragAutoCollapsePauseActive {
-                dragAutoCollapsePauseActive = false
-                syncPreferences()
-            }
-        }
+        return CGRect(
+            x: centerX - (captureWidth / 2),
+            y: screenFrame.maxY - captureHeight,
+            width: captureWidth,
+            height: captureHeight
+        )
     }
 
-    private func inspectDragPasteboard(_ dragPB: NSPasteboard) {
+    @discardableResult
+    private func inspectDragPasteboard(_ dragPB: NSPasteboard) -> Bool {
         let types = Set(dragPB.types ?? [])
         let hasSupported = !types.isDisjoint(with: Self.supportedDragTypes)
-        cachedDragHasPayload = hasSupported
         guard hasSupported else {
             cachedDragHasImage = false
             cachedDragItemCount = 0
-            return
+            return false
         }
 
         if let urls = dragPB.readObjects(
@@ -552,7 +679,7 @@ public final class NotchHUDCoordinator {
             cachedDragHasImage = urls.contains {
                 Self.imageDragExtensions.contains($0.pathExtension.lowercased())
             }
-            return
+            return true
         }
 
         cachedDragItemCount = max(1, dragPB.pasteboardItems?.count ?? 1)
@@ -561,6 +688,7 @@ public final class NotchHUDCoordinator {
             || types.contains(NSPasteboard.PasteboardType("public.image"))
             || types.contains(NSPasteboard.PasteboardType("public.jpeg"))
             || types.contains(NSPasteboard.PasteboardType("public.heic"))
+        return true
     }
 
     private static func makeNotchMotion() -> NotchMotion {

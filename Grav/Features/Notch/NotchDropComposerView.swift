@@ -10,7 +10,7 @@ extension Notification.Name {
 
 /// Reliable AppKit `NSDraggingDestination` bridge that intercepts Finder files, macOS Screenshots,
 /// Safari/Chrome/Figma dragged images, `NSFilePromiseReceiver` promises, and text drops across
-/// the entire Notch surface — while passing 100% of clicks/typing/hover through when idle.
+/// the Notch drop zones — while passing 100% of clicks/typing/hover through when idle.
 public struct NotchNativeDropBridgeView: NSViewRepresentable {
     public var isCatchingActive: Bool
     public var onTargetedChanged: (Bool) -> Void
@@ -85,8 +85,7 @@ public final class NativeDropCatcherNSView: NSView {
         registerForDraggedTypes(types)
     }
 
-    /// Passes all normal mouse clicks, typing, scrolling, and hover straight through to SwiftUI
-    /// whenever no macOS file/image drag is active.
+    /// Passes normal clicks, typing, scrolling, and hover straight through to SwiftUI when not dragging.
     public override func hitTest(_ point: NSPoint) -> NSView? {
         guard isCatchingActive else { return nil }
         return super.hitTest(point)
@@ -113,12 +112,10 @@ public final class NativeDropCatcherNSView: NSView {
         onTargetedChanged?(false)
         let pb = sender.draggingPasteboard
 
-        // First try synchronous local URLs / PNG / TIFF / NSImage / text
         if let count = onDropPasteboard?(pb), count > 0 {
             return true
         }
 
-        // Fallback: NSFilePromiseReceiver (Photos.app, Safari dragged images, Mail)
         if let receivers = pb.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil) as? [NSFilePromiseReceiver],
            !receivers.isEmpty
         {
@@ -142,115 +139,15 @@ public final class NativeDropCatcherNSView: NSView {
     }
 }
 
-// MARK: - Living Optical Drop Aperture (Monochrome Leica Viewfinder Physics)
+// MARK: - boring.notch-Inspired Dual-Zone Drop Shelf + Obsidian Prompt Composer
 
-/// Pure-monochrome 120fps optical viewfinder takeover shown when dragging an image/file
-/// into the Notch capture bay. Zero dashed SaaS boxes, zero neon rainbow glow.
-public struct OpticalDropApertureOverlay: View {
-    public var isHovered: Bool
-    public var hasImage: Bool
-    public var itemCount: Int
-    public var targetLabel: String
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    public var body: some View {
-        ZStack {
-            // Subtle optical vignette directly on the obsidian Notch surface
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.black.opacity(0.92))
-
-            // 60/120fps monochrome viewfinder brackets & subtle harmonic refraction rings
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion)) { timeline in
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                Canvas { ctx, size in
-                    let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                    let phase = reduceMotion ? 0.0 : (t * 0.85).truncatingRemainder(dividingBy: 1.0)
-
-                    // Two whisper-thin contracting concentric optical rings (pulls image IN)
-                    for ringIndex in 0..<2 {
-                        let p = (phase + Double(ringIndex) * 0.5).truncatingRemainder(dividingBy: 1.0)
-                        let radius = CGFloat(1.0 - p) * (min(size.width, size.height) * 0.48) + 18
-                        let alpha = sin(p * .pi) * (isHovered ? 0.16 : 0.08)
-                        let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-                        ctx.stroke(
-                            Path(ellipseIn: rect),
-                            with: .color(Color.white.opacity(alpha)),
-                            lineWidth: isHovered ? 0.85 : 0.6
-                        )
-                    }
-
-                    // Four precision camera viewfinder corner brackets that pull inward when hovered
-                    let inset: CGFloat = isHovered ? 12 : 18
-                    let arm: CGFloat = isHovered ? 16 : 12
-                    let bracketColor = Color.white.opacity(isHovered ? 0.62 : 0.28)
-                    let lw: CGFloat = isHovered ? 1.25 : 0.9
-
-                    let corners: [(CGPoint, CGFloat, CGFloat)] = [
-                        (CGPoint(x: inset, y: inset), 1, 1),
-                        (CGPoint(x: size.width - inset, y: inset), -1, 1),
-                        (CGPoint(x: inset, y: size.height - inset), 1, -1),
-                        (CGPoint(x: size.width - inset, y: size.height - inset), -1, -1),
-                    ]
-                    for (pt, dx, dy) in corners {
-                        var path = Path()
-                        path.move(to: CGPoint(x: pt.x + dx * arm, y: pt.y))
-                        path.addLine(to: pt)
-                        path.addLine(to: CGPoint(x: pt.x, y: pt.y + dy * arm))
-                        ctx.stroke(
-                            path,
-                            with: .color(bracketColor),
-                            style: StrokeStyle(lineWidth: lw, lineCap: .round, lineJoin: .round)
-                        )
-                    }
-                }
-            }
-
-            // Minimal centered optical readout
-            VStack(spacing: 6) {
-                Image(systemName: hasImage ? "photo.on.rectangle.angled" : "arrow.down.doc")
-                    .font(.system(size: 18, weight: .light))
-                    .foregroundStyle(Color.white.opacity(isHovered ? 0.96 : 0.72))
-                    .scaleEffect(!reduceMotion && isHovered ? 1.12 : 1.0)
-                    .offset(y: !reduceMotion && isHovered ? -2 : 0)
-
-                Text(isHovered ? releaseHeadline : approachHeadline)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .tracking(-0.15)
-                    .foregroundStyle(Color.white.opacity(isHovered ? 0.96 : 0.78))
-
-                Text(targetLabel)
-                    .font(.system(size: 10, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.38))
-                    .lineLimit(1)
-            }
-            .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.24), value: isHovered)
-        }
-        .allowsHitTesting(false)
-    }
-
-    private var releaseHeadline: String {
-        if hasImage {
-            return itemCount > 1 ? "Release to attach \(itemCount) images" : "Release to attach image"
-        }
-        return itemCount > 1 ? "Release to stage \(itemCount) files" : "Release to stage file"
-    }
-
-    private var approachHeadline: String {
-        hasImage ? "Drop image onto Notch" : "Drop file onto Notch"
-    }
-}
-
-// MARK: - Obsidian Studio Composer (Zero Boxes, Tactile Instrument Craft)
-
-/// Flush, bespoke obsidian Notch Composer + Contact-Sheet Image Filmstrip + Horizontal Queue Rail.
-///
-/// Strict Anti-AI-Slop Industrial Craft:
-/// - ZERO dashed upload boxes, ZERO grey bordered TextField rectangles, ZERO generic button toolbars.
-/// - Seamless borderless typing directly on `#000000` with a center-expanding optical focus hairline.
-/// - Active-session vs New-chat sliding capsule switcher (`matchedGeometryEffect`).
-/// - Tactile studio Contact-Sheet filmstrip for dragged/pasted images (`⌘V` screenshot paste supported!).
-/// - Kinetic launch orb (`↑` / `⌘↵`) with spring-launch physics and haptic feedback.
+/// Dual-zone Notch Drop Shelf inspired by `TheBoredTeam/boring.notch` (`ShelfView` + `FileShareView` +
+/// `ShelfItemView`), paired with Grav's flush borderless Antigravity Prompt Composer:
+/// - **Left Square Pod (`Instant Send`)**: Drop an image/file straight onto it to immediately send/attach
+///   into your active Antigravity session (or click to browse local files).
+/// - **Right Expansive Shelf Bay (`Drop Shelf`)**: Drop 1 or many images/files to hold them on the Notch
+///   as crisp `52×52` rounded Finder/Studio thumbnails with native drag-out (`.draggable`), Quick Look / click
+///   to open, and pairing with the borderless prompt composer right underneath.
 public struct NotchDropComposerView: View {
     public var store: AntigravityTelemetryStore
     public var trayStore: NotchTrayStore
@@ -263,7 +160,9 @@ public struct NotchDropComposerView: View {
 
     @State private var hoveredItemID: String?
     @State private var hoveredQueueID: String?
-    @State private var isDropHovered: Bool = false
+    @State private var isQuickPodHovered: Bool = false
+    @State private var isQuickPodDropTargeted: Bool = false
+    @State private var isShelfDropTargeted: Bool = false
     @State private var isAccessibilityTrusted: Bool = false
     @State private var sendLaunchImpulse: Bool = false
     @State private var captureShutterFlash: Bool = false
@@ -290,90 +189,56 @@ public struct NotchDropComposerView: View {
             .replacingOccurrences(of: "</USER_REQUEST>", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if cleaned.isEmpty { return "Active Chat" }
-        return cleaned.count > 26 ? String(cleaned.prefix(25)) + "…" : cleaned
+        return cleaned.count > 24 ? String(cleaned.prefix(23)) + "…" : cleaned
     }
 
-    private var isApertureVisible: Bool {
-        trayStore.isGlobalDragNearNotch || trayStore.isDropTargeted || isDropHovered
+    private var isNativeDragCatching: Bool {
+        trayStore.isGlobalDragActive || trayStore.isGlobalDragNearNotch
+    }
+
+    private var shelfHeight: CGFloat {
+        trayStore.queuedPrompts.isEmpty ? 104 : 88
     }
 
     public var body: some View {
         @Bindable var tray = trayStore
 
-        ZStack {
-            // Primary flush obsidian studio composer
-            VStack(alignment: .leading, spacing: 9) {
-                targetAndToolsRail
+        VStack(alignment: .leading, spacing: 9) {
+            // 1. boring.notch-inspired Dual-Zone Drop Stage (Instant Send Pod + Expansive Drop Shelf)
+            HStack(spacing: 10) {
+                quickSendPod
+                    .frame(width: shelfHeight, height: shelfHeight)
 
-                if !trayStore.stagedItems.isEmpty {
-                    contactSheetFilmstrip
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .asymmetric(
-                                    insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .top)).combined(with: .offset(y: -4)),
-                                    removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
-                                )
-                        )
-                }
-
-                seamlessWritingCanvas(draftBinding: $tray.draftPrompt)
-
-                if !trayStore.queuedPrompts.isEmpty {
-                    horizontalQueueRail
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .opacity.combined(with: .move(edge: .bottom))
-                        )
-                }
-
-                Spacer(minLength: 0)
+                dropShelfBay
+                    .frame(maxWidth: .infinity, minHeight: shelfHeight, maxHeight: shelfHeight)
             }
-            .padding(.horizontal, 4)
-            .padding(.top, 2)
-            .opacity(isApertureVisible ? 0.14 : 1.0)
-            .scaleEffect(!reduceMotion && isApertureVisible ? 0.982 : 1.0)
-            .blur(radius: !reduceMotion && isApertureVisible ? 2.5 : 0)
-            .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.14), value: isApertureVisible)
-            .animation(reduceMotion ? nil : .spring(duration: 0.30, bounce: 0.16), value: trayStore.stagedItems.isEmpty)
-            .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.14), value: trayStore.queuedPrompts.isEmpty)
+            .animation(reduceMotion ? nil : .spring(duration: 0.30, bounce: 0.16), value: shelfHeight)
 
-            // Living Optical Drop Aperture Takeover (drag an image anywhere near the Notch!)
-            if isApertureVisible {
-                OpticalDropApertureOverlay(
-                    isHovered: trayStore.isDropTargeted || isDropHovered,
-                    hasImage: trayStore.globalDragHasImage || true,
-                    itemCount: max(1, trayStore.globalDragItemCount),
-                    targetLabel: trayStore.sendTarget == .activeSession
-                        ? "Attaching to \(activeSessionShortTitle)"
-                        : "Attaching to New Chat"
-                )
-                .transition(
-                    reduceMotion
-                        ? .opacity
-                        : .opacity.combined(with: .scale(scale: 0.96))
-                )
+            // 2. Seamless Borderless Obsidian Prompt Composer + Target Switcher
+            seamlessPromptSection(draftBinding: $tray.draftPrompt)
+
+            // 3. Compact Horizontal Queue Rail (only when prompts are queued)
+            if !trayStore.queuedPrompts.isEmpty {
+                horizontalQueueRail
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .opacity.combined(with: .move(edge: .bottom))
+                    )
             }
-
-            // Crisp 220ms monochrome optical shutter confirmation pulse on image capture
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .overlay {
             if captureShutterFlash {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.45), lineWidth: 1.0)
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onDrop(of: [.fileURL, .image, .plainText], isTargeted: $isDropHovered) { providers in
-            handleSwiftUIDrop(providers)
-        }
-        .onChange(of: isDropHovered) { _, targeted in
-            trayStore.isDropTargeted = targeted
-            if targeted {
-                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-            }
-        }
+        .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.14), value: trayStore.queuedPrompts.isEmpty)
         .onChange(of: trayStore.lastCapturePulseToken) { _, _ in
             triggerCaptureShutterPulse()
             activateNotchPanelForTyping()
@@ -392,175 +257,222 @@ public struct NotchDropComposerView: View {
             removeImagePasteMonitor()
             isInputFocused = false
             trayStore.isDropTargeted = false
+            trayStore.isQuickSendDropTargeted = false
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             isAccessibilityTrusted = trayStore.isAccessibilityTrustedForAutoSend
         }
     }
 
-    // MARK: - 1. Whisper-Quiet Target Switcher & Utility Rail
+    // MARK: - Left Pod: boring.notch FileShareView-Inspired Instant Send Pod
 
-    private var targetAndToolsRail: some View {
-        HStack(spacing: 8) {
-            // Sliding monochrome capsule switcher: Active Session vs New Chat
-            HStack(spacing: 2) {
-                targetChip(
-                    target: .activeSession,
-                    label: "Active",
-                    showLiveDot: true
-                )
-                targetChip(
-                    target: .newChat,
-                    label: "New",
-                    showLiveDot: false
-                )
-            }
-            .padding(2)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.045))
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.075), lineWidth: 0.5)
+    private var quickSendPod: some View {
+        let highlighted = isQuickPodDropTargeted || trayStore.isQuickSendDropTargeted
+        return ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(highlighted ? 0.11 : (isQuickPodHovered ? 0.065 : 0.04)),
+                            Color.white.opacity(highlighted ? 0.05 : 0.018),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
-            )
-
-            // Live session context subtitle (only in Active mode)
-            if trayStore.sendTarget == .activeSession {
-                Text(activeSessionShortTitle)
-                    .font(.system(size: 10.5, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.42))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .transition(.opacity)
-            } else {
-                Text("Starts fresh thread")
-                    .font(.system(size: 10.5, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.32))
-                    .lineLimit(1)
-                    .transition(.opacity)
-            }
-
-            Spacer(minLength: 6)
-
-            // If Active mode & Accessibility not granted yet, show a single quiet 1-click grant chip
-            if trayStore.sendTarget == .activeSession && !isAccessibilityTrusted {
-                Button {
-                    trayStore.requestAccessibilityPermission()
-                    onShowToast("Allow Grav in Accessibility for 1-click send")
-                } label: {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(GravPalette.fileEdit)
-                            .frame(width: 4.5, height: 4.5)
-                        Text("Enable Auto-Send")
-                            .font(.system(size: 9.5, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.66))
-                    }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.white.opacity(0.055))
-                    )
-                }
-                .buttonStyle(.plain)
-                .help("Grant Accessibility once so Grav types & sends straight into your active Antigravity session")
-            }
-
-            if trayStore.hasComposableContent {
-                Button {
-                    withAnimation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.10)) {
-                        trayStore.draftPrompt = ""
-                        trayStore.clearStagedItems()
-                    }
-                } label: {
-                    Text("Clear")
-                        .font(.system(size: 10, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.36))
-                }
-                .buttonStyle(.plain)
-            }
-
-            Button {
-                browseLocalFiles()
-            } label: {
-                Image(systemName: "photo.badge.plus")
-                    .font(.system(size: 11.5, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.54))
-                    .frame(width: 24, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Attach image or file (or drag onto Notch / ⌘V screenshot)")
-        }
-        .animation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.14), value: trayStore.sendTarget)
-    }
-
-    private func targetChip(target: AntigravitySendTarget, label: String, showLiveDot: Bool) -> some View {
-        let selected = trayStore.sendTarget == target
-        return Button {
-            GravOnboardingWelcomeAudio.shared.playButtonTap()
-            withAnimation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.16)) {
-                trayStore.sendTarget = target
-            }
-        } label: {
-            HStack(spacing: 4) {
-                if showLiveDot {
-                    Circle()
-                        .fill(selected ? GravPalette.emerald : Color.white.opacity(0.28))
-                        .frame(width: 4.5, height: 4.5)
-                }
-                Text(label)
-                    .font(.system(size: 10, weight: selected ? .semibold : .regular))
-                    .foregroundStyle(selected ? Color.white.opacity(0.95) : Color.white.opacity(0.45))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background {
-                if selected {
-                    Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.13))
-                        .matchedGeometryEffect(id: "composerTargetPill", in: targetSwitchNamespace)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - 2. Studio Contact-Sheet Image Filmstrip (Zero Empty Box!)
-
-    private var contactSheetFilmstrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Array(trayStore.stagedItems.enumerated()), id: \.element.id) { index, item in
-                    contactSheetFrame(for: item, index: index)
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .asymmetric(
-                                    insertion: .opacity.combined(with: .scale(scale: 0.72)).combined(with: .offset(y: -10)),
-                                    removal: .opacity.combined(with: .scale(scale: 0.80))
-                                )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(
+                            highlighted
+                                ? Color.white.opacity(0.75)
+                                : Color.white.opacity(isQuickPodHovered ? 0.22 : 0.11),
+                            style: StrokeStyle(
+                                lineWidth: highlighted ? 1.8 : 1.0,
+                                lineCap: .round,
+                                dash: highlighted ? [7, 5] : [6, 5]
+                            )
                         )
+                )
+
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(highlighted ? 0.18 : 0.085))
+                        .frame(width: 40, height: 40)
+
+                    Image(systemName: highlighted ? "paperplane.fill" : "arrow.up.forward.app")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(highlighted ? Color.white : Color.white.opacity(0.76))
+                        .scaleEffect(!reduceMotion && highlighted ? 1.12 : 1.0)
+                        .offset(y: !reduceMotion && highlighted ? -1.5 : 0)
                 }
+
+                Text(highlighted ? "Send Now" : "Quick Send")
+                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(highlighted ? 0.96 : 0.72))
+                    .lineLimit(1)
             }
-            .padding(.vertical, 5)
-            .padding(.horizontal, 2)
+            .padding(6)
+
+            // Native AppKit drop catcher dedicated to this Quick Send pod
+            NotchNativeDropBridgeView(
+                isCatchingActive: isNativeDragCatching,
+                onTargetedChanged: { targeted in
+                    isQuickPodDropTargeted = targeted
+                    trayStore.isQuickSendDropTargeted = targeted
+                    if targeted {
+                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                    }
+                },
+                onDropPasteboard: { pb in
+                    let added = trayStore.stageFromPasteboard(pb, allowPlainText: true)
+                    if added > 0 {
+                        completeDragDropAndQuickSend()
+                    }
+                    return added
+                },
+                onPromisedURLs: { urls in
+                    let added = trayStore.stageFileURLs(urls)
+                    if added > 0 {
+                        completeDragDropAndQuickSend()
+                    }
+                }
+            )
         }
-        .animation(reduceMotion ? nil : .spring(duration: 0.34, bounce: 0.22), value: trayStore.stagedItems.map(\.id))
+        .scaleEffect(!reduceMotion && highlighted ? 1.025 : 1.0)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture {
+            browseLocalFiles()
+        }
+        .onHover { hovering in
+            isQuickPodHovered = hovering
+        }
+        .onDrop(of: [.fileURL, .url, .image, .png, .tiff, .plainText, .data], isTargeted: $isQuickPodDropTargeted) { providers in
+            trayStore.handleDrop(providers: providers) {
+                completeDragDropAndQuickSend()
+            }
+        }
+        .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.74), value: highlighted)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isQuickPodHovered)
+        .help("Drop image/file to send immediately to Antigravity, or click to browse")
     }
 
-    private func contactSheetFrame(for item: StagedDropItem, index: Int) -> some View {
-        let isHovered = hoveredItemID == item.id
-        let organicTilt: Double = {
-            if reduceMotion || isHovered { return 0 }
-            let angles: [Double] = [-1.8, 1.3, -1.1, 1.6, -1.4, 1.0]
-            return angles[index % angles.count]
-        }()
+    // MARK: - Right Bay: boring.notch ShelfView-Inspired Expansive Drop Shelf
 
+    private var dropShelfBay: some View {
+        let targeted = isShelfDropTargeted || (trayStore.isDropTargeted && !trayStore.isQuickSendDropTargeted)
+        return ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(targeted ? 0.065 : 0.024))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(
+                            targeted
+                                ? Color.white.opacity(0.72)
+                                : Color.white.opacity(trayStore.isGlobalDragNearNotch ? 0.24 : 0.11),
+                            style: StrokeStyle(
+                                lineWidth: targeted ? 2.0 : 1.15,
+                                lineCap: .round,
+                                dash: [8, 6]
+                            )
+                        )
+                )
+
+            if trayStore.stagedItems.isEmpty {
+                // Clean boring.notch empty drop bay with live magnetic spring cue
+                VStack(spacing: 6) {
+                    Image(systemName: targeted ? "arrow.down.circle.fill" : "tray.and.arrow.down.fill")
+                        .symbolRenderingMode(.hierarchical)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(
+                            targeted ? Color.white : Color.white.opacity(0.78),
+                            Color.white.opacity(0.32)
+                        )
+                        .scaleEffect(!reduceMotion && targeted ? 1.14 : 1.0)
+                        .offset(y: !reduceMotion && targeted ? -2 : 0)
+
+                    Text(targeted ? releaseHeadline : "Drop images or files here")
+                        .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(targeted ? 0.96 : 0.66))
+
+                    Text("Stage with your prompt · drag out anytime · ⌘V paste")
+                        .font(.system(size: 9.5, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.30))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 12)
+            } else {
+                // boring.notch ShelfItemView-inspired horizontal thumbnail strip
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(trayStore.stagedItems) { item in
+                            shelfItemTile(item)
+                                .transition(
+                                    reduceMotion
+                                        ? .opacity
+                                        : .asymmetric(
+                                            insertion: .opacity.combined(with: .scale(scale: 0.78)).combined(with: .offset(y: -6)),
+                                            removal: .opacity.combined(with: .scale(scale: 0.82))
+                                        )
+                                )
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                }
+                .animation(reduceMotion ? nil : .spring(duration: 0.30, bounce: 0.18), value: trayStore.stagedItems.map(\.id))
+            }
+
+            // Native AppKit drop catcher covering the entire right shelf bay during active macOS drags
+            NotchNativeDropBridgeView(
+                isCatchingActive: isNativeDragCatching,
+                onTargetedChanged: { isOver in
+                    isShelfDropTargeted = isOver
+                    trayStore.isDropTargeted = isOver
+                    if isOver {
+                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                    }
+                },
+                onDropPasteboard: { pb in
+                    let added = trayStore.stageFromPasteboard(pb, allowPlainText: true)
+                    if added > 0 {
+                        completeShelfStage(count: added)
+                    }
+                    return added
+                },
+                onPromisedURLs: { urls in
+                    let added = trayStore.stageFileURLs(urls)
+                    if added > 0 {
+                        completeShelfStage(count: added)
+                    }
+                }
+            )
+        }
+        .scaleEffect(!reduceMotion && targeted ? 1.012 : 1.0)
+        .onDrop(of: [.fileURL, .url, .image, .png, .tiff, .utf8PlainText, .plainText, .data], isTargeted: $isShelfDropTargeted) { providers in
+            trayStore.handleDrop(providers: providers) {
+                completeShelfStage(count: 1)
+            }
+        }
+        .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.76), value: targeted)
+    }
+
+    private var releaseHeadline: String {
+        if trayStore.globalDragHasImage {
+            return trayStore.globalDragItemCount > 1
+                ? "Release to stage \(trayStore.globalDragItemCount) images"
+                : "Release to stage image"
+        }
+        return trayStore.globalDragItemCount > 1
+            ? "Release to stage \(trayStore.globalDragItemCount) files"
+            : "Release to stage file"
+    }
+
+    /// Clean `boring.notch` `ShelfItemView`-inspired rounded tile (`50×50` thumbnail + centered filename + native drag-out).
+    private func shelfItemTile(_ item: StagedDropItem) -> some View {
+        let isHovered = hoveredItemID == item.id
         return ZStack(alignment: .topTrailing) {
-            ZStack(alignment: .bottomLeading) {
+            VStack(alignment: .center, spacing: 4) {
                 Group {
                     if item.isImage, let img = trayStore.thumbnails[item.id] {
                         Image(nsImage: img)
@@ -568,54 +480,40 @@ public struct NotchDropComposerView: View {
                             .interpolation(.high)
                             .scaledToFill()
                     } else {
-                        ZStack {
-                            Color.white.opacity(0.05)
-                            Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
-                                .resizable()
-                                .interpolation(.high)
-                                .scaledToFit()
-                                .frame(width: 22, height: 22)
-                        }
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
+                            .resizable()
+                            .interpolation(.high)
+                            .scaledToFit()
+                            .padding(5)
                     }
                 }
-                .frame(width: 62, height: 44)
-                .clipped()
+                .frame(width: 52, height: 46)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(isHovered ? 0.34 : 0.12), lineWidth: 0.6)
+                )
+                .shadow(color: Color.black.opacity(0.35), radius: isHovered ? 6 : 3, y: 2)
 
-                // Whisper bottom scrim with filename only when hovered (keeps image 100% pure at rest!)
-                if isHovered || !item.isImage {
-                    LinearGradient(
-                        colors: [.clear, Color.black.opacity(0.78)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 18)
-
-                    Text(item.name)
-                        .font(.system(size: 8, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.92))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .padding(.horizontal, 4)
-                        .padding(.bottom, 2.5)
-                }
+                Text(item.name)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(isHovered ? 0.96 : 0.72))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(width: 68)
             }
-            .frame(width: 62, height: 44)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(
-                        Color.white.opacity(isHovered ? 0.38 : 0.12),
-                        lineWidth: isHovered ? 0.9 : 0.5
-                    )
+            .padding(.horizontal, 5)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(Color.white.opacity(isHovered ? 0.085 : 0.0))
             )
-            .shadow(
-                color: Color.black.opacity(isHovered ? 0.55 : 0.26),
-                radius: isHovered ? 8 : 3,
-                y: isHovered ? 4 : 1.5
-            )
-            .rotationEffect(.degrees(organicTilt))
-            .scaleEffect(!reduceMotion && isHovered ? 1.08 : 1.0)
-            .offset(y: !reduceMotion && isHovered ? -3 : 0)
+            .scaleEffect(!reduceMotion && isHovered ? 1.04 : 1.0)
+            .offset(y: !reduceMotion && isHovered ? -1.5 : 0)
             .draggable(item.url)
             .onTapGesture {
                 NSWorkspace.shared.open(item.url)
@@ -624,7 +522,7 @@ public struct NotchDropComposerView: View {
             if isHovered {
                 Button {
                     GravOnboardingWelcomeAudio.shared.playButtonTap()
-                    withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.14)) {
+                    withAnimation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.14)) {
                         trayStore.removeStagedItem(id: item.id)
                     }
                 } label: {
@@ -634,41 +532,103 @@ public struct NotchDropComposerView: View {
                         .frame(width: 15, height: 15)
                         .background(
                             Circle()
-                                .fill(Color(red: 0.11, green: 0.12, blue: 0.14))
+                                .fill(Color(red: 0.12, green: 0.13, blue: 0.15))
                                 .overlay(
                                     Circle().strokeBorder(Color.white.opacity(0.28), lineWidth: 0.6)
                                 )
                         )
                 }
                 .buttonStyle(.plain)
-                .offset(x: 4, y: -4)
+                .offset(x: 2, y: -2)
                 .transition(.scale(scale: 0.65).combined(with: .opacity))
             }
         }
         .onHover { hovering in
-            withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.20)) {
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.18)) {
                 hoveredItemID = hovering ? item.id : (hoveredItemID == item.id ? nil : hoveredItemID)
             }
         }
-        .help("\(item.name) — Drag out or click to open")
+        .help("\(item.name) — Drag out to any app or click to open")
     }
 
-    // MARK: - 3. Seamless Borderless Typing Canvas + Kinetic Launch Orb
+    // MARK: - 2. Seamless Borderless Obsidian Prompt Composer
 
-    private func seamlessWritingCanvas(draftBinding: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .bottom, spacing: 10) {
+    private func seamlessPromptSection(draftBinding: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .center, spacing: 8) {
+                // Active Session vs New Chat sliding pill
+                HStack(spacing: 2) {
+                    targetChip(target: .activeSession, label: "Active", showLiveDot: true)
+                    targetChip(target: .newChat, label: "New", showLiveDot: false)
+                }
+                .padding(2)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.045))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.075), lineWidth: 0.5)
+                        )
+                )
+
+                Text(trayStore.sendTarget == .activeSession ? activeSessionShortTitle : "New thread")
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.38))
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                if trayStore.sendTarget == .activeSession && !isAccessibilityTrusted {
+                    Button {
+                        trayStore.requestAccessibilityPermission()
+                        onShowToast("Allow Grav in Accessibility for 1-click auto-send")
+                    } label: {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(GravPalette.fileEdit)
+                                .frame(width: 4.5, height: 4.5)
+                            Text("Auto-Send")
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundStyle(Color.white.opacity(0.68))
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2.5)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.06))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Grant macOS Accessibility once so Grav pastes & submits straight into your active Antigravity session")
+                }
+
+                if trayStore.hasComposableContent {
+                    Button {
+                        withAnimation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.10)) {
+                            trayStore.draftPrompt = ""
+                            trayStore.clearStagedItems()
+                        }
+                    } label: {
+                        Text("Clear")
+                            .font(.system(size: 9.5, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.36))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            HStack(alignment: .bottom, spacing: 8) {
                 TextField(
                     composerPlaceholder,
                     text: draftBinding,
                     axis: .vertical
                 )
                 .textFieldStyle(.plain)
-                .font(.system(size: 13, weight: .regular))
+                .font(.system(size: 12.5, weight: .regular))
                 .foregroundStyle(Color.white.opacity(0.95))
-                .lineLimit(1...4)
+                .lineLimit(1...2)
                 .focused($promptFieldFocused)
-                .padding(.vertical, 4)
+                .padding(.vertical, 3)
                 .onSubmit {
                     if NSEvent.modifierFlags.contains(.command) {
                         sendToAntigravityChat()
@@ -677,19 +637,18 @@ public struct NotchDropComposerView: View {
                     }
                 }
 
-                // Inline kinetic controls flush with text baseline (zero chunky toolbar)
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     // Queue button (↵)
                     Button {
                         queueCurrentDraft()
                     } label: {
                         Image(systemName: "text.badge.plus")
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(trayStore.hasComposableContent ? 0.72 : 0.22))
-                            .frame(width: 26, height: 26)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(trayStore.hasComposableContent ? 0.74 : 0.24))
+                            .frame(width: 24, height: 24)
                             .background(
                                 Circle()
-                                    .fill(Color.white.opacity(trayStore.hasComposableContent ? 0.065 : 0.025))
+                                    .fill(Color.white.opacity(trayStore.hasComposableContent ? 0.07 : 0.025))
                                     .overlay(
                                         Circle().strokeBorder(
                                             Color.white.opacity(trayStore.hasComposableContent ? 0.12 : 0.05),
@@ -722,7 +681,7 @@ public struct NotchDropComposerView: View {
                                 )
 
                             Image(systemName: "arrow.up")
-                                .font(.system(size: 11.5, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(
                                     trayStore.hasComposableContent
                                         ? Color.black.opacity(0.94)
@@ -731,7 +690,7 @@ public struct NotchDropComposerView: View {
                                 .offset(y: sendLaunchImpulse ? -13 : 0)
                                 .opacity(sendLaunchImpulse ? 0 : 1)
                         }
-                        .frame(width: 28, height: 28)
+                        .frame(width: 26, height: 26)
                         .clipShape(Circle())
                         .scaleEffect(!reduceMotion && trayStore.hasComposableContent ? 1.0 : 0.94)
                     }
@@ -744,7 +703,7 @@ public struct NotchDropComposerView: View {
                             : "Open New Chat with prompt (⌘↵)"
                     )
                 }
-                .animation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.22), value: trayStore.hasComposableContent)
+                .animation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.20), value: trayStore.hasComposableContent)
             }
 
             // Center-expanding optical hairline directly beneath the typing baseline
@@ -764,24 +723,40 @@ public struct NotchDropComposerView: View {
                     .frame(height: 0.85)
                     .scaleEffect(x: promptFieldFocused ? 1.0 : 0.001, y: 1.0, anchor: .center)
                     .opacity(promptFieldFocused ? 1.0 : 0.0)
-                    .animation(reduceMotion ? nil : .spring(duration: 0.36, bounce: 0.08), value: promptFieldFocused)
+                    .animation(reduceMotion ? nil : .spring(duration: 0.34, bounce: 0.08), value: promptFieldFocused)
             }
+        }
+    }
 
-            // Whisper keyboard legend (only when empty & no staged items — keeps surface calm)
-            if !trayStore.hasComposableContent && trayStore.queuedPrompts.isEmpty {
-                HStack(spacing: 10) {
-                    Text("Drag any image to the Notch or paste ⌘V")
-                        .font(.system(size: 10, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.28))
-
-                    Spacer(minLength: 4)
-
-                    Text("↵ Queue  ·  ⌘↵ Send")
-                        .font(.system(size: 9.5, weight: .regular, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.24))
+    private func targetChip(target: AntigravitySendTarget, label: String, showLiveDot: Bool) -> some View {
+        let selected = trayStore.sendTarget == target
+        return Button {
+            GravOnboardingWelcomeAudio.shared.playButtonTap()
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.16)) {
+                trayStore.sendTarget = target
+            }
+        } label: {
+            HStack(spacing: 3.5) {
+                if showLiveDot {
+                    Circle()
+                        .fill(selected ? GravPalette.emerald : Color.white.opacity(0.28))
+                        .frame(width: 4, height: 4)
+                }
+                Text(label)
+                    .font(.system(size: 9.5, weight: selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? Color.white.opacity(0.95) : Color.white.opacity(0.45))
+            }
+            .padding(.horizontal, 7.5)
+            .padding(.vertical, 2.5)
+            .background {
+                if selected {
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.13))
+                        .matchedGeometryEffect(id: "composerTargetPill", in: targetSwitchNamespace)
                 }
             }
         }
+        .buttonStyle(.plain)
     }
 
     private var composerPlaceholder: String {
@@ -789,21 +764,18 @@ public struct NotchDropComposerView: View {
         let fileCount = trayStore.stagedItems.count
         if imageCount > 0 {
             return imageCount == 1
-                ? "Ask Antigravity about this image…"
-                : "Ask Antigravity about these \(imageCount) images…"
+                ? "Ask Antigravity about this image… (⌘↵ send)"
+                : "Ask Antigravity about these \(imageCount) images… (⌘↵ send)"
         }
         if fileCount > 0 {
-            return "Describe what to do with \(fileCount) staged file\(fileCount == 1 ? "" : "s")…"
-        }
-        if store.state.isActive {
-            return "Draft next instruction while Antigravity works…"
+            return "Write instruction for \(fileCount) file\(fileCount == 1 ? "" : "s")… (⌘↵ send)"
         }
         return trayStore.sendTarget == .activeSession
-            ? "Message \(activeSessionShortTitle)…"
-            : "Start a new Antigravity conversation…"
+            ? "Message \(activeSessionShortTitle)… (↵ queue · ⌘↵ send)"
+            : "Start a new conversation… (↵ queue · ⌘↵ send)"
     }
 
-    // MARK: - 4. Horizontal Tactile Queue Rail (Zero Clunky Vertical Table)
+    // MARK: - 3. Compact Horizontal Queue Rail
 
     private var horizontalQueueRail: some View {
         HStack(spacing: 6) {
@@ -841,14 +813,14 @@ public struct NotchDropComposerView: View {
                 .foregroundStyle(Color.white.opacity(0.38))
 
             Text(item.text)
-                .font(.system(size: 10.5, weight: .regular))
+                .font(.system(size: 10, weight: .regular))
                 .foregroundStyle(Color.white.opacity(isHovered ? 0.96 : 0.74))
                 .lineLimit(1)
-                .frame(maxWidth: 168, alignment: .leading)
+                .frame(maxWidth: 160, alignment: .leading)
 
             if !item.attachedPaths.isEmpty {
                 Image(systemName: "photo")
-                    .font(.system(size: 8.5, weight: .medium))
+                    .font(.system(size: 8, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.45))
             }
 
@@ -866,7 +838,7 @@ public struct NotchDropComposerView: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 4.5)
+        .padding(.vertical, 4)
         .background(
             Capsule(style: .continuous)
                 .fill(Color.white.opacity(isHovered ? 0.11 : 0.048))
@@ -889,13 +861,27 @@ public struct NotchDropComposerView: View {
 
     // MARK: - Actions & Micro-Animations
 
-    private func handleSwiftUIDrop(_ providers: [NSItemProvider]) -> Bool {
-        trayStore.handleDrop(providers: providers) {
-            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-            GravOnboardingWelcomeAudio.shared.playButtonTap()
-            onShowToast("Attached to Notch")
-            activateNotchPanelForTyping()
-        }
+    private func completeShelfStage(count: Int) {
+        trayStore.isGlobalDragActive = false
+        trayStore.isGlobalDragNearNotch = false
+        trayStore.isDropTargeted = false
+        trayStore.isQuickSendDropTargeted = false
+        isShelfDropTargeted = false
+        isQuickPodDropTargeted = false
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        GravOnboardingWelcomeAudio.shared.playButtonTap()
+        onShowToast(count == 1 ? "Staged on Notch Shelf" : "Staged \(count) items on Shelf")
+        activateNotchPanelForTyping()
+    }
+
+    private func completeDragDropAndQuickSend() {
+        trayStore.isGlobalDragActive = false
+        trayStore.isGlobalDragNearNotch = false
+        trayStore.isDropTargeted = false
+        trayStore.isQuickSendDropTargeted = false
+        isShelfDropTargeted = false
+        isQuickPodDropTargeted = false
+        sendToAntigravityChat()
     }
 
     private func triggerCaptureShutterPulse() {
@@ -965,7 +951,7 @@ public struct NotchDropComposerView: View {
             onShowToast("Sent to \(activeSessionShortTitle)")
         case .copiedToActiveSessionNeedsAccessibility:
             isAccessibilityTrusted = false
-            onShowToast("Focused active chat · Press ⌘V (or enable Auto-Send)")
+            onShowToast("Focused active chat · Press ⌘V (or tap Auto-Send)")
         case .openedNewChatDeepLink:
             onShowToast("Opened in new Antigravity chat")
         case .copiedToClipboardFallback:
@@ -979,11 +965,11 @@ public struct NotchDropComposerView: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
         panel.title = "Attach images or files to Grav Notch"
-        panel.prompt = "Attach"
+        panel.prompt = "Stage"
         if panel.runModal() == .OK, !panel.urls.isEmpty {
             let added = trayStore.stageFileURLs(panel.urls)
             if added > 0 {
-                onShowToast("Attached \(added) item\(added == 1 ? "" : "s")")
+                onShowToast("Staged \(added) item\(added == 1 ? "" : "s")")
             }
             activateNotchPanelForTyping()
         }

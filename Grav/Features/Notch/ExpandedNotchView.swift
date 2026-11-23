@@ -173,19 +173,17 @@ public struct ExpandedNotchView: View {
                 .allowsHitTesting(false)
             }
 
-            // Full-surface native AppKit NSDraggingDestination catcher (active ONLY during macOS drags
-            // so normal clicks, typing, scrolling, and hover pass straight through at 100% fidelity).
+            // Full-surface native AppKit NSDraggingDestination catcher when viewing other tabs
+            // (when `isShowingTray` is open, `NotchDropComposerView`'s dedicated left/right pods handle drops directly).
             NotchNativeDropBridgeView(
-                isCatchingActive: trayStore.isGlobalDragActive || trayStore.isGlobalDragNearNotch,
+                isCatchingActive: !isShowingTray && (trayStore.isGlobalDragActive || trayStore.isGlobalDragNearNotch),
                 onTargetedChanged: { targeted in
                     trayStore.isDropTargeted = targeted
                     if targeted {
                         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-                        if !isShowingTray {
-                            withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
-                                isShowingProfile = false
-                                isShowingTray = true
-                            }
+                        withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                            isShowingProfile = false
+                            isShowingTray = true
                         }
                     }
                 },
@@ -222,6 +220,22 @@ public struct ExpandedNotchView: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            if trayStore.isTrayOpenRequested || trayStore.isGlobalDragNearNotch {
+                isShowingProfile = false
+                isShowingTray = true
+                trayStore.isTrayOpenRequested = false
+            }
+        }
+        .onChange(of: trayStore.isTrayOpenRequested) { _, requested in
+            if requested {
+                withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                    isShowingProfile = false
+                    isShowingTray = true
+                }
+                trayStore.isTrayOpenRequested = false
+            }
         }
         .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: statusBannerMessage)
         .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: store.activeRadarAlert?.id)
