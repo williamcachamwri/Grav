@@ -92,6 +92,7 @@
 		D082C33C7C4009031102CCB7 /* LiquidGlassLighting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114265FE26497E3C5F2F803E /* LiquidGlassLighting.swift */; };
 		D349EE9BABF922ED9F60B2B9 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2701B799B195D18555809F2 /* MenuBarController.swift */; };
 		D5BC543BAE973137B730FC0A /* GravTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED4B2A0D94552FAB23AB341 /* GravTokens.swift */; };
+		D88A3AFBAC1F8328ABA2A58B /* NotchTokenFlowDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8B659AD20BB27747AFD2BE1 /* NotchTokenFlowDisplay.swift */; };
 		DD0ABF5CABD8F77A3D6574B9 /* GeneralSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72CD0B6FECEE6F1844388B13 /* GeneralSettingsPane.swift */; };
 		DD268DF32CD8F6632534C956 /* LiveTelemetryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FCDFDB2CAD4122B82BB0F56 /* LiveTelemetryTabView.swift */; };
 		E031E6062709194FAB3D56F2 /* GravMotionSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25A9D7374949A50509394FF1 /* GravMotionSpec.swift */; };
@@ -191,6 +192,7 @@
 		A189B95D103E3C1285184C3F /* FilesTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesTelemetryTabView.swift; sourceTree = "<group>"; };
 		A1F7C8358277B92CA02CE052 /* GravMockDesktopCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravMockDesktopCanvas.swift; sourceTree = "<group>"; };
 		A7C6FC432DEB452FF3AABBC2 /* ExpandedNotchHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpandedNotchHeaderView.swift; sourceTree = "<group>"; };
+		A8B659AD20BB27747AFD2BE1 /* NotchTokenFlowDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchTokenFlowDisplay.swift; sourceTree = "<group>"; };
 		ABF01EFE3FC18E5E14F2F396 /* DesktopPetOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopPetOverlayView.swift; sourceTree = "<group>"; };
 		AF72E703711EF7C02C996F6F /* GravOnboardingChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingChrome.swift; sourceTree = "<group>"; };
 		B0C0F3062C170F4F485AC076 /* TerminalTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalTelemetryTabView.swift; sourceTree = "<group>"; };
@@ -362,6 +364,7 @@
 				7F8016017308216597D832BE /* NotchHUDCoordinator.swift */,
 				943F323D0FFF409F539D13E7 /* NotchSurfacePrimitives.swift */,
 				8AD2BFC0EB482A7BD92E7778 /* NotchTab.swift */,
+				A8B659AD20BB27747AFD2BE1 /* NotchTokenFlowDisplay.swift */,
 				0FE40147E8C4DAAED64BB1E5 /* OpticalMotionHelpers.swift */,
 				FFB7B35F20C3023A4D53AA2D /* ResponseTelemetryTabView.swift */,
 				E7EE32D22339B9911813728D /* SegmentedModeRail.swift */,
@@ -655,6 +658,7 @@
 				8CF109A20EDC98490D24E345 /* NotchHUDSettingsPane.swift in Sources */,
 				F500474F3FB13A751605CEF5 /* NotchSurfacePrimitives.swift in Sources */,
 				FBAECBE5803734C0BAEB64EA /* NotchTab.swift in Sources */,
+				D88A3AFBAC1F8328ABA2A58B /* NotchTokenFlowDisplay.swift in Sources */,
 				3BB9FFAFC1669FEB1FA2B771 /* OnboardingWindowController.swift in Sources */,
 				423500D769BA183722D748AF /* OpticalMotionHelpers.swift in Sources */,
 				C890187EDA513327457EFE31 /* PreferencesStore.swift in Sources */,

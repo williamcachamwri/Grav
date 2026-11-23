@@ -332,12 +332,12 @@ public struct ExpandedNotchHeaderView: View {
             GravOnboardingWelcomeAudio.shared.playButtonTap()
             isShowingMetricsPopover.toggle()
         } label: {
-            HStack(spacing: 7) {
-                tokenPair(prefix: "↓", value: inputText, color: Color.white.opacity(0.54))
-                tokenPair(prefix: "↑", value: outputText, color: GravPalette.glacialCyan.opacity(0.92))
-            }
-            .padding(.horizontal, 6)
-            .frame(height: 22)
+            NotchTokenFlowDisplay(
+                metrics: metrics,
+                isStreaming: isActivelyStreaming,
+                style: .expandedHeader,
+                reduceMotion: reduceMotion
+            )
         }
         .buttonStyle(NotchChromeButtonStyle(isActive: isShowingMetricsPopover, cornerRadius: 6))
         .fixedSize(horizontal: true, vertical: false)

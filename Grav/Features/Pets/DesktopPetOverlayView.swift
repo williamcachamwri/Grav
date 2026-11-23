@@ -21,6 +21,9 @@ struct DesktopPetOverlayView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var isHoveringStage = false
+    @State private var isHoveringBubble = false
+    @State private var isHoverActive = false
+    @State private var hoverExitTask: Task<Void, Never>?
     @State private var isDraggingWindow = false
     @State private var isResizing = false
     @State private var resizeStartSize: Double = 84
@@ -47,11 +50,15 @@ struct DesktopPetOverlayView: View {
                     now: context.date
                 )
 
-                VStack(spacing: 6) {
+                VStack(spacing: 4) {
                     petCharacterStage(pet: pet, animState: animState)
 
                     if shouldShowStatusBubble {
                         liveSpeechBubble(animState: animState)
+                            .onHover { hovering in
+                                isHoveringBubble = hovering
+                                reconcileHoverState()
+                            }
                             .transition(
                                 reduceMotion
                                     ? .opacity
@@ -67,9 +74,12 @@ struct DesktopPetOverlayView: View {
                 .padding(.top, 8)
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .animation(reduceMotion ? nil : .spring(duration: 0.30, bounce: 0.16), value: shouldShowStatusBubble)
+                .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.14), value: shouldShowStatusBubble)
                 .onChange(of: animState) { _, newState in
                     updatePatrolMotion(for: newState)
+                }
+                .onDisappear {
+                    hoverExitTask?.cancel()
                 }
             }
         }
@@ -86,7 +96,7 @@ struct DesktopPetOverlayView: View {
             HStack(spacing: 4) {
                 Spacer(minLength: 0)
 
-                if isHoveringStage && !isDraggingWindow {
+                if isHoverActive && !isDraggingWindow {
                     HStack(spacing: 4) {
                         Button {
                             if preferences.playSounds {
@@ -172,7 +182,7 @@ struct DesktopPetOverlayView: View {
                 .gesture(windowDragGesture)
 
                 // Corner resize handle cleanly tucked at bottom-right OUTSIDE sprite bounds
-                if isHoveringStage && !isDraggingWindow {
+                if isHoverActive && !isDraggingWindow {
                     VStack {
                         Spacer()
                         HStack {
@@ -199,12 +209,31 @@ struct DesktopPetOverlayView: View {
         }
         .offset(x: reduceMotion ? 0 : patrolOffsetX)
         .onHover { hovering in
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
-                isHoveringStage = hovering
-            }
+            isHoveringStage = hovering
+            reconcileHoverState()
         }
         .contextMenu {
             petContextMenuItems
+        }
+    }
+
+    private func reconcileHoverState() {
+        hoverExitTask?.cancel()
+        if isHoveringStage || isHoveringBubble {
+            if !isHoverActive {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+                    isHoverActive = true
+                }
+            }
+        } else {
+            // Smooth 340ms hover bridge so moving cursor from pet -> speech bubble buttons never drops hover
+            hoverExitTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(340))
+                guard !Task.isCancelled, !isHoveringStage, !isHoveringBubble else { return }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                    isHoverActive = false
+                }
+            }
         }
     }
 
@@ -261,7 +290,7 @@ struct DesktopPetOverlayView: View {
 
     private var shouldShowStatusBubble: Bool {
         guard preferences.miniPetShowBubble else { return false }
-        if isHoveringStage { return true }
+        if isHoverActive { return true }
         if store.isPaused { return false }
         if store.state.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil {
             return true
@@ -471,7 +500,7 @@ struct DesktopPetOverlayView: View {
                 }
                 Spacer(minLength: 0)
             }
-        } else if isHoveringStage || animState == .waiting {
+        } else if isHoverActive || animState == .waiting {
             HStack(spacing: 5) {
                 bubbleActionChip(title: "Open Notch", icon: "rectangle.topthird.inset.filled") {
                     onToggleNotch()

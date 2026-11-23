@@ -480,9 +480,12 @@ private struct GravNotchHUDLivePreviewCard: View {
                     }
                 } else {
                     if preferences.showCollapsedTokens && store.tokenMetrics.totalTokens > 0 {
-                        Text(TokenMetrics.formatCompact(store.tokenMetrics.totalTokens))
-                            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color.white.opacity(0.46))
+                        NotchTokenFlowDisplay(
+                            metrics: store.tokenMetrics,
+                            isStreaming: false,
+                            style: .collapsedIdle(compact: false),
+                            reduceMotion: reduceMotion
+                        )
                     } else if preferences.showCollapsedFocus {
                         Text("Ready")
                             .font(.system(size: 10.5, weight: .medium))

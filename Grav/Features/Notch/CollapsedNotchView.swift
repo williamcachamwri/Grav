@@ -433,15 +433,26 @@ public struct CollapsedNotchView: View {
     }
 
     private func replyingTrailingSignal(compact: Bool) -> some View {
-        NotchShimmerText(
-            text: "Replying",
-            font: .system(size: compact ? 11 : 11.5, weight: .medium),
-            tracking: -0.15,
-            baseOpacity: 0.50,
-            peakOpacity: 0.98,
-            period: 1.55,
-            reduceMotion: reduceMotion
-        )
+        HStack(alignment: .center, spacing: 6) {
+            NotchShimmerText(
+                text: "Replying",
+                font: .system(size: compact ? 11 : 11.5, weight: .medium),
+                tracking: -0.15,
+                baseOpacity: 0.50,
+                peakOpacity: 0.98,
+                period: 1.55,
+                reduceMotion: reduceMotion
+            )
+
+            if !compact && preferences.showCollapsedTokens && store.tokenMetrics.outputTokens > 0 {
+                NotchTokenFlowDisplay(
+                    metrics: store.tokenMetrics,
+                    isStreaming: true,
+                    style: .collapsedStreamingOutput,
+                    reduceMotion: reduceMotion
+                )
+            }
+        }
     }
 
     private func inspectingTrailingSignal(for event: FileInspectionEvent, compact: Bool) -> some View {
@@ -551,12 +562,13 @@ public struct CollapsedNotchView: View {
 
     private func idleTrailingSignal(compact: Bool) -> some View {
         HStack(spacing: 6) {
-            if !compact && preferences.showCollapsedTokens && store.tokenMetrics.totalTokens > 0 {
-                Text(TokenMetrics.formatCompact(store.tokenMetrics.totalTokens))
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.white.opacity(0.40))
-                    .contentTransition(reduceMotion ? .identity : .numericText())
+            if preferences.showCollapsedTokens && store.tokenMetrics.totalTokens > 0 {
+                NotchTokenFlowDisplay(
+                    metrics: store.tokenMetrics,
+                    isStreaming: false,
+                    style: .collapsedIdle(compact: compact),
+                    reduceMotion: reduceMotion
+                )
             }
 
             Circle()
