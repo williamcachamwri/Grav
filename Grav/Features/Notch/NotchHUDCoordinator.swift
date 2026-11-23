@@ -225,6 +225,13 @@ public final class NotchHUDCoordinator {
         }
     }
 
+    private var isAntigravityBackgrounded: Bool {
+        guard let frontmost = NSWorkspace.shared.frontmostApplication else { return true }
+        let bundleID = (frontmost.bundleIdentifier ?? "").lowercased()
+        let name = (frontmost.localizedName ?? "").lowercased()
+        return !bundleID.contains("antigravity") && !name.contains("antigravity")
+    }
+
     private func handlePeekRequest(_ event: NotchPeekEvent) {
         guard isInstalled else { return }
 
@@ -233,41 +240,67 @@ public final class NotchHUDCoordinator {
             return
         }
 
-        if case .needsInput = event, preferences.autoExpandOnNeedsInput, !store.isPaused {
-            if presenter.phase == .collapsed {
-                let now = Date()
-                if now.timeIntervalSince(lastTelemetryPeekAt) >= 1.2 {
-                    lastTelemetryPeekAt = now
-                    if preferences.playSounds {
-                        GravOnboardingWelcomeAudio.shared.playStepComplete()
-                    }
-                    presenter.expand(reason: .programmatic)
-                }
-            }
-            return
-        }
-
-        guard preferences.autoPeekOnEvents, !store.isPaused else { return }
-        guard presenter.phase == .collapsed else { return }
+        guard !store.isPaused else { return }
 
         let now = Date()
-        guard now.timeIntervalSince(lastTelemetryPeekAt) >= 1.2 else { return }
-        lastTelemetryPeekAt = now
+        let backgrounded = isAntigravityBackgrounded
 
-        if preferences.playSounds {
-            switch event {
-            case .turnCompleted:
-                GravOnboardingWelcomeAudio.shared.playChallengeComplete()
-            case .commandFailed:
-                GravOnboardingWelcomeAudio.shared.playShutterSnap()
-            case .needsInput:
+        switch event {
+        case .needsInput:
+            let shouldAutoExpand = preferences.autoExpandOnNeedsInput
+                || (preferences.urgentAlertWhenBackgrounded && backgrounded)
+            guard shouldAutoExpand || preferences.autoPeekOnEvents else { return }
+            guard now.timeIntervalSince(lastTelemetryPeekAt) >= 1.2 else { return }
+            lastTelemetryPeekAt = now
+            if preferences.playSounds {
                 GravOnboardingWelcomeAudio.shared.playStepComplete()
-            default:
-                break
             }
-        }
+            if shouldAutoExpand {
+                presenter.expand(reason: .programmatic)
+            } else if presenter.phase == .collapsed {
+                presenter.peek()
+            }
+            return
 
-        presenter.peek()
+        case .commandFailed:
+            guard preferences.notifyOnFailure else { return }
+            let urgentExpand = preferences.urgentAlertWhenBackgrounded && backgrounded
+            guard urgentExpand || preferences.autoPeekOnEvents else { return }
+            guard now.timeIntervalSince(lastTelemetryPeekAt) >= 1.2 else { return }
+            lastTelemetryPeekAt = now
+            if preferences.playSounds {
+                GravOnboardingWelcomeAudio.shared.playShutterSnap()
+            }
+            if urgentExpand {
+                presenter.expand(reason: .programmatic)
+            } else if presenter.phase == .collapsed {
+                presenter.peek()
+            }
+            return
+
+        case .turnCompleted:
+            guard preferences.notifyOnTurnCompleted, preferences.autoPeekOnEvents else { return }
+            if preferences.smartAlertMinDurationSeconds > 0 {
+                let dur = store.lastTurnDuration ?? 0
+                if dur < preferences.smartAlertMinDurationSeconds {
+                    return
+                }
+            }
+            guard presenter.phase == .collapsed else { return }
+            guard now.timeIntervalSince(lastTelemetryPeekAt) >= 1.2 else { return }
+            lastTelemetryPeekAt = now
+            if preferences.playSounds {
+                GravOnboardingWelcomeAudio.shared.playChallengeComplete()
+            }
+            presenter.peek()
+            return
+
+        default:
+            guard preferences.autoPeekOnEvents, presenter.phase == .collapsed else { return }
+            guard now.timeIntervalSince(lastTelemetryPeekAt) >= 1.2 else { return }
+            lastTelemetryPeekAt = now
+            presenter.peek()
+        }
     }
 
     private func startPreferenceObservation() {

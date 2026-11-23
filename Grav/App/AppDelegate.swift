@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         _ = notification
         telemetryStore.stop()
+        GlobalHotkeyManager.shared.uninstall()
         notchHUD?.uninstall()
         desktopPet?.uninstall()
         menuBarController?.uninstall()
@@ -89,10 +90,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onFocusAntigravity: { [weak self] in
                 self?.telemetryStore.activateAntigravityApp()
+            },
+            onToggleNotch: { [weak self] in
+                self?.notchHUD?.toggle()
             }
         )
         self.desktopPet = petCoordinator
         petCoordinator.install()
+
+        let hotkeys = GlobalHotkeyManager.shared
+        hotkeys.onToggleNotch = { [weak self] in
+            self?.notchHUD?.toggle()
+        }
+        hotkeys.onToggleMiniPet = { [weak self] in
+            self?.preferences.miniPetEnabled.toggle()
+        }
+        hotkeys.onFocusAntigravity = { [weak self] in
+            self?.telemetryStore.activateAntigravityApp()
+        }
+        hotkeys.install(preferences: preferences)
+        observeGlobalHotkeys()
 
         let menuBar = MenuBarController(
             store: telemetryStore,
@@ -153,6 +170,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.menuBarController?.uninstall()
                 }
                 self.observeMenuBarVisibility()
+            }
+        }
+    }
+
+    private func observeGlobalHotkeys() {
+        withObservationTracking {
+            _ = preferences.globalHotkeysEnabled
+            _ = preferences.hotkeyToggleNotch
+            _ = preferences.hotkeyToggleMiniPet
+            _ = preferences.hotkeyFocusAntigravity
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                GlobalHotkeyManager.shared.sync(with: self.preferences)
+                self.observeGlobalHotkeys()
             }
         }
     }

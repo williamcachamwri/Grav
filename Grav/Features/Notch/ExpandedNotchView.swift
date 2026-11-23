@@ -205,6 +205,16 @@ public struct ExpandedNotchView: View {
                 }
                 .keyboardShortcut("l", modifiers: [.command])
 
+                Button("") {
+                    cycleSession(step: 1)
+                }
+                .keyboardShortcut("]", modifiers: [.command])
+
+                Button("") {
+                    cycleSession(step: -1)
+                }
+                .keyboardShortcut("[", modifiers: [.command])
+
                 ForEach(NotchTab.allCases) { tab in
                     Button("") {
                         switchTab(to: tab)
@@ -301,6 +311,23 @@ public struct ExpandedNotchView: View {
             NotchTelemetryHelpers.copyToPasteboard("\(swarm.displayTitle): \(summary)")
             showBanner("Copied swarm roster")
         }
+    }
+
+    private func cycleSession(step: Int) {
+        let list = store.sessions
+        guard list.count >= 2 else { return }
+        GravOnboardingWelcomeAudio.shared.playButtonTap()
+        let currentIdx = store.activeSession.flatMap { active in
+            list.firstIndex(where: { $0.id == active.id })
+        } ?? 0
+        let nextIdx = ((currentIdx + step) % list.count + list.count) % list.count
+        let target = list[nextIdx]
+        store.selectSession(target)
+        let title = target.title
+            .replacingOccurrences(of: "<USER_REQUEST>", with: "")
+            .replacingOccurrences(of: "</USER_REQUEST>", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        showBanner("Switched: \(String(title.prefix(28)))")
     }
 
     private func showBanner(_ message: String) {

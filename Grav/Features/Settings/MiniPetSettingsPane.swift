@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Modern Codex-inspired Pets Settings pane:
 /// - Fluid `ScrollView` layout (zero macOS `Form` hit-test/focus trapping) so Search works instantaneously.
@@ -26,6 +27,7 @@ struct MiniPetSettingsPane: View {
     @State private var searchQuery: String = ""
     @State private var sortOrder: CodexPetSort = .popular
     @State private var stageBounce: Bool = false
+    @State private var isDropTargeted: Bool = false
     @State private var debounceTask: Task<Void, Never>?
     @FocusState private var isSearchFocused: Bool
 
@@ -91,9 +93,10 @@ struct MiniPetSettingsPane: View {
             Spacer(minLength: 8)
 
             HStack(spacing: 6) {
-                subtleActionButton(title: "codex-pets.net", systemImage: "arrow.up.right") {
-                    if let url = URL(string: "https://codex-pets.net/") {
-                        openURL(url)
+                subtleActionButton(title: "Import Sheet", systemImage: "square.and.arrow.down") {
+                    if let imported = petsStore.presentImportSpritesheetPanel() {
+                        preferences.activeMiniPetID = imported.id
+                        preferences.miniPetEnabled = true
                     }
                 }
 
@@ -280,6 +283,40 @@ struct MiniPetSettingsPane: View {
         }
         .padding(16)
         .background(cardSurface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(
+                    Color.accentColor.opacity(isDropTargeted ? 0.85 : 0.0),
+                    style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+                )
+        )
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleDroppedSpritesheet(providers)
+        }
+    }
+
+    private func handleDroppedSpritesheet(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }) else {
+            return false
+        }
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            let resolvedURL: URL?
+            if let data = item as? Data {
+                resolvedURL = URL(dataRepresentation: data, relativeTo: nil)
+            } else if let url = item as? URL {
+                resolvedURL = url
+            } else {
+                resolvedURL = nil
+            }
+            guard let fileURL = resolvedURL else { return }
+            Task { @MainActor in
+                if let imported = petsStore.importLocalSpritesheet(from: fileURL) {
+                    preferences.activeMiniPetID = imported.id
+                    preferences.miniPetEnabled = true
+                }
+            }
+        }
+        return true
     }
 
     private var stageSubtleDotGrid: some View {
@@ -627,6 +664,44 @@ struct MiniPetSettingsPane: View {
                         )
                     }
                 }
+
+                // Load More Pagination Button (browse all 3,700+ pets!)
+                if petsStore.hasMoreGalleryPages || petsStore.isLoadingMoreGallery {
+                    HStack {
+                        Spacer()
+                        Button {
+                            Task { await petsStore.loadNextGalleryPage() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if petsStore.isLoadingMoreGallery {
+                                    ProgressView()
+                                        .controlSize(.mini)
+                                    Text("Loading more pets…")
+                                } else {
+                                    Image(systemName: "plus.circle")
+                                        .font(.system(size: 11, weight: .medium))
+                                    Text("Load More (\(petsStore.galleryPets.count) of \(petsStore.galleryTotal.formatted()))")
+                                }
+                            }
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.primary.opacity(0.88))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 7)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.primary.opacity(0.065))
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75)
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(petsStore.isLoadingMoreGallery)
+                        Spacer()
+                    }
+                    .padding(.top, 6)
+                }
             }
         }
     }
@@ -744,6 +819,14 @@ struct MiniPetSettingsPane: View {
                     title: "Float Above All Windows",
                     subtitle: "Keep your pet visible over Xcode, Antigravity, and browsers across Spaces.",
                     isOn: $preferences.miniPetAlwaysOnTop
+                )
+
+                rowDivider
+
+                tuningToggleRow(
+                    title: "Auto-Hide in Fullscreen",
+                    subtitle: "Automatically tuck away the pet during fullscreen videos, presentations, or fullscreen apps.",
+                    isOn: $preferences.miniPetAutoHideFullscreen
                 )
 
                 rowDivider

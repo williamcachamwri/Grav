@@ -311,6 +311,35 @@ public struct SettingsSearchEntry: Identifiable, Hashable, Sendable {
                 anchored: false
             ),
 
+            SettingsSearchEntry(
+                .notchHUD,
+                section: "Smart Attention Rules",
+                title: "Minimum Turn Duration",
+                detail: "Only chime or peek on turn completion if Antigravity worked longer than the chosen duration.",
+                keywords: ["smart", "attention", "duration", "threshold", "chime", "silence"]
+            ),
+            SettingsSearchEntry(
+                .notchHUD,
+                section: "Smart Attention Rules",
+                title: "Urgent Alert When Backgrounded",
+                detail: "Auto-expand the Notch when Antigravity fails or asks for input while you're in another app.",
+                keywords: ["urgent", "background", "alert", "failure", "needs input"]
+            ),
+            SettingsSearchEntry(
+                .miniPet,
+                section: "Desktop Companion",
+                title: "Auto-Hide in Fullscreen",
+                detail: "Automatically hide the desktop pet during fullscreen videos or fullscreen apps.",
+                keywords: ["fullscreen", "hide", "video", "youtube", "screen sharing"]
+            ),
+            SettingsSearchEntry(
+                .shortcuts,
+                section: "Global Hotkeys (System-Wide)",
+                title: "Enable Global Hotkeys",
+                detail: "Use system-wide shortcuts to toggle the Notch, toggle Mini Pet, or focus Antigravity.",
+                keywords: ["global", "hotkey", "shortcut", "option space", "toggle"]
+            ),
+
             // Quick Actions
             SettingsSearchEntry(
                 .notchHUD,

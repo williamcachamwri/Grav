@@ -14,10 +14,13 @@ public final class DesktopPetCoordinator {
 
     public var onOpenPetSettings: (() -> Void)?
     public var onFocusAntigravity: (() -> Void)?
+    public var onToggleNotch: (() -> Void)?
 
     private var panel: NSPanel?
     private var isInstalled = false
+    private var isHiddenForFullscreen = false
     @ObservationIgnored private var isObserving = false
+    @ObservationIgnored private var workspaceObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var dragStartMouseLocation: NSPoint = .zero
     @ObservationIgnored private var dragStartWindowOrigin: NSPoint = .zero
     @ObservationIgnored private var lastTrackedPlacement: MiniPetPlacement = .topRight
@@ -27,19 +30,23 @@ public final class DesktopPetCoordinator {
         preferences: PreferencesStore,
         petsStore: CodexPetsStore = .shared,
         onOpenPetSettings: (() -> Void)? = nil,
-        onFocusAntigravity: (() -> Void)? = nil
+        onFocusAntigravity: (() -> Void)? = nil,
+        onToggleNotch: (() -> Void)? = nil
     ) {
         self.store = store
         self.preferences = preferences
         self.petsStore = petsStore
         self.onOpenPetSettings = onOpenPetSettings
         self.onFocusAntigravity = onFocusAntigravity
+        self.onToggleNotch = onToggleNotch
         self.lastTrackedPlacement = preferences.miniPetPlacement
     }
 
     public func install() {
         guard !isInstalled else { return }
         isInstalled = true
+        installFullscreenObservers()
+        refreshFullscreenState()
         syncPanelState(animated: false)
         startObservation()
     }
@@ -47,6 +54,10 @@ public final class DesktopPetCoordinator {
     public func uninstall() {
         isInstalled = false
         isObserving = false
+        for observer in workspaceObservers {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+        workspaceObservers.removeAll()
         panel?.orderOut(nil)
         panel?.contentView = nil
         panel = nil
@@ -55,7 +66,7 @@ public final class DesktopPetCoordinator {
     public func syncPanelState(animated: Bool = true) {
         guard isInstalled else { return }
 
-        if !preferences.miniPetEnabled {
+        if !preferences.miniPetEnabled || (preferences.miniPetAutoHideFullscreen && isHiddenForFullscreen) {
             hidePanel(animated: animated)
             return
         }
@@ -177,6 +188,9 @@ public final class DesktopPetCoordinator {
             },
             onFocusAntigravity: { [weak self] in
                 self?.onFocusAntigravity?()
+            },
+            onToggleNotch: { [weak self] in
+                self?.onToggleNotch?()
             }
         )
 
@@ -274,6 +288,7 @@ public final class DesktopPetCoordinator {
             _ = preferences.miniPetSize
             _ = preferences.miniPetPlacement
             _ = preferences.miniPetAlwaysOnTop
+            _ = preferences.miniPetAutoHideFullscreen
             _ = preferences.activeMiniPetID
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
@@ -282,6 +297,47 @@ public final class DesktopPetCoordinator {
                 self.observePreferences()
             }
         }
+    }
+
+    private func installFullscreenObservers() {
+        let nc = NSWorkspace.shared.notificationCenter
+        let spaceObs = nc.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshFullscreenState()
+            }
+        }
+        let appObs = nc.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshFullscreenState()
+            }
+        }
+        workspaceObservers = [spaceObs, appObs]
+    }
+
+    private func refreshFullscreenState() {
+        let nowFullscreen = Self.detectFullscreenSpace()
+        if nowFullscreen != isHiddenForFullscreen {
+            isHiddenForFullscreen = nowFullscreen
+            syncPanelState(animated: true)
+        }
+    }
+
+    /// Detects native macOS Fullscreen Space (where the menu bar auto-hides and `visibleFrame.maxY == frame.maxY`).
+    private static func detectFullscreenSpace() -> Bool {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return false }
+        let frame = screen.frame
+        let visible = screen.visibleFrame
+        let topBarHeight = frame.maxY - visible.maxY
+        // On a normal desktop Space, topBarHeight >= 24pt (menu bar / notch); in Fullscreen Space it collapses to ~0.
+        return topBarHeight < 4.0 && abs(visible.width - frame.width) < 4.0
     }
 }
 

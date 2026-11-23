@@ -228,11 +228,32 @@ public struct ExpandedNotchHeaderView: View {
                         .foregroundStyle(GravPalette.glacialCyan.opacity(0.88))
                         .fixedSize(horizontal: true, vertical: false)
                 } else if store.activeRunningChatsCount >= 2 {
-                    Text("· \(store.activeRunningChatsCount) chats")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .monospacedDigit()
-                        .foregroundStyle(GravPalette.glacialCyan.opacity(0.84))
-                        .fixedSize(horizontal: true, vertical: false)
+                    Button {
+                        cycleToNextSession()
+                    } label: {
+                        HStack(spacing: 3) {
+                            Circle()
+                                .fill(GravPalette.glacialCyan)
+                                .frame(width: 4.5, height: 4.5)
+                            Text("\(store.activeRunningChatsCount) chats")
+                                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                .monospacedDigit()
+                                .foregroundStyle(GravPalette.glacialCyan.opacity(0.95))
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(GravPalette.glacialCyan.opacity(0.14))
+                                .overlay(
+                                    Capsule(style: .continuous)
+                                        .strokeBorder(GravPalette.glacialCyan.opacity(0.32), lineWidth: 0.5)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Click to cycle between parallel Antigravity chats (⌘])")
+                    .fixedSize(horizontal: true, vertical: false)
                 }
             } else {
                 Text(stateLabel)
@@ -248,6 +269,19 @@ public struct ExpandedNotchHeaderView: View {
         .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: stateLabel)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Telemetry state: \(stateLabel)")
+    }
+
+    private func cycleToNextSession() {
+        guard store.sessions.count >= 2 else { return }
+        GravOnboardingWelcomeAudio.shared.playButtonTap()
+        if let current = store.activeSession,
+           let idx = store.sessions.firstIndex(where: { $0.id == current.id })
+        {
+            let next = store.sessions[(idx + 1) % store.sessions.count]
+            store.selectSession(next)
+        } else if let first = store.sessions.first {
+            store.selectSession(first)
+        }
     }
 
     // MARK: - Right Cluster (Bare Tabular Tokens · Ghost Controls)

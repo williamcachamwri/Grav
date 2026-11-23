@@ -16,6 +16,7 @@ struct DesktopPetOverlayView: View {
     var onTuckAway: () -> Void
     var onOpenSettings: () -> Void
     var onFocusAntigravity: () -> Void
+    var onToggleNotch: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -25,6 +26,7 @@ struct DesktopPetOverlayView: View {
     @State private var resizeStartSize: Double = 84
     @State private var tapBounce = false
     @State private var patrolOffsetX: CGFloat = 0
+    @State private var copiedBubbleFeedback = false
 
     private var activePet: InstalledCodexPet? {
         petsStore.pet(withID: preferences.activeMiniPetID)
@@ -385,51 +387,143 @@ struct DesktopPetOverlayView: View {
     }
 
     private func liveSpeechBubble(animState: CodexPetAnimationState) -> some View {
-        Button {
-            onFocusAntigravity()
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .center, spacing: 6) {
-                    Text(bubbleHeadline(for: animState))
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.95))
-                        .lineLimit(1)
-
-                    Spacer(minLength: 4)
-
-                    HStack(spacing: 4) {
-                        Text(animState.label)
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(statePillTint(for: animState))
+        VStack(alignment: .leading, spacing: 5) {
+            Button {
+                onFocusAntigravity()
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .center, spacing: 6) {
+                        Text(bubbleHeadline(for: animState))
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.95))
                             .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
 
-                        bubbleStatusIndicator(animState: animState)
+                        Spacer(minLength: 4)
+
+                        HStack(spacing: 4) {
+                            Text(animState.label)
+                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(statePillTint(for: animState))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+
+                            bubbleStatusIndicator(animState: animState)
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
                     }
-                    .fixedSize(horizontal: true, vertical: false)
-                }
 
-                Text(bubbleDetail(for: animState))
-                    .font(.system(size: 10.5, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.64))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                    Text(bubbleDetail(for: animState))
+                        .font(.system(size: 10.5, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.64))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
             }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 8)
-            .frame(width: 224, alignment: .leading)
+            .buttonStyle(.plain)
+
+            // Contextual Quick Actions Row (Copy Error / Open File / Open Notch)
+            bubbleQuickActionsRow(animState: animState)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .frame(width: 224, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(Color(red: 0.082, green: 0.086, blue: 0.098).opacity(0.94))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.13), lineWidth: 0.75)
+                )
+                .shadow(color: Color.black.opacity(0.45), radius: 14, y: 6)
+        )
+    }
+
+    @ViewBuilder
+    private func bubbleQuickActionsRow(animState: CodexPetAnimationState) -> some View {
+        let activeFilePath: String? = {
+            switch store.state {
+            case let .editing(ev): return ev.path
+            case let .inspecting(ev): return ev.path
+            default: return nil
+            }
+        }()
+
+        if animState == .failed {
+            HStack(spacing: 5) {
+                bubbleActionChip(
+                    title: copiedBubbleFeedback ? "Copied" : "Copy Error",
+                    icon: copiedBubbleFeedback ? "checkmark" : "doc.on.doc"
+                ) {
+                    copyLatestFailure()
+                }
+                bubbleActionChip(title: "Notch", icon: "rectangle.topthird.inset.filled") {
+                    onToggleNotch()
+                }
+                Spacer(minLength: 0)
+            }
+        } else if let path = activeFilePath, FileManager.default.fileExists(atPath: path) {
+            HStack(spacing: 5) {
+                bubbleActionChip(title: "Open File", icon: "arrow.up.forward.square") {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                }
+                bubbleActionChip(title: "Notch", icon: "rectangle.topthird.inset.filled") {
+                    onToggleNotch()
+                }
+                Spacer(minLength: 0)
+            }
+        } else if isHoveringStage || animState == .waiting {
+            HStack(spacing: 5) {
+                bubbleActionChip(title: "Open Notch", icon: "rectangle.topthird.inset.filled") {
+                    onToggleNotch()
+                }
+                bubbleActionChip(title: "Focus", icon: "arrow.up.forward.app") {
+                    onFocusAntigravity()
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func bubbleActionChip(title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 3.5) {
+                Image(systemName: icon)
+                    .font(.system(size: 8.5, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(Color.white.opacity(0.84))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
             .background(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(Color(red: 0.082, green: 0.086, blue: 0.098).opacity(0.94))
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.08))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.13), lineWidth: 0.75)
+                        Capsule(style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
                     )
-                    .shadow(color: Color.black.opacity(0.45), radius: 14, y: 6)
             )
         }
         .buttonStyle(.plain)
-        .help("Click to focus Antigravity")
+    }
+
+    private func copyLatestFailure() {
+        let text: String
+        if let cmd = store.commands.first, cmd.status == .failed {
+            text = "\(cmd.commandLine)\n\(cmd.logOutput)"
+        } else if let tool = CodexPetTelemetryMapper.latestFailedTool(in: store) {
+            text = "\(tool.title): \(tool.outputPreview ?? tool.detail ?? "")"
+        } else {
+            return
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copiedBubbleFeedback = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            copiedBubbleFeedback = false
+        }
     }
 
     @ViewBuilder

@@ -174,14 +174,22 @@ public final class CodexPetsStore {
     public private(set) var installedPets: [InstalledCodexPet] = []
     public private(set) var galleryPets: [CodexPetRemoteItem] = []
     public private(set) var galleryTotal: Int = 0
+    public private(set) var galleryPage: Int = 1
     public private(set) var isLoadingGallery: Bool = false
+    public private(set) var isLoadingMoreGallery: Bool = false
     public private(set) var galleryError: String?
     public private(set) var downloadingPetIDs: Set<String> = []
     public private(set) var statusMessage: String?
 
+    public var hasMoreGalleryPages: Bool {
+        galleryTotal > galleryPets.count && !isLoadingGallery && !isLoadingMoreGallery
+    }
+
     /// Short-lived interactive override triggered when the user clicks or pets the Mini Pet.
     public private(set) var reactionOverride: CodexPetAnimationState?
 
+    private var lastGalleryQuery: String = ""
+    private var lastGallerySort: CodexPetSort = .popular
     private var reactionResetTask: Task<Void, Never>?
     private var framesCache: [String: [CodexPetAnimationState: [CGImage]]] = [:]
     private let service = CodexPetsCatalogService()
@@ -256,6 +264,9 @@ public final class CodexPetsStore {
     public func searchGallery(query: String, sort: CodexPetSort = .popular) async {
         isLoadingGallery = true
         galleryError = nil
+        lastGalleryQuery = query
+        lastGallerySort = sort
+        galleryPage = 1
         defer { isLoadingGallery = false }
 
         do {
@@ -272,6 +283,107 @@ public final class CodexPetsStore {
             }
         } catch {
             galleryError = "Could not reach codex-pets.net (\(error.localizedDescription))."
+        }
+    }
+
+    public func loadNextGalleryPage() async {
+        guard hasMoreGalleryPages else { return }
+        guard case let .query(cleaned) = CodexPetSearchInput.parse(lastGalleryQuery) else { return }
+
+        isLoadingMoreGallery = true
+        galleryError = nil
+        defer { isLoadingMoreGallery = false }
+
+        let nextPage = galleryPage + 1
+        do {
+            let response = try await service.fetchPets(query: cleaned, sort: lastGallerySort, page: nextPage, pageSize: 36)
+            let existingIDs = Set(galleryPets.map(\.id))
+            let newItems = response.pets.filter { !existingIDs.contains($0.id) }
+            galleryPets.append(contentsOf: newItems)
+            galleryPage = nextPage
+            if let total = response.total {
+                galleryTotal = total
+            }
+        } catch {
+            galleryError = "Could not load page \(nextPage): \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Local Custom Sprite Sheet Import (`.webp` / `.png`, 8×9 or 8×11)
+
+    @discardableResult
+    public func presentImportSpritesheetPanel() -> InstalledCodexPet? {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.webP, .png]
+        panel.title = "Import Custom Codex Pet Sprite Sheet"
+        panel.prompt = "Import Pet"
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        return importLocalSpritesheet(from: url)
+    }
+
+    @discardableResult
+    public func importLocalSpritesheet(from url: URL, customName: String? = nil) -> InstalledCodexPet? {
+        galleryError = nil
+        do {
+            let data = try Data(contentsOf: url)
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else {
+                galleryError = "Could not decode image from \(url.lastPathComponent)."
+                return nil
+            }
+
+            // Detect v2 (11 rows, aspect ~1.49) vs v1 (9 rows, aspect ~1.22)
+            let aspect = Double(image.height) / max(1.0, Double(image.width))
+            let detectedVersion = aspect >= 1.35 ? 2 : 1
+
+            guard let sliced = CodexPetSpriteSlicer.sliceAtlas(data: data, spriteVersion: detectedVersion) else {
+                galleryError = "Image must be a valid 8-column Codex Pet sprite sheet."
+                return nil
+            }
+
+            let baseTitle = (customName ?? url.deletingPathExtension().lastPathComponent)
+                .replacingOccurrences(of: "-", with: " ")
+                .replacingOccurrences(of: "_", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayName = baseTitle.isEmpty ? "Custom Pet" : baseTitle.capitalized
+            let slugBase = displayName
+                .lowercased()
+                .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+            let id = "custom-\(slugBase.isEmpty ? "pet" : slugBase)-\(Int(Date().timeIntervalSince1970) % 100_000)"
+
+            let ext = url.pathExtension.lowercased() == "png" ? "png" : "webp"
+            let filename = "spritesheet.\(ext)"
+            let petDir = petsRootURL.appendingPathComponent(id, isDirectory: true)
+            try FileManager.default.createDirectory(at: petDir, withIntermediateDirectories: true)
+            try data.write(to: petDir.appendingPathComponent(filename), options: .atomic)
+
+            let record = InstalledCodexPet(
+                id: id,
+                displayName: displayName,
+                description: "Imported custom \(detectedVersion == 2 ? "11-state v2" : "9-state v1") sprite sheet.",
+                ownerHandle: "local",
+                spriteVersionNumber: detectedVersion,
+                tags: ["custom"],
+                spritesheetFilename: filename,
+                sourceURL: nil,
+                installedAt: Date(),
+                isBundledDefault: false
+            )
+            let metaData = try JSONEncoder().encode(record)
+            try metaData.write(to: petDir.appendingPathComponent("metadata.json"), options: .atomic)
+
+            framesCache[record.id] = sliced
+            reloadInstalledPets()
+            statusMessage = "Imported \(record.displayName) (v\(detectedVersion))"
+            return record
+        } catch {
+            galleryError = "Import failed: \(error.localizedDescription)"
+            return nil
         }
     }
 

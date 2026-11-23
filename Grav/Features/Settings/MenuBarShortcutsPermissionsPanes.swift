@@ -361,10 +361,59 @@ private struct GravMenuBarPreviewCard: View {
 
 // MARK: - Shortcuts Settings Pane
 
-/// Native grouped-form Shortcuts reference pane using `GravKeycapChip` and `GravKeycapRow`.
+/// Native grouped-form Shortcuts pane with live system-wide Global Hotkey recorders (Carbon)
+/// plus Notch HUD and Settings Window shortcut reference tables.
 struct ShortcutsSettingsPane: View {
+    @Bindable var preferences: PreferencesStore
+
     var body: some View {
         Form {
+            Section("Global Hotkeys (System-Wide)") {
+                SettingRow(
+                    title: "Enable Global Hotkeys",
+                    description: "Trigger Grav actions from any app on macOS without requiring Accessibility permission."
+                ) {
+                    Toggle("", isOn: $preferences.globalHotkeysEnabled)
+                        .labelsHidden()
+                }
+
+                SettingRow(
+                    title: "Toggle Notch HUD",
+                    description: "Expand or collapse the Notch HUD from anywhere on macOS."
+                ) {
+                    HotkeyRecorderControl(shortcut: $preferences.hotkeyToggleNotch)
+                }
+                .disabled(!preferences.globalHotkeysEnabled)
+
+                SettingRow(
+                    title: "Toggle Desktop Mini Pet",
+                    description: "Show or tuck away your floating desktop Codex Mini Pet."
+                ) {
+                    HotkeyRecorderControl(shortcut: $preferences.hotkeyToggleMiniPet)
+                }
+                .disabled(!preferences.globalHotkeysEnabled)
+
+                SettingRow(
+                    title: "Focus Antigravity",
+                    description: "Bring Google Antigravity straight to the front from any Space."
+                ) {
+                    HotkeyRecorderControl(shortcut: $preferences.hotkeyFocusAntigravity)
+                }
+                .disabled(!preferences.globalHotkeysEnabled)
+
+                SettingRow(
+                    title: "Reset Global Hotkeys",
+                    description: "Restore default global shortcuts (⌥Space, ⌥⇧P, ⌥⇧A)."
+                ) {
+                    Button("Reset Defaults") {
+                        preferences.resetGlobalHotkeysToDefaults()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .disabled(!preferences.globalHotkeysEnabled)
+            }
+
             Section("Notch HUD") {
                 SettingRow(
                     title: "Live Tab",
@@ -446,6 +495,102 @@ private struct SettingsKeycapPlate: View {
                     }
             }
         }
+    }
+}
+
+// MARK: - Interactive Global Hotkey Recorder Control
+
+private struct HotkeyRecorderControl: View {
+    @Binding var shortcut: GravHotkeyShortcut?
+    @State private var isRecording = false
+    @State private var localMonitor: Any?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                if isRecording {
+                    stopRecording()
+                } else {
+                    startRecording()
+                }
+            } label: {
+                if isRecording {
+                    Text("Press keys…")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color.accentColor.opacity(0.14))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .strokeBorder(Color.accentColor.opacity(0.6), lineWidth: 1)
+                                )
+                        )
+                } else if let shortcut {
+                    SettingsKeycapPlate(keys: shortcut.displayKeys)
+                } else {
+                    Text("Record…")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color.primary.opacity(0.06))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.75)
+                                )
+                        )
+                }
+            }
+            .buttonStyle(.plain)
+
+            if shortcut != nil && !isRecording {
+                Button {
+                    shortcut = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear shortcut")
+            }
+        }
+        .onDisappear {
+            stopRecording()
+        }
+    }
+
+    private func startRecording() {
+        stopRecording()
+        isRecording = true
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 { // Escape cancels recording
+                stopRecording()
+                return nil
+            }
+            let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            let carbonMods = GravHotkeyShortcut.carbonModifiers(from: flags)
+            guard carbonMods != 0 else {
+                NSSound.beep()
+                return nil
+            }
+            shortcut = GravHotkeyShortcut(keyCode: UInt32(event.keyCode), carbonModifiers: carbonMods)
+            stopRecording()
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        if let localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+            self.localMonitor = nil
+        }
+        isRecording = false
     }
 }
 

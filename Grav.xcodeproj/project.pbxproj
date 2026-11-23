@@ -86,6 +86,7 @@
 		C3C90B8F8BB5285E9FC7B427 /* LiquidGlassButtonSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = E48C2511572DB8044EF3307F /* LiquidGlassButtonSurface.swift */; };
 		C890187EDA513327457EFE31 /* PreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6C215E35EBA9F7D3735BF6 /* PreferencesStore.swift */; };
 		CA5BB644FDF7B18B73D891DC /* GravOnboardingActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB8BE24B233BB6DB74B351F1 /* GravOnboardingActionBar.swift */; };
+		CB9A6574CC95A3DBC5230539 /* GlobalHotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6518654DDFD3702450F56B /* GlobalHotkeyManager.swift */; };
 		CD00C5ADC719B6938036AFB5 /* LiquidGlassControlChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 084775248C8E1F3A57C630DC /* LiquidGlassControlChrome.swift */; };
 		CFF080B22C8824213F826D19 /* SettingsNavigationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3978D7EEA69E801935E810D /* SettingsNavigationState.swift */; };
 		D082C33C7C4009031102CCB7 /* LiquidGlassLighting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114265FE26497E3C5F2F803E /* LiquidGlassLighting.swift */; };
@@ -200,6 +201,7 @@
 		C5FEA16D62BA28D6673FF57A /* DestructiveCommandParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructiveCommandParserTests.swift; sourceTree = "<group>"; };
 		CAE3AC855B91A25DE4BFBA52 /* GravKeycapBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravKeycapBadge.swift; sourceTree = "<group>"; };
 		CCF7798C42F0CFD0241053D9 /* DestructiveCommandParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructiveCommandParser.swift; sourceTree = "<group>"; };
+		CF6518654DDFD3702450F56B /* GlobalHotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotkeyManager.swift; sourceTree = "<group>"; };
 		D80414C1DE01980C28A80A7E /* ExpandedNotchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpandedNotchView.swift; sourceTree = "<group>"; };
 		D955AE3AFBBD48C3582D82C0 /* MenuBarShortcutsPermissionsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarShortcutsPermissionsPanes.swift; sourceTree = "<group>"; };
 		DB8BE24B233BB6DB74B351F1 /* GravOnboardingActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingActionBar.swift; sourceTree = "<group>"; };
@@ -274,6 +276,7 @@
 			isa = PBXGroup;
 			children = (
 				852BD2EC804A1743843856FE /* AppDelegate.swift */,
+				CF6518654DDFD3702450F56B /* GlobalHotkeyManager.swift */,
 				5E5F5B9A0520058DBE81E4F2 /* GravApp.swift */,
 				E2701B799B195D18555809F2 /* MenuBarController.swift */,
 				81CC611757009E75C131812E /* MenuBarIconRenderer.swift */,
@@ -605,6 +608,7 @@
 				91D3F498CDC55C2DBAFDBA40 /* ExpandedNotchView.swift in Sources */,
 				35A99B4C75C934A207622157 /* FilesTelemetryTabView.swift in Sources */,
 				DD0ABF5CABD8F77A3D6574B9 /* GeneralSettingsPane.swift in Sources */,
+				CB9A6574CC95A3DBC5230539 /* GlobalHotkeyManager.swift in Sources */,
 				0BE5AA7A5521E678F4B05B0D /* GravApp.swift in Sources */,
 				2D31239101E9F9DC9B4BD2F7 /* GravBrandMark.swift in Sources */,
 				4580DCAAA4A4BC098EDE595C /* GravButtonStyles.swift in Sources */,

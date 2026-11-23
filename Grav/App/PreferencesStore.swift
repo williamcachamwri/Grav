@@ -59,16 +59,27 @@ public enum GravPreferenceKeys {
     public static let miniPetRoaming = "grav.miniPetRoaming"
     public static let miniPetShowBubble = "grav.miniPetShowBubble"
     public static let miniPetAlwaysOnTop = "grav.miniPetAlwaysOnTop"
+    public static let miniPetAutoHideFullscreen = "grav.miniPetAutoHideFullscreen"
     public static let miniPetOriginX = "grav.miniPetOriginX"
     public static let miniPetOriginY = "grav.miniPetOriginY"
 
-    // Expanded Notch HUD & UI customizations
+    // Expanded Notch HUD & Smart Attention Rules
     public static let hoverOpenDelay = "grav.hoverOpenDelay"
     public static let showCollapsedTokens = "grav.showCollapsedTokens"
     public static let showCollapsedFocus = "grav.showCollapsedFocus"
     public static let showCollapsedStepProgress = "grav.showCollapsedStepProgress"
     public static let autoExpandOnNeedsInput = "grav.autoExpandOnNeedsInput"
     public static let hapticsEnabled = "grav.hapticsEnabled"
+    public static let smartAlertMinDurationSeconds = "grav.smartAlertMinDurationSeconds"
+    public static let urgentAlertWhenBackgrounded = "grav.urgentAlertWhenBackgrounded"
+    public static let notifyOnTurnCompleted = "grav.notifyOnTurnCompleted"
+    public static let notifyOnFailure = "grav.notifyOnFailure"
+
+    // Global Hotkeys
+    public static let globalHotkeysEnabled = "grav.globalHotkeysEnabled"
+    public static let hotkeyToggleNotch = "grav.hotkeyToggleNotch"
+    public static let hotkeyToggleMiniPet = "grav.hotkeyToggleMiniPet"
+    public static let hotkeyFocusAntigravity = "grav.hotkeyFocusAntigravity"
 }
 
 /// User-configurable preferences for Grav's Notch HUD, Liquid Glass, Appearance, and macOS integration.
@@ -171,6 +182,10 @@ public final class PreferencesStore {
         didSet { defaults.set(miniPetAlwaysOnTop, forKey: GravPreferenceKeys.miniPetAlwaysOnTop) }
     }
 
+    public var miniPetAutoHideFullscreen: Bool {
+        didSet { defaults.set(miniPetAutoHideFullscreen, forKey: GravPreferenceKeys.miniPetAutoHideFullscreen) }
+    }
+
     /// Saved screen X coordinate when user drags the desktop pet freely (`nil` uses `miniPetPlacement` snap).
     public var miniPetOriginX: Double? {
         didSet {
@@ -219,6 +234,44 @@ public final class PreferencesStore {
         didSet { defaults.set(hapticsEnabled, forKey: GravPreferenceKeys.hapticsEnabled) }
     }
 
+    // MARK: - Smart Attention Rules
+
+    /// Minimum active turn duration (seconds) before playing completion chime/peek (`0` = always).
+    public var smartAlertMinDurationSeconds: Double {
+        didSet { defaults.set(smartAlertMinDurationSeconds, forKey: GravPreferenceKeys.smartAlertMinDurationSeconds) }
+    }
+
+    /// Prominently alert when Antigravity is backgrounded and hits a failure or asks for input.
+    public var urgentAlertWhenBackgrounded: Bool {
+        didSet { defaults.set(urgentAlertWhenBackgrounded, forKey: GravPreferenceKeys.urgentAlertWhenBackgrounded) }
+    }
+
+    public var notifyOnTurnCompleted: Bool {
+        didSet { defaults.set(notifyOnTurnCompleted, forKey: GravPreferenceKeys.notifyOnTurnCompleted) }
+    }
+
+    public var notifyOnFailure: Bool {
+        didSet { defaults.set(notifyOnFailure, forKey: GravPreferenceKeys.notifyOnFailure) }
+    }
+
+    // MARK: - Global Hotkeys
+
+    public var globalHotkeysEnabled: Bool {
+        didSet { defaults.set(globalHotkeysEnabled, forKey: GravPreferenceKeys.globalHotkeysEnabled) }
+    }
+
+    public var hotkeyToggleNotch: GravHotkeyShortcut? {
+        didSet { Self.saveHotkey(hotkeyToggleNotch, key: GravPreferenceKeys.hotkeyToggleNotch, to: defaults) }
+    }
+
+    public var hotkeyToggleMiniPet: GravHotkeyShortcut? {
+        didSet { Self.saveHotkey(hotkeyToggleMiniPet, key: GravPreferenceKeys.hotkeyToggleMiniPet, to: defaults) }
+    }
+
+    public var hotkeyFocusAntigravity: GravHotkeyShortcut? {
+        didSet { Self.saveHotkey(hotkeyFocusAntigravity, key: GravPreferenceKeys.hotkeyFocusAntigravity, to: defaults) }
+    }
+
     public var launchAtLogin: Bool {
         didSet {
             defaults.set(launchAtLogin, forKey: GravPreferenceKeys.launchAtLogin)
@@ -263,6 +316,7 @@ public final class PreferencesStore {
         self.miniPetRoaming = defaults.object(forKey: GravPreferenceKeys.miniPetRoaming) as? Bool ?? false
         self.miniPetShowBubble = defaults.object(forKey: GravPreferenceKeys.miniPetShowBubble) as? Bool ?? true
         self.miniPetAlwaysOnTop = defaults.object(forKey: GravPreferenceKeys.miniPetAlwaysOnTop) as? Bool ?? true
+        self.miniPetAutoHideFullscreen = defaults.object(forKey: GravPreferenceKeys.miniPetAutoHideFullscreen) as? Bool ?? true
         self.miniPetOriginX = defaults.object(forKey: GravPreferenceKeys.miniPetOriginX) as? Double
         self.miniPetOriginY = defaults.object(forKey: GravPreferenceKeys.miniPetOriginY) as? Double
 
@@ -273,6 +327,27 @@ public final class PreferencesStore {
         self.showCollapsedStepProgress = defaults.object(forKey: GravPreferenceKeys.showCollapsedStepProgress) as? Bool ?? true
         self.autoExpandOnNeedsInput = defaults.object(forKey: GravPreferenceKeys.autoExpandOnNeedsInput) as? Bool ?? true
         self.hapticsEnabled = defaults.object(forKey: GravPreferenceKeys.hapticsEnabled) as? Bool ?? true
+        self.smartAlertMinDurationSeconds = defaults.object(forKey: GravPreferenceKeys.smartAlertMinDurationSeconds) as? Double ?? 0.0
+        self.urgentAlertWhenBackgrounded = defaults.object(forKey: GravPreferenceKeys.urgentAlertWhenBackgrounded) as? Bool ?? true
+        self.notifyOnTurnCompleted = defaults.object(forKey: GravPreferenceKeys.notifyOnTurnCompleted) as? Bool ?? true
+        self.notifyOnFailure = defaults.object(forKey: GravPreferenceKeys.notifyOnFailure) as? Bool ?? true
+
+        self.globalHotkeysEnabled = defaults.object(forKey: GravPreferenceKeys.globalHotkeysEnabled) as? Bool ?? true
+        self.hotkeyToggleNotch = Self.loadHotkey(
+            key: GravPreferenceKeys.hotkeyToggleNotch,
+            defaultValue: .defaultToggleNotch,
+            from: defaults
+        )
+        self.hotkeyToggleMiniPet = Self.loadHotkey(
+            key: GravPreferenceKeys.hotkeyToggleMiniPet,
+            defaultValue: .defaultToggleMiniPet,
+            from: defaults
+        )
+        self.hotkeyFocusAntigravity = Self.loadHotkey(
+            key: GravPreferenceKeys.hotkeyFocusAntigravity,
+            defaultValue: .defaultFocusAntigravity,
+            from: defaults
+        )
 
         if let rawAppearance = defaults.string(forKey: GravPreferenceKeys.appearanceMode),
            let parsed = GravAppearanceMode(rawValue: rawAppearance)
@@ -287,6 +362,33 @@ public final class PreferencesStore {
         } else {
             self.launchAtLogin = SMAppService.mainApp.status == .enabled
         }
+    }
+
+    public func resetGlobalHotkeysToDefaults() {
+        hotkeyToggleNotch = .defaultToggleNotch
+        hotkeyToggleMiniPet = .defaultToggleMiniPet
+        hotkeyFocusAntigravity = .defaultFocusAntigravity
+    }
+
+    private static func saveHotkey(_ shortcut: GravHotkeyShortcut?, key: String, to defaults: UserDefaults) {
+        if let shortcut, let data = try? JSONEncoder().encode(shortcut) {
+            defaults.set(data, forKey: key)
+        } else {
+            // Store empty Data sentinel so nil ("disabled") is distinguished from unset default
+            defaults.set(Data(), forKey: key)
+        }
+    }
+
+    private static func loadHotkey(
+        key: String,
+        defaultValue: GravHotkeyShortcut,
+        from defaults: UserDefaults
+    ) -> GravHotkeyShortcut? {
+        guard let data = defaults.data(forKey: key) else {
+            return defaultValue
+        }
+        if data.isEmpty { return nil }
+        return (try? JSONDecoder().decode(GravHotkeyShortcut.self, from: data)) ?? defaultValue
     }
 
     public func refreshLaunchAtLoginStatus() {

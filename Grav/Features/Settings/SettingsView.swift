@@ -157,7 +157,7 @@ public struct SettingsView: View {
                 }
             case .shortcuts:
                 SettingsLazyView {
-                    ShortcutsSettingsPane()
+                    ShortcutsSettingsPane(preferences: preferences)
                 }
             case .permissions:
                 SettingsLazyView {

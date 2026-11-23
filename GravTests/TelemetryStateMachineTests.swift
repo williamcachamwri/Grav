@@ -894,5 +894,35 @@ final class TelemetryStateMachineTests: XCTestCase {
             )
             XCTAssertEqual(mapped, .idle)
         }
+
+        // Verify Global Hotkey defaults, display keys, and custom serialization
+        XCTAssertEqual(GravHotkeyShortcut.defaultToggleNotch.displayKeys, ["⌥", "Space"])
+        XCTAssertEqual(GravHotkeyShortcut.defaultToggleMiniPet.displayKeys, ["⌥", "⇧", "P"])
+        XCTAssertEqual(GravHotkeyShortcut.defaultFocusAntigravity.displayKeys, ["⌥", "⇧", "A"])
+
+        store1.hotkeyToggleNotch = nil
+        store1.smartAlertMinDurationSeconds = 30.0
+        store1.urgentAlertWhenBackgrounded = false
+        store1.miniPetAutoHideFullscreen = false
+
+        let store3 = PreferencesStore(defaults: defaults)
+        XCTAssertNil(store3.hotkeyToggleNotch)
+        XCTAssertEqual(store3.smartAlertMinDurationSeconds, 30.0, accuracy: 0.01)
+        XCTAssertFalse(store3.urgentAlertWhenBackgrounded)
+        XCTAssertFalse(store3.miniPetAutoHideFullscreen)
+
+        // Verify local custom sprite sheet import into isolated temporary Pets directory
+        let tmpPetsDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("grav-test-pets-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmpPetsDir) }
+
+        let sheetURL = Bundle(for: AntigravityTelemetryStore.self)
+            .url(forResource: "super-saiyan-goku-combat", withExtension: "webp")
+            ?? URL(fileURLWithPath: "/Users/wica/Grav/Grav/Resources/DefaultPet/super-saiyan-goku-combat.webp")
+        let isolatedPetsStore = CodexPetsStore(baseDirectoryURL: tmpPetsDir)
+        let imported = isolatedPetsStore.importLocalSpritesheet(from: sheetURL, customName: "My Custom Goku")
+        XCTAssertNotNil(imported)
+        XCTAssertEqual(imported?.displayName, "My Custom Goku")
+        XCTAssertEqual(imported?.spriteVersionNumber, 2)
     }
 }
