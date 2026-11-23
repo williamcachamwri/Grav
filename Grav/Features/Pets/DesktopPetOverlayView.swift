@@ -295,6 +295,9 @@ struct DesktopPetOverlayView: View {
         if store.state.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil {
             return true
         }
+        if store.activeModelFailureIncident(maxAge: 25.0) != nil {
+            return true
+        }
         if let cmd = store.commands.first,
            cmd.status == .failed,
            let completedAt = cmd.completedAt,
@@ -308,6 +311,9 @@ struct DesktopPetOverlayView: View {
     private func bubbleHeadline(for animState: CodexPetAnimationState) -> String {
         if store.isPaused { return "Telemetry paused" }
         if animState == .failed {
+            if let incident = store.activeModelFailureIncident(maxAge: 25.0) {
+                return incident.title
+            }
             if let cmd = store.commands.first, cmd.status == .failed {
                 return "Failed · \(cmd.displayTitle)"
             }
@@ -351,6 +357,9 @@ struct DesktopPetOverlayView: View {
             return "Resume telemetry from the Notch or Menu Bar."
         }
         if animState == .failed {
+            if let incident = store.activeModelFailureIncident(maxAge: 25.0) {
+                return incident.detail
+            }
             if let cmd = store.commands.first, cmd.status == .failed {
                 let exitInfo = cmd.exitCode.map { "Exit \($0) · " } ?? ""
                 return "\(exitInfo)\(cmd.commandLine)"

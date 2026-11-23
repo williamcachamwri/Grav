@@ -562,16 +562,31 @@ public struct CollapsedNotchView: View {
 
     private func idleTrailingSignal(compact: Bool) -> some View {
         HStack(spacing: 6) {
-            if store.activeRadarAlert != nil && !store.isPaused {
+            if let radar = store.activeRadarAlert, !store.isPaused {
+                let dotColor: Color = {
+                    switch radar.severity {
+                    case .approval: return Color(red: 0.96, green: 0.72, blue: 0.28)
+                    case .modelIncident: return GravPalette.coral
+                    case .modelFallback: return GravPalette.glacialCyan
+                    }
+                }()
+                let shortLabel: String = {
+                    switch radar.severity {
+                    case .approval:
+                        return "Reply"
+                    case .modelIncident, .modelFallback:
+                        return store.latestModelIncident?.shortCollapsedLabel ?? "Error"
+                    }
+                }()
                 HStack(spacing: 4) {
                     NotchSemanticDot(
-                        color: Color(red: 0.96, green: 0.72, blue: 0.28),
+                        color: dotColor,
                         size: 5,
-                        isPulsing: true
+                        isPulsing: radar.severity != .modelFallback
                     )
-                    Text("Reply")
+                    Text(shortLabel)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.86))
+                        .foregroundStyle(Color.white.opacity(0.88))
                         .lineLimit(1)
                 }
             } else if store.unreadSessionCount > 0 && !store.isPaused {

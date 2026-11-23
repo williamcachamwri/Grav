@@ -59,8 +59,19 @@ public final class AntigravityTelemetryStore {
     public internal(set) var mcpServers: [MCPServerSummary] = []
     /// Active & recent background tasks, daemons, and `/schedule` timers/crons (Feature #6).
     public internal(set) var scheduledTasks: [ScheduledTaskRecord] = []
+    /// Most recent Quota / HTTP 429 Rate-Limit / Capacity / Model Fallback incident (Feature A2).
+    public internal(set) var latestModelIncident: ModelIncidentEvent?
     /// Last radar alert ID explicitly dismissed by the user (Feature #2).
     public internal(set) var dismissedRadarAlertID: String?
+
+    /// Returns the active failure incident (quota / 429 / capacity / model error) if still fresh
+    /// and not dismissed — used by both the Notch HUD and Desktop Mini Pet `.failed` state.
+    public func activeModelFailureIncident(now: Date = Date(), maxAge: TimeInterval = 45.0) -> ModelIncidentEvent? {
+        guard !isPaused, let incident = latestModelIncident, incident.isFailure else { return nil }
+        guard dismissedRadarAlertID != incident.id else { return nil }
+        guard now.timeIntervalSince(incident.timestamp) <= maxAge else { return nil }
+        return incident
+    }
 
     public var unreadSessionCount: Int {
         unreadSessionIDs.count
@@ -78,11 +89,11 @@ public final class AntigravityTelemetryStore {
         }
     }
 
-    /// High-signal real-time Approval / Question alert for the active session (Feature #2).
+    /// High-signal real-time Approval / Question / Quota & Model Fallback alert for the active session.
     public var activeRadarAlert: AntigravityRadarAlert? {
         guard !isPaused else { return nil }
 
-        // Waiting for user input / ask_question / approval
+        // 1. Waiting for user input / ask_question / approval
         if case let .waitingForInput(prompt) = state {
             let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             let detail = trimmed.isEmpty ? "Antigravity paused for your response or approval." : trimmed
@@ -94,6 +105,21 @@ public final class AntigravityTelemetryStore {
                 badge: "WAITING"
             )
             return dismissedRadarAlertID == alert.id ? nil : alert
+        }
+
+        // 2. Fresh Quota / 429 Rate-Limit / Capacity / Model Error or Mid-Session Model Fallback
+        if let incident = latestModelIncident, dismissedRadarAlertID != incident.id {
+            let maxAge: TimeInterval = incident.isFailure ? 60.0 : 30.0
+            if Date().timeIntervalSince(incident.timestamp) <= maxAge {
+                return AntigravityRadarAlert(
+                    id: incident.id,
+                    severity: incident.isFailure ? .modelIncident : .modelFallback,
+                    title: incident.title,
+                    detail: incident.detail,
+                    badge: incident.badge,
+                    timestamp: incident.timestamp
+                )
+            }
         }
 
         return nil
@@ -130,6 +156,7 @@ public final class AntigravityTelemetryStore {
     private var unreadRefreshTask: Task<Void, Never>?
     private var artifactsRefreshTask: Task<Void, Never>?
     private var runtimeInspectionTask: Task<Void, Never>?
+    private var previousObservedModel: String?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var sessionGeneration: UInt64 = 0
 
@@ -546,6 +573,7 @@ public final class AntigravityTelemetryStore {
                 lastStepDate = step.parsedDate
                 let classified = self.classifier.process(step: step, session: self.activeSession)
                 self.applyClassification(classified, suppressPeeks: isInitialHydration || self.isPaused)
+                self.detectModelIncident(from: step, isInitialHydration: isInitialHydration)
             }
         }
 
@@ -673,6 +701,8 @@ public final class AntigravityTelemetryStore {
         stepsProgress = nil
         turnStartedAt = nil
         lastTurnDuration = nil
+        latestModelIncident = nil
+        previousObservedModel = nil
         sqliteProbeTask?.cancel()
         sqliteProbeTask = nil
 
@@ -853,6 +883,8 @@ public final class AntigravityTelemetryStore {
         stepsProgress = nil
         turnStartedAt = nil
         lastTurnDuration = nil
+        latestModelIncident = nil
+        previousObservedModel = nil
         sqliteProbeTask?.cancel()
         sqliteProbeTask = nil
 
@@ -954,6 +986,27 @@ public final class AntigravityTelemetryStore {
                 }
                 recentActivity[idx] = .toolActivity(existing)
             }
+        }
+
+        // Surface real-time SQLite `error_details` quota / 429 / capacity / planner errors immediately
+        if let modelErr = snapshot.latestModelError {
+            if let incident = AntigravityRuntimeInspector.classifyModelError(
+                rawMessage: modelErr.message,
+                stepIndex: modelErr.stepIndex,
+                treatUnknownAsModelError: modelErr.isPlannerStep,
+                timestamp: now
+            ) {
+                let existingStep = latestModelIncident?.stepIndex ?? -1
+                if incident.stepIndex > existingStep || latestModelIncident?.id != incident.id {
+                    latestModelIncident = incident
+                }
+            }
+        } else if case .replying = snapshot.phase,
+                  let existing = latestModelIncident,
+                  existing.isFailure,
+                  snapshot.latestStepIndex > existing.stepIndex
+        {
+            latestModelIncident = nil
         }
 
         let setState: (TelemetryState) -> Void = { newState in
@@ -1725,6 +1778,60 @@ public final class AntigravityTelemetryStore {
             refreshUnreadSessions()
             refreshSessionArtifacts()
             refreshRuntimeInspection()
+        }
+    }
+
+    private func detectModelIncident(from step: TranscriptStep, isInitialHydration: Bool) {
+        let now = Date()
+
+        // 1. Check transcript step for Quota / 429 / Capacity / Planner ERROR
+        if let incident = AntigravityRuntimeInspector.classifyTranscriptStepError(step) {
+            let isFresh = !isInitialHydration || now.timeIntervalSince(incident.timestamp) <= 60.0
+            if isFresh {
+                let adjusted = ModelIncidentEvent(
+                    id: incident.id,
+                    stepIndex: incident.stepIndex,
+                    kind: incident.kind,
+                    title: incident.title,
+                    detail: incident.detail,
+                    badge: incident.badge,
+                    shortCollapsedLabel: incident.shortCollapsedLabel,
+                    timestamp: isInitialHydration ? incident.timestamp : now
+                )
+                latestModelIncident = adjusted
+            }
+            return
+        }
+
+        // 2. Auto-clear stale error incident once a subsequent PLANNER_RESPONSE completes cleanly
+        let typeUpper = (step.type ?? "").uppercased()
+        let statusUpper = (step.status ?? "").uppercased()
+        if typeUpper == "PLANNER_RESPONSE" && statusUpper == "DONE" {
+            let hasOutput = !(step.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                || !(step.thinking?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                || !(step.toolCalls?.isEmpty ?? true)
+            if hasOutput,
+               let existing = latestModelIncident,
+               existing.isFailure,
+               step.stepIndex > existing.stepIndex
+            {
+                latestModelIncident = nil
+            }
+        }
+
+        // 3. Detect mid-session Model Fallback / Model Switch (`model` changed live between steps)
+        if let rawModel = step.model?.trimmingCharacters(in: .whitespacesAndNewlines), !rawModel.isEmpty {
+            if let prev = previousObservedModel, prev != rawModel {
+                if !isInitialHydration {
+                    latestModelIncident = AntigravityRuntimeInspector.makeModelFallbackEvent(
+                        from: prev,
+                        to: rawModel,
+                        stepIndex: step.stepIndex,
+                        timestamp: now
+                    )
+                }
+            }
+            previousObservedModel = rawModel
         }
     }
 

@@ -351,7 +351,25 @@ public struct AntigravityRadarBannerView: View {
     }
 
     private var accentColor: Color {
-        Color(red: 0.96, green: 0.72, blue: 0.28)
+        switch alert.severity {
+        case .approval:
+            return Color(red: 0.96, green: 0.72, blue: 0.28)
+        case .modelIncident:
+            return GravPalette.coral
+        case .modelFallback:
+            return GravPalette.glacialCyan
+        }
+    }
+
+    private var symbolName: String {
+        switch alert.severity {
+        case .approval:
+            return "hand.raised.fill"
+        case .modelIncident:
+            return "exclamationmark.octagon.fill"
+        case .modelFallback:
+            return "arrow.triangle.branch"
+        }
     }
 
     public var body: some View {
@@ -360,7 +378,7 @@ public struct AntigravityRadarBannerView: View {
                 .fill(accentColor)
                 .frame(width: 2.5, height: 22)
 
-            Image(systemName: "hand.raised.fill")
+            Image(systemName: symbolName)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(accentColor)
 

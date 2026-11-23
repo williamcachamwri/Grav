@@ -289,10 +289,12 @@ public struct AntigravitySpotlightHit: Sendable, Equatable, Identifiable {
     }
 }
 
-/// High-signal real-time Antigravity attention alert (Approval / Question).
+/// High-signal real-time Antigravity attention alert (Approval / Question / Quota & Model Incident).
 public struct AntigravityRadarAlert: Sendable, Equatable, Identifiable {
     public enum Severity: String, Sendable, Equatable {
         case approval
+        case modelIncident
+        case modelFallback
     }
 
     public let id: String
@@ -315,6 +317,59 @@ public struct AntigravityRadarAlert: Sendable, Equatable, Identifiable {
         self.title = title
         self.detail = detail
         self.badge = badge
+        self.timestamp = timestamp
+    }
+}
+
+/// Detected Antigravity quota exhaustion, HTTP 429 rate-limit, capacity error, or mid-session model fallback.
+public struct ModelIncidentEvent: Sendable, Equatable, Identifiable {
+    public enum Kind: Sendable, Equatable {
+        case quotaExceeded
+        case rateLimited
+        case capacityExhausted
+        case modelError
+        case modelFallback(from: String, to: String)
+
+        public var isFailure: Bool {
+            switch self {
+            case .quotaExceeded, .rateLimited, .capacityExhausted, .modelError:
+                return true
+            case .modelFallback:
+                return false
+            }
+        }
+    }
+
+    public let id: String
+    public let stepIndex: Int
+    public let kind: Kind
+    public let title: String
+    public let detail: String
+    public let badge: String
+    public let shortCollapsedLabel: String
+    public let timestamp: Date
+
+    public var isFailure: Bool {
+        kind.isFailure
+    }
+
+    public init(
+        id: String,
+        stepIndex: Int,
+        kind: Kind,
+        title: String,
+        detail: String,
+        badge: String,
+        shortCollapsedLabel: String,
+        timestamp: Date = Date()
+    ) {
+        self.id = id
+        self.stepIndex = stepIndex
+        self.kind = kind
+        self.title = title
+        self.detail = detail
+        self.badge = badge
+        self.shortCollapsedLabel = shortCollapsedLabel
         self.timestamp = timestamp
     }
 }

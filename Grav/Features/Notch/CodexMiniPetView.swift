@@ -101,6 +101,11 @@ public enum CodexPetTelemetryMapper {
             return .idle
         }
 
+        // React immediately with `.failed` when Antigravity hits a Quota / 429 / Capacity / Model error
+        if store.activeModelFailureIncident(now: now, maxAge: 25.0) != nil {
+            return .failed
+        }
+
         // React immediately with `.failed` when a command or tool fails recently (10s window)
         if let latestCommand = store.commands.first,
            latestCommand.status == .failed,

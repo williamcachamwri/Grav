@@ -979,4 +979,91 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(tasks.count, 1)
         XCTAssertEqual(tasks.first?.title, "task-99")
     }
+
+    @MainActor
+    func testQuotaRateLimitAndModelFallbackDetectorDrivesNotchAndPetFailedState() throws {
+        // 1. Direct classifier tests (Quota, 429 Rate Limit, Capacity 503/529, benign prose ignored)
+        let quota = try XCTUnwrap(
+            AntigravityRuntimeInspector.classifyModelError(
+                rawMessage: "RPC error: RESOURCE_EXHAUSTED — daily quota exceeded",
+                stepIndex: 10
+            )
+        )
+        XCTAssertEqual(quota.kind, .quotaExceeded)
+        XCTAssertEqual(quota.badge, "429 · QUOTA")
+        XCTAssertTrue(quota.isFailure)
+
+        let rate = try XCTUnwrap(
+            AntigravityRuntimeInspector.classifyModelError(
+                rawMessage: "HTTP 429 Too Many Requests: rate limit hit",
+                stepIndex: 11
+            )
+        )
+        XCTAssertEqual(rate.kind, .rateLimited)
+        XCTAssertTrue(rate.isFailure)
+
+        let cap = try XCTUnwrap(
+            AntigravityRuntimeInspector.classifyModelError(
+                rawMessage: "503 Service Unavailable: model overloaded due to high demand",
+                stepIndex: 12
+            )
+        )
+        XCTAssertEqual(cap.kind, .capacityExhausted)
+        XCTAssertTrue(cap.isFailure)
+
+        // Benign assistant prose mentioning "429" on a DONE step must NOT trigger a false alarm
+        let benignStep = TranscriptStep(
+            stepIndex: 13,
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            model: "gemini-4-pro",
+            content: "We added a 429 quota detector."
+        )
+        XCTAssertNil(AntigravityRuntimeInspector.classifyTranscriptStepError(benignStep))
+
+        // 2. End-to-end store ingestion: Quota ERROR -> Notch radar + Mini Pet `.failed`
+        let store = AntigravityTelemetryStore()
+        store.ingestSteps([benignStep], isInitialHydration: false)
+        XCTAssertNil(store.latestModelIncident)
+
+        let failedStep = TranscriptStep(
+            stepIndex: 14,
+            type: "PLANNER_RESPONSE",
+            status: "ERROR",
+            model: "gemini-4-pro",
+            content: "RESOURCE_EXHAUSTED: Quota exceeded for model gemini-4-pro"
+        )
+        store.ingestSteps([failedStep], isInitialHydration: false)
+        XCTAssertEqual(store.latestModelIncident?.kind, .quotaExceeded)
+        XCTAssertEqual(store.activeRadarAlert?.severity, .modelIncident)
+
+        let petStateOnQuota = CodexPetTelemetryMapper.animationState(
+            for: store,
+            reactionOverride: nil,
+            roamingEnabled: false,
+            spriteVersion: 2
+        )
+        XCTAssertEqual(petStateOnQuota, .failed)
+
+        // 3. Recovery + mid-session Model Fallback (`gemini-4-pro` -> `gemini-4-flash`)
+        let recoveredFallbackStep = TranscriptStep(
+            stepIndex: 15,
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            model: "gemini-4-flash",
+            content: "Continuing on flash."
+        )
+        store.ingestSteps([recoveredFallbackStep], isInitialHydration: false)
+        XCTAssertEqual(store.latestModelIncident?.kind, .modelFallback(from: "gemini-4-pro", to: "gemini-4-flash"))
+        XCTAssertEqual(store.activeRadarAlert?.severity, .modelFallback)
+
+        // Model fallback is informational (not a failure), so Pet leaves `.failed` cleanly
+        let petStateAfterFallback = CodexPetTelemetryMapper.animationState(
+            for: store,
+            reactionOverride: nil,
+            roamingEnabled: false,
+            spriteVersion: 2
+        )
+        XCTAssertNotEqual(petStateAfterFallback, .failed)
+    }
 }

@@ -31,6 +31,13 @@ public struct LiveSQLiteToolExecution: Sendable, Equatable {
     public let errorMessage: String?
 }
 
+/// Live planner/model error decoded directly from SQLite `steps.error_details`.
+public struct LiveSQLiteModelError: Sendable, Equatable {
+    public let stepIndex: Int
+    public let message: String
+    public let isPlannerStep: Bool
+}
+
 /// Live real-time snapshot decoded directly from Antigravity's active SQLite WAL database
 /// (`~/.gemini/antigravity/conversations/<id>.db`) combined with global `conversation_summaries.db`.
 public struct ConversationSQLiteLiveSnapshot: Sendable, Equatable {
@@ -50,6 +57,7 @@ public struct ConversationSQLiteLiveSnapshot: Sendable, Equatable {
     public let latestSteps: AgentStepsProgress?
     public let activeTools: [LiveSQLiteToolExecution]
     public let recentToolErrors: [LiveSQLiteToolExecution]
+    public let latestModelError: LiveSQLiteModelError?
     public let activeRunningCount: Int
     public let globalSummary: ConversationRunSummarySnapshot?
 
@@ -60,6 +68,7 @@ public struct ConversationSQLiteLiveSnapshot: Sendable, Equatable {
         latestSteps: AgentStepsProgress? = nil,
         activeTools: [LiveSQLiteToolExecution] = [],
         recentToolErrors: [LiveSQLiteToolExecution] = [],
+        latestModelError: LiveSQLiteModelError? = nil,
         activeRunningCount: Int = 0,
         globalSummary: ConversationRunSummarySnapshot? = nil
     ) {
@@ -69,6 +78,7 @@ public struct ConversationSQLiteLiveSnapshot: Sendable, Equatable {
         self.latestSteps = latestSteps
         self.activeTools = activeTools
         self.recentToolErrors = recentToolErrors
+        self.latestModelError = latestModelError
         self.activeRunningCount = activeRunningCount
         self.globalSummary = globalSummary
     }
@@ -271,36 +281,73 @@ public enum ConversationSQLiteProbe {
             }
         }
 
+        // Collect the newest planner/system quota, rate-limit, capacity, or model error from `error_details`
+        var latestModelError: LiveSQLiteModelError?
+        for row in rows.prefix(4) {
+            let isPlanner = row.stepType == StepType.plannerResponse
+            let isErrorRow = row.status == StepStatus.error
+            guard isErrorRow || !row.errorDetails.isEmpty else { continue }
+            let decoded = decodeErrorDetails(row.errorDetails) ?? ""
+            if isPlanner && isErrorRow {
+                latestModelError = LiveSQLiteModelError(
+                    stepIndex: row.idx,
+                    message: decoded,
+                    isPlannerStep: true
+                )
+                break
+            }
+            if !decoded.isEmpty,
+               AntigravityRuntimeInspector.classifyModelError(
+                   rawMessage: decoded,
+                   stepIndex: row.idx,
+                   treatUnknownAsModelError: false
+               ) != nil
+            {
+                latestModelError = LiveSQLiteModelError(
+                    stepIndex: row.idx,
+                    message: decoded,
+                    isPlannerStep: isPlanner
+                )
+                break
+            }
+        }
+
+        // Helper to ensure every snapshot carries `latestModelError` consistently
+        func makeSnapshot(
+            phase: ConversationSQLiteLiveSnapshot.LivePhase,
+            tools: [LiveSQLiteToolExecution] = activeTools,
+            runningCount: Int = activeRows.count
+        ) -> ConversationSQLiteLiveSnapshot {
+            ConversationSQLiteLiveSnapshot(
+                latestStepIndex: newest.idx,
+                phase: phase,
+                latestFocus: foundFocus,
+                latestSteps: foundSteps,
+                activeTools: tools,
+                recentToolErrors: recentErrors,
+                latestModelError: latestModelError,
+                activeRunningCount: runningCount,
+                globalSummary: globalSummary
+            )
+        }
+
+        // 0. Terminal newest PLANNER_RESPONSE ERROR (quota / 429 / capacity / model failure)
+        if newest.stepType == StepType.plannerResponse && newest.status == StepStatus.error && activeRows.isEmpty {
+            return makeSnapshot(phase: .idle, tools: [], runningCount: 0)
+        }
+
         // 1. Highest priority: WAITING (user approval or `ask_question`)
         if let waiting = waitingRows.first {
             let tool = decodeGenericToolCall(waiting.payload)
             let prompt = extractWaitingPrompt(toolName: tool?.name, argsJSON: tool?.argsJSON)
-            return ConversationSQLiteLiveSnapshot(
-                latestStepIndex: newest.idx,
-                phase: .waitingForInput(prompt: prompt),
-                latestFocus: foundFocus,
-                latestSteps: foundSteps,
-                activeTools: activeTools,
-                recentToolErrors: recentErrors,
-                activeRunningCount: activeRows.count,
-                globalSummary: globalSummary
-            )
+            return makeSnapshot(phase: .waitingForInput(prompt: prompt))
         }
 
         // 2. Active RUNNING / GENERATING step
         if let running = activeRows.first {
             switch running.stepType {
             case StepType.checkpoint:
-                return ConversationSQLiteLiveSnapshot(
-                    latestStepIndex: newest.idx,
-                    phase: .compacting,
-                    latestFocus: foundFocus,
-                    latestSteps: foundSteps,
-                    activeTools: activeTools,
-                    recentToolErrors: recentErrors,
-                    activeRunningCount: activeRows.count,
-                    globalSummary: globalSummary
-                )
+                return makeSnapshot(phase: .compacting)
 
             case StepType.plannerResponse:
                 let parsed = decodePlannerPayload(running.payload)
@@ -314,110 +361,38 @@ public enum ConversationSQLiteProbe {
                 } else {
                     phase = .working
                 }
-                return ConversationSQLiteLiveSnapshot(
-                    latestStepIndex: newest.idx,
-                    phase: phase,
-                    latestFocus: foundFocus,
-                    latestSteps: foundSteps,
-                    activeTools: activeTools,
-                    recentToolErrors: recentErrors,
-                    activeRunningCount: activeRows.count,
-                    globalSummary: globalSummary
-                )
+                return makeSnapshot(phase: phase)
 
             case StepType.generic:
                 if let primaryTool = activeTools.first {
                     if primaryTool.name == "ask_question" {
                         let prompt = extractWaitingPrompt(toolName: primaryTool.name, argsJSON: primaryTool.argsJSON)
-                        return ConversationSQLiteLiveSnapshot(
-                            latestStepIndex: newest.idx,
-                            phase: .waitingForInput(prompt: prompt),
-                            latestFocus: foundFocus,
-                            latestSteps: foundSteps,
-                            activeTools: activeTools,
-                            recentToolErrors: recentErrors,
-                            activeRunningCount: activeRows.count,
-                            globalSummary: globalSummary
-                        )
+                        return makeSnapshot(phase: .waitingForInput(prompt: prompt))
                     }
-                    return ConversationSQLiteLiveSnapshot(
-                        latestStepIndex: newest.idx,
-                        phase: .runningTool(primaryTool),
-                        latestFocus: foundFocus,
-                        latestSteps: foundSteps,
-                        activeTools: activeTools,
-                        recentToolErrors: recentErrors,
-                        activeRunningCount: activeRows.count,
-                        globalSummary: globalSummary
-                    )
+                    return makeSnapshot(phase: .runningTool(primaryTool))
                 }
-                return ConversationSQLiteLiveSnapshot(
-                    latestStepIndex: newest.idx,
-                    phase: .working,
-                    latestFocus: foundFocus,
-                    latestSteps: foundSteps,
-                    activeTools: activeTools,
-                    recentToolErrors: recentErrors,
-                    activeRunningCount: activeRows.count,
-                    globalSummary: globalSummary
-                )
+                return makeSnapshot(phase: .working)
 
             default:
-                return ConversationSQLiteLiveSnapshot(
-                    latestStepIndex: newest.idx,
-                    phase: .working,
-                    latestFocus: foundFocus,
-                    latestSteps: foundSteps,
-                    activeTools: activeTools,
-                    recentToolErrors: recentErrors,
-                    activeRunningCount: activeRows.count,
-                    globalSummary: globalSummary
-                )
+                return makeSnapshot(phase: .working)
             }
         }
 
         // 3. Pending queued steps waiting to execute next
         if !pendingRows.isEmpty {
-            return ConversationSQLiteLiveSnapshot(
-                latestStepIndex: newest.idx,
-                phase: .working,
-                latestFocus: foundFocus,
-                latestSteps: foundSteps,
-                activeTools: activeTools,
-                recentToolErrors: recentErrors,
-                activeRunningCount: pendingRows.count,
-                globalSummary: globalSummary
-            )
+            return makeSnapshot(phase: .working, runningCount: pendingRows.count)
         }
 
         // 4. Authoritative global summary check: if Antigravity explicitly marks conversation IDLE & not_fully_idle=0
         if let summary = globalSummary, summary.isExplicitlyIdle {
-            return ConversationSQLiteLiveSnapshot(
-                latestStepIndex: newest.idx,
-                phase: .idle,
-                latestFocus: foundFocus,
-                latestSteps: foundSteps,
-                activeTools: [],
-                recentToolErrors: recentErrors,
-                activeRunningCount: 0,
-                globalSummary: globalSummary
-            )
+            return makeSnapshot(phase: .idle, tools: [], runningCount: 0)
         }
 
         // 5. Terminal check: final PLANNER_RESPONSE (DONE, no tool calls)
         if newest.stepType == StepType.plannerResponse && newest.status == StepStatus.done {
             let parsed = decodePlannerPayload(newest.payload)
             if parsed.toolCalls.isEmpty {
-                return ConversationSQLiteLiveSnapshot(
-                    latestStepIndex: newest.idx,
-                    phase: .idle,
-                    latestFocus: foundFocus,
-                    latestSteps: foundSteps,
-                    activeTools: [],
-                    recentToolErrors: recentErrors,
-                    activeRunningCount: 0,
-                    globalSummary: globalSummary
-                )
+                return makeSnapshot(phase: .idle, tools: [], runningCount: 0)
             }
         }
 
@@ -427,28 +402,10 @@ public enum ConversationSQLiteProbe {
             || (newest.stepType == StepType.generic && (newest.status == StepStatus.done || newest.status == StepStatus.error))
             || newest.stepType == StepType.systemMessage
         {
-            return ConversationSQLiteLiveSnapshot(
-                latestStepIndex: newest.idx,
-                phase: .working,
-                latestFocus: foundFocus,
-                latestSteps: foundSteps,
-                activeTools: activeTools,
-                recentToolErrors: recentErrors,
-                activeRunningCount: 0,
-                globalSummary: globalSummary
-            )
+            return makeSnapshot(phase: .working, runningCount: 0)
         }
 
-        return ConversationSQLiteLiveSnapshot(
-            latestStepIndex: newest.idx,
-            phase: .idle,
-            latestFocus: foundFocus,
-            latestSteps: foundSteps,
-            activeTools: [],
-            recentToolErrors: recentErrors,
-            activeRunningCount: 0,
-            globalSummary: globalSummary
-        )
+        return makeSnapshot(phase: .idle, tools: [], runningCount: 0)
     }
 
     // MARK: - Pretty JSON Formatter (Shared by SQLite Probe & EventClassifier)

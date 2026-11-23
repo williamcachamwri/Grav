@@ -1,9 +1,190 @@
 import Foundation
 
 /// Pure local filesystem & command telemetry inspector powering Grav's Antigravity-native modules:
+/// - **Feature A2**: Quota, HTTP 429 rate-limit, capacity error & mid-session model fallback classifier.
 /// - **Feature #4**: Session Artifacts, Plans, Scratch scripts & media Quick-Look scanner (`brain/<id>/`).
 /// - **Feature #6**: Installed MCP servers (`~/.gemini/antigravity/mcp/`) & Background Tasks / `/schedule` monitor.
 public enum AntigravityRuntimeInspector: Sendable {
+
+    // MARK: - Feature A2: Quota, Rate-Limit, Capacity & Model Error Classifier
+
+    /// Classifies raw error text from Antigravity's SQLite `error_details` or `transcript.jsonl`
+    /// into a structured `ModelIncidentEvent`. Returns `nil` for benign or unrelated messages unless
+    /// `treatUnknownAsModelError` is `true` (e.g. a failed `PLANNER_RESPONSE` step).
+    public static func classifyModelError(
+        rawMessage: String,
+        stepIndex: Int,
+        treatUnknownAsModelError: Bool = false,
+        timestamp: Date = Date()
+    ) -> ModelIncidentEvent? {
+        let cleaned = sanitizeErrorSnippet(rawMessage)
+        guard !cleaned.isEmpty else {
+            guard treatUnknownAsModelError else { return nil }
+            return ModelIncidentEvent(
+                id: "model-err-\(stepIndex)",
+                stepIndex: stepIndex,
+                kind: .modelError,
+                title: "Model Request Failed",
+                detail: "Antigravity planner step returned an error.",
+                badge: "MODEL ERR",
+                shortCollapsedLabel: "Error",
+                timestamp: timestamp
+            )
+        }
+
+        let lowered = cleaned.lowercased()
+
+        // 1. Quota exhausted (`RESOURCE_EXHAUSTED`, quota exceeded, usage/daily limit)
+        if lowered.contains("resource_exhausted")
+            || lowered.contains("quota")
+            || lowered.contains("usage limit")
+            || lowered.contains("daily limit")
+            || lowered.contains("credit") && lowered.contains("exhaust")
+            || lowered.contains("insufficient_quota")
+        {
+            return ModelIncidentEvent(
+                id: "quota-\(stepIndex)",
+                stepIndex: stepIndex,
+                kind: .quotaExceeded,
+                title: "Quota Exhausted",
+                detail: cleaned,
+                badge: "429 · QUOTA",
+                shortCollapsedLabel: "Quota",
+                timestamp: timestamp
+            )
+        }
+
+        // 2. Rate-limited (`429`, too many requests, rate limit, throttled)
+        if lowered.contains("429")
+            || lowered.contains("rate limit")
+            || lowered.contains("rate_limit")
+            || lowered.contains("too many requests")
+            || lowered.contains("throttl")
+        {
+            return ModelIncidentEvent(
+                id: "ratelimit-\(stepIndex)",
+                stepIndex: stepIndex,
+                kind: .rateLimited,
+                title: "Rate Limited (429)",
+                detail: cleaned,
+                badge: "429 · LIMIT",
+                shortCollapsedLabel: "429",
+                timestamp: timestamp
+            )
+        }
+
+        // 3. Model capacity / overloaded (`503`, `529`, overloaded, high demand, unavailable)
+        if lowered.contains("overloaded")
+            || lowered.contains("capacity")
+            || lowered.contains("high demand")
+            || lowered.contains("model unavailable")
+            || lowered.contains("service unavailable")
+            || lowered.contains("temporarily unavailable")
+            || lowered.contains("503")
+            || lowered.contains("529")
+            || lowered.contains("unavailable") && lowered.contains("model")
+        {
+            return ModelIncidentEvent(
+                id: "capacity-\(stepIndex)",
+                stepIndex: stepIndex,
+                kind: .capacityExhausted,
+                title: "Model Capacity Limit",
+                detail: cleaned,
+                badge: "CAPACITY",
+                shortCollapsedLabel: "Capacity",
+                timestamp: timestamp
+            )
+        }
+
+        // 4. Generic planner/model failure when explicitly flagged on a planner step
+        if treatUnknownAsModelError {
+            return ModelIncidentEvent(
+                id: "model-err-\(stepIndex)",
+                stepIndex: stepIndex,
+                kind: .modelError,
+                title: "Model Error",
+                detail: cleaned,
+                badge: "MODEL ERR",
+                shortCollapsedLabel: "Error",
+                timestamp: timestamp
+            )
+        }
+
+        return nil
+    }
+
+    /// Classifies a `TranscriptStep` for planner/system quota, rate-limit, capacity, or model errors.
+    public static func classifyTranscriptStepError(_ step: TranscriptStep) -> ModelIncidentEvent? {
+        let statusUpper = (step.status ?? "").uppercased()
+        let typeUpper = (step.type ?? "").uppercased()
+        let isPlannerOrSystem = typeUpper == "PLANNER_RESPONSE" || typeUpper == "SYSTEM_MESSAGE" || typeUpper.isEmpty
+        let isErrorStatus = statusUpper == "ERROR" || statusUpper == "FAILED"
+
+        let rawText = (step.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Never falsely flag normal assistant replies that merely discuss quota/429 in prose
+        if !isErrorStatus && typeUpper != "SYSTEM_MESSAGE" {
+            return nil
+        }
+
+        if isErrorStatus && isPlannerOrSystem {
+            return classifyModelError(
+                rawMessage: rawText,
+                stepIndex: step.stepIndex,
+                treatUnknownAsModelError: true,
+                timestamp: step.parsedDate
+            )
+        }
+
+        // System messages reporting rate-limit / quota / capacity / model switching
+        if typeUpper == "SYSTEM_MESSAGE", !rawText.isEmpty {
+            return classifyModelError(
+                rawMessage: rawText,
+                stepIndex: step.stepIndex,
+                treatUnknownAsModelError: false,
+                timestamp: step.parsedDate
+            )
+        }
+
+        return nil
+    }
+
+    /// Creates a structured mid-session model fallback event when Antigravity switches models cleanly.
+    public static func makeModelFallbackEvent(
+        from previousModel: String,
+        to nextModel: String,
+        stepIndex: Int,
+        timestamp: Date = Date()
+    ) -> ModelIncidentEvent {
+        let shortFrom = shortenModelName(previousModel)
+        let shortTo = shortenModelName(nextModel)
+        return ModelIncidentEvent(
+            id: "fallback-\(stepIndex)-\(shortTo)",
+            stepIndex: stepIndex,
+            kind: .modelFallback(from: shortFrom, to: shortTo),
+            title: "Model Switched",
+            detail: "\(shortFrom) → \(shortTo)",
+            badge: "FALLBACK",
+            shortCollapsedLabel: "Fallback",
+            timestamp: timestamp
+        )
+    }
+
+    private static func shortenModelName(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "models/", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func sanitizeErrorSnippet(_ raw: String) -> String {
+        let collapsed = raw
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard collapsed.count > 140 else { return collapsed }
+        return String(collapsed.prefix(139)) + "…"
+    }
 
     // MARK: - Feature #4: Session Artifacts, Plans & Scratch Quick-Look Scanner
 
