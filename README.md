@@ -1,9 +1,6 @@
 <div align="center">
 
-<img src="Assets/grav-banner.png" alt="Grav 1.0 — Antigravity companion in your MacBook notch" width="100%" />
-
-<br />
-<br />
+<img src="Assets/grav-icon.png" alt="Grav" width="96" height="96" />
 
 # Grav
 
@@ -17,9 +14,20 @@ A lightweight native macOS notch companion for **Google Antigravity**.
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-27272a?style=flat-square&labelColor=09090b" alt="MIT License" /></a>
 </p>
 
+<p>
+  <a href="#what-it-does">Features</a> ·
+  <a href="#shortcuts">Shortcuts</a> ·
+  <a href="#build-from-source">Build from Source</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+<br />
+
+<img src="Assets/grav-banner.png" alt="Grav 1.0 — Antigravity companion in your MacBook notch" width="100%" />
+
 </div>
 
----
+<br />
 
 Grav sits in your MacBook notch (or as a minimal top pill on external monitors) and shows what Antigravity is doing right now—without switching windows. Everything is read locally from Antigravity's runtime files, stays under ~70 MB of RAM, and idles near 0% CPU.
 
