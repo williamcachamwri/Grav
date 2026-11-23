@@ -14,6 +14,7 @@ public struct AntigravityProfileDrawerView: View {
 
     @State private var hoveredModelID: String?
     @State private var copiedModelID: String?
+    @State private var animateRing: Bool = false
 
     public init(
         store: AntigravityTelemetryStore,
@@ -57,6 +58,14 @@ public struct AntigravityProfileDrawerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             store.refreshProfileSnapshot()
+            if reduceMotion {
+                animateRing = true
+            } else {
+                animateRing = false
+                withAnimation(.spring(duration: 0.50, bounce: 0.06).delay(0.04)) {
+                    animateRing = true
+                }
+            }
         }
     }
 
@@ -194,12 +203,35 @@ public struct AntigravityProfileDrawerView: View {
                         secondary: "↑\(TokenMetrics.formatCompact(store.tokenMetrics.outputTokens))"
                     )
                     if store.tokenMetrics.latestContextTokens > 0 {
-                        let ctxPct = Int((store.tokenMetrics.contextFillRatio * 100.0).rounded())
-                        nativeKeyValueRow(
-                            label: "Context",
-                            primary: "\(ctxPct)%",
-                            secondary: TokenMetrics.formatCompact(store.tokenMetrics.latestContextTokens)
-                        )
+                        let fillRatio = min(1.0, max(0.0, store.tokenMetrics.contextFillRatio))
+                        let remainingRatio = max(0.0, 1.0 - fillRatio)
+                        let ctxPct = Int((fillRatio * 100.0).rounded())
+                        HStack(alignment: .center, spacing: 6) {
+                            Text("Context")
+                                .font(.system(size: 11.5, weight: .regular))
+                                .foregroundStyle(Color.white.opacity(0.56))
+                                .lineLimit(1)
+
+                            Spacer(minLength: 4)
+
+                            Text("\(ctxPct)%")
+                                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                                .monospacedDigit()
+                                .foregroundStyle(Color.white.opacity(0.90))
+                                .contentTransition(reduceMotion ? .identity : .numericText())
+
+                            Text(TokenMetrics.formatCompact(store.tokenMetrics.latestContextTokens))
+                                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                                .monospacedDigit()
+                                .foregroundStyle(Color.white.opacity(0.34))
+
+                            QuotaCircularRing(
+                                progress: animateRing ? remainingRatio : 0,
+                                color: quotaRingColor(for: remainingRatio),
+                                size: 13.5,
+                                lineWidth: 2.0
+                            )
+                        }
                     }
                 }
             }
