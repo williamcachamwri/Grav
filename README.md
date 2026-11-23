@@ -50,7 +50,7 @@ Requires **macOS 14.0+** and **Xcode 16+** (Swift 6).
 
 ```bash
 # Clone the repo
-git clone https://github.com/<your-username>/Grav.git
+git clone https://github.com/williamcachamwri/Grav.git
 cd Grav
 
 # Build Debug (Apple Silicon)
