@@ -337,6 +337,7 @@ extension SettingsTab {
         switch self {
         case .general: return .graphite
         case .notchHUD: return .teal
+        case .miniPet: return .amber
         case .telemetry: return .cyan
         case .menuBar: return .emerald
         case .shortcuts: return .periwinkle

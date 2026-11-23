@@ -44,6 +44,7 @@ struct GravOnboardingMockHost: View {
         switch state.currentStep {
         case .connect: .antigravity
         case .notchHud: .notchHud
+        case .miniPet: .miniPet
         case .preferences: .settings
         }
     }
@@ -52,7 +53,8 @@ struct GravOnboardingMockHost: View {
         switch step {
         case .connect: 0
         case .notchHud: 1
-        case .preferences: 2
+        case .miniPet: 2
+        case .preferences: 3
         }
     }
 
@@ -88,6 +90,10 @@ struct GravOnboardingMockHost: View {
                 }
 
                 spaceSlot(index: 2, stageWidth: stageWidth) {
+                    GravMockMiniPetScene(state: state, preferences: preferences)
+                }
+
+                spaceSlot(index: 3, stageWidth: stageWidth) {
                     GravMockPreferencesScene(state: state, preferences: preferences)
                 }
 

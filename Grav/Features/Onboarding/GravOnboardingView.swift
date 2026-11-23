@@ -225,7 +225,7 @@ struct GravOnboardingView: View {
 
             if !isShowingCompletion {
                 GravOnboardingStepRail(state: state)
-                    .frame(maxWidth: 420)
+                    .frame(maxWidth: 500)
                     .opacity(isFlowSettled ? 1 : 0)
                     .offset(y: reduceMotion ? 0 : (isFlowSettled ? 0 : -8))
                     .animation(

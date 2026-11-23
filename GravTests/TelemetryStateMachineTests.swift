@@ -778,4 +778,103 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(outArt.toolActivities.first?.kind, .artifact)
         XCTAssertEqual(outArt.toolActivities.first?.title, "Artifact · plan.md")
     }
+
+    // MARK: - Codex Mini Pet API Parser, Sprite Slicer, GIF Export & Preferences
+
+    func testCodexPetSearchInputParsing() {
+        XCTAssertEqual(
+            CodexPetSearchInput.parse("https://codex-pets.net/#/pets/super-saiyan-goku-combat"),
+            .directPetSlug("super-saiyan-goku-combat")
+        )
+        XCTAssertEqual(
+            CodexPetSearchInput.parse("https://codex-pets.net/#/?q=goku"),
+            .query("goku")
+        )
+        XCTAssertEqual(
+            CodexPetSearchInput.parse("https://codex-pets.net/#/?sort=popular&q=super%20saiyan"),
+            .query("super saiyan")
+        )
+        XCTAssertEqual(
+            CodexPetSearchInput.parse("  pikachu  "),
+            .query("pikachu")
+        )
+        XCTAssertEqual(
+            CodexPetSearchInput.parse(""),
+            .query("")
+        )
+    }
+
+    func testCodexPetSpriteSlicerAndGIFExport() throws {
+        // Locate the bundled starter spritesheet inside Grav app bundle or repo resources
+        let bundleURL = Bundle(for: AntigravityTelemetryStore.self)
+            .url(forResource: "super-saiyan-goku-combat", withExtension: "webp")
+            ?? URL(fileURLWithPath: "/Users/wica/Grav/Grav/Resources/DefaultPet/super-saiyan-goku-combat.webp")
+
+        let data = try Data(contentsOf: bundleURL)
+        let sliced = try XCTUnwrap(CodexPetSpriteSlicer.sliceAtlas(data: data, spriteVersion: 2))
+
+        XCTAssertEqual(sliced.count, 11)
+        XCTAssertEqual(sliced[.idle]?.count, 6)
+        XCTAssertEqual(sliced[.runningRight]?.count, 8)
+        XCTAssertEqual(sliced[.runningLeft]?.count, 8)
+        XCTAssertEqual(sliced[.waving]?.count, 4)
+        XCTAssertEqual(sliced[.jumping]?.count, 5)
+        XCTAssertEqual(sliced[.failed]?.count, 8)
+        XCTAssertEqual(sliced[.waiting]?.count, 6)
+        XCTAssertEqual(sliced[.running]?.count, 6)
+        XCTAssertEqual(sliced[.review]?.count, 6)
+        XCTAssertEqual(sliced[.lookRightSide]?.count, 8)
+        XCTAssertEqual(sliced[.lookLeftSide]?.count, 8)
+
+        // Verify authentic GIF export via macOS ImageIO
+        let idleFrames = try XCTUnwrap(sliced[.idle])
+        let tmpGIF = FileManager.default.temporaryDirectory
+            .appendingPathComponent("grav-test-goku-idle-\(UUID().uuidString).gif")
+        defer { try? FileManager.default.removeItem(at: tmpGIF) }
+
+        try CodexPetSpriteSlicer.exportGIF(frames: idleFrames, to: tmpGIF)
+        let gifData = try Data(contentsOf: tmpGIF)
+        XCTAssertGreaterThan(gifData.count, 1024)
+        let header = String(data: gifData.prefix(6), encoding: .ascii)
+        XCTAssertTrue(header == "GIF89a" || header == "GIF87a", "Unexpected GIF header: \(header ?? "nil")")
+        if let source = CGImageSourceCreateWithData(gifData as CFData, nil) {
+            XCTAssertEqual(CGImageSourceGetCount(source), 6)
+        } else {
+            XCTFail("Exported GIF could not be decoded by ImageIO")
+        }
+    }
+
+    @MainActor
+    func testMiniPetAndHUDPreferencesPersistence() {
+        let suiteName = "grav.test.preferences.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store1 = PreferencesStore(defaults: defaults)
+        XCTAssertTrue(store1.miniPetEnabled)
+        XCTAssertEqual(store1.activeMiniPetID, "super-saiyan-goku-combat")
+        XCTAssertEqual(store1.miniPetPlacement, .leading)
+        XCTAssertEqual(store1.miniPetSize, 22.0, accuracy: 0.01)
+        XCTAssertEqual(store1.miniPetSpeed, 1.0, accuracy: 0.01)
+        XCTAssertEqual(store1.hoverOpenDelay, 0.15, accuracy: 0.001)
+        XCTAssertTrue(store1.autoExpandOnNeedsInput)
+        XCTAssertTrue(store1.hapticsEnabled)
+
+        store1.miniPetPlacement = .trailing
+        store1.miniPetSize = 26.0
+        store1.miniPetSpeed = 1.4
+        store1.miniPetRoaming = false
+        store1.hoverOpenDelay = 0.25
+        store1.showCollapsedTokens = false
+        store1.autoExpandOnNeedsInput = false
+
+        let store2 = PreferencesStore(defaults: defaults)
+        XCTAssertEqual(store2.miniPetPlacement, .trailing)
+        XCTAssertEqual(store2.miniPetSize, 26.0, accuracy: 0.01)
+        XCTAssertEqual(store2.miniPetSpeed, 1.4, accuracy: 0.01)
+        XCTAssertFalse(store2.miniPetRoaming)
+        XCTAssertEqual(store2.hoverOpenDelay, 0.25, accuracy: 0.001)
+        XCTAssertFalse(store2.showCollapsedTokens)
+        XCTAssertFalse(store2.autoExpandOnNeedsInput)
+    }
 }

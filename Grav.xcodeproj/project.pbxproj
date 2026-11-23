@@ -29,6 +29,7 @@
 		26182CD68B70E55949AEBF7E /* ExpandedNotchHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C6FC432DEB452FF3AABBC2 /* ExpandedNotchHeaderView.swift */; };
 		26FD7FC6AE8A7B5490B65371 /* TelemetryStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0358A05600CF6B26370D0C1 /* TelemetryStateMachineTests.swift */; };
 		2D31239101E9F9DC9B4BD2F7 /* GravBrandMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F8A085700195064961A25A /* GravBrandMark.swift */; };
+		2E27405B0CD5047B0E97F6FE /* MiniPetSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91C5365F5C81059CA33138E1 /* MiniPetSettingsPane.swift */; };
 		317F03128A8F1809196E1B17 /* AboutSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89DB957442A77B4D96BE4F37 /* AboutSettingsPane.swift */; };
 		31ED620382689ACC323BF8AC /* TelemetrySettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894368D065C1C9708F4A800D /* TelemetrySettingsPane.swift */; };
 		32E53235DF117842E30B3DA4 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D7F28CD41D5B618C0539446 /* DesignTokens.swift */; };
@@ -63,6 +64,8 @@
 		7B90FA5A0FA52E5372524B22 /* NotchHUDCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8016017308216597D832BE /* NotchHUDCoordinator.swift */; };
 		81674DBEBCC8C5859D7A2419 /* GravOnboardingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4153587F6F624469A3FFCE7 /* GravOnboardingState.swift */; };
 		857C6479C9E63071925061DE /* EventClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D5D7A3171BFD3583CB88FEB /* EventClassifier.swift */; };
+		87E6847E29063A8E39ABED8C /* CodexMiniPetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7160022F8CF851ABB1BB5233 /* CodexMiniPetView.swift */; };
+		8918995A00E79E3C25738670 /* CodexPetsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EDD28E7CFF0E04DB6F24635 /* CodexPetsService.swift */; };
 		8CA7E9A88CB1F1895C561CB7 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852BD2EC804A1743843856FE /* AppDelegate.swift */; };
 		8CF109A20EDC98490D24E345 /* NotchHUDSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC6AD83E77E0351195E31D2 /* NotchHUDSettingsPane.swift */; };
 		8EA536B96D3FD137481EDB3B /* LanguageIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECA5F119FC0A9559C7E19B80 /* LanguageIconView.swift */; };
@@ -93,10 +96,13 @@
 		E37B1CE4EB53B218A266DE6B /* EventClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E08A338BAAE53631D2537EE /* EventClassifierTests.swift */; };
 		E622AF6644EA2504BCBD04B3 /* LiquidGlassSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 027AFD6E734A2F3F62FDB9E9 /* LiquidGlassSurface.swift */; };
 		E6D2F905233F3F58A3B4E4A0 /* SettingsSidebarProfileHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E1EEF8C1F84D3C98FEC473 /* SettingsSidebarProfileHeader.swift */; };
+		E8C3EA95A5423B1AD66652C3 /* CodexPetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35EC5A3DD76907E4720CA688 /* CodexPetModels.swift */; };
 		F050502B2AE697B0E8640A73 /* CollapsedNotchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505B023BBFB8599A956A2BD2 /* CollapsedNotchView.swift */; };
 		F0CA558E222110D05A0873EB /* ConversationDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3415985EECA17346AAFB0089 /* ConversationDiscovery.swift */; };
 		F500474F3FB13A751605CEF5 /* NotchSurfacePrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 943F323D0FFF409F539D13E7 /* NotchSurfacePrimitives.swift */; };
+		F6C539002B43C8F7771375BE /* super-saiyan-goku-combat.webp in Resources */ = {isa = PBXBuildFile; fileRef = FA1E15D49525AA2E6D379F50 /* super-saiyan-goku-combat.webp */; };
 		F6E66BE36F979E3EF60C8070 /* SegmentedModeRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EE32D22339B9911813728D /* SegmentedModeRail.swift */; };
+		FAA849D16DA09E44FE92764E /* GravMockMiniPetScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75BC90B5A519C021979038E0 /* GravMockMiniPetScene.swift */; };
 		FBAECBE5803734C0BAEB64EA /* NotchTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD2BFC0EB482A7BD92E7778 /* NotchTab.swift */; };
 		FE47946778FACBC1BA49362C /* TerminalTelemetryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C0F3062C170F4F485AC076 /* TerminalTelemetryTabView.swift */; };
 /* End PBXBuildFile section */
@@ -131,6 +137,7 @@
 		33E3A022801BA5E9D7B462BA /* GravTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GravTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3415985EECA17346AAFB0089 /* ConversationDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationDiscovery.swift; sourceTree = "<group>"; };
 		34F03068745124FF09F8AAFC /* GravKeycapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravKeycapView.swift; sourceTree = "<group>"; };
+		35EC5A3DD76907E4720CA688 /* CodexPetModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexPetModels.swift; sourceTree = "<group>"; };
 		3AA30702A27E78DEF0415086 /* TaskLogTailer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskLogTailer.swift; sourceTree = "<group>"; };
 		3DA05462AA23FE2D576017E3 /* LiquidGlassContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassContainer.swift; sourceTree = "<group>"; };
 		3FCDFDB2CAD4122B82BB0F56 /* LiveTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTelemetryTabView.swift; sourceTree = "<group>"; };
@@ -145,10 +152,13 @@
 		61F2D793076B9935599BD337 /* SettingsSettingRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSettingRow.swift; sourceTree = "<group>"; };
 		680E5CAA331FE60B756716D2 /* TranscriptTailer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptTailer.swift; sourceTree = "<group>"; };
 		6E08A338BAAE53631D2537EE /* EventClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventClassifierTests.swift; sourceTree = "<group>"; };
+		6EDD28E7CFF0E04DB6F24635 /* CodexPetsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexPetsService.swift; sourceTree = "<group>"; };
 		6FC148A4927C7357583D93F4 /* SemanticDot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticDot.swift; sourceTree = "<group>"; };
+		7160022F8CF851ABB1BB5233 /* CodexMiniPetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexMiniPetView.swift; sourceTree = "<group>"; };
 		72CD0B6FECEE6F1844388B13 /* GeneralSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsPane.swift; sourceTree = "<group>"; };
 		7374544BF8CD44B6A91F576D /* AntigravityAppDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityAppDetector.swift; sourceTree = "<group>"; };
 		7584C05AC97E1BBBDA47D994 /* LiquidGlassTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassTokens.swift; sourceTree = "<group>"; };
+		75BC90B5A519C021979038E0 /* GravMockMiniPetScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravMockMiniPetScene.swift; sourceTree = "<group>"; };
 		76FC3CE779D11F7A2EDBEF03 /* GravPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravPalette.swift; sourceTree = "<group>"; };
 		78D5F95F5AD7C5A27385D1BF /* LiquidGlassWindowBackdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassWindowBackdrop.swift; sourceTree = "<group>"; };
 		7A88509B96DB07EB20A5B641 /* SwarmModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmModels.swift; sourceTree = "<group>"; };
@@ -168,6 +178,7 @@
 		8B6E5791B3ECCE0F3282AC33 /* TranscriptTailerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptTailerTests.swift; sourceTree = "<group>"; };
 		8F6C215E35EBA9F7D3735BF6 /* PreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesStore.swift; sourceTree = "<group>"; };
 		8F6D0C56A09AC458AF195BB2 /* GravButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravButtonStyles.swift; sourceTree = "<group>"; };
+		91C5365F5C81059CA33138E1 /* MiniPetSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPetSettingsPane.swift; sourceTree = "<group>"; };
 		943F323D0FFF409F539D13E7 /* NotchSurfacePrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchSurfacePrimitives.swift; sourceTree = "<group>"; };
 		963418B974EA472DFDB529F9 /* SwarmTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmTelemetryTabView.swift; sourceTree = "<group>"; };
 		9AA4D5DAB9532096AF75857D /* SwarmSubagentWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmSubagentWatcher.swift; sourceTree = "<group>"; };
@@ -204,6 +215,7 @@
 		F4153587F6F624469A3FFCE7 /* GravOnboardingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingState.swift; sourceTree = "<group>"; };
 		F4F8A085700195064961A25A /* GravBrandMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravBrandMark.swift; sourceTree = "<group>"; };
 		F80A76ADD6985FC5058D991B /* GravOnboardingWelcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingWelcome.swift; sourceTree = "<group>"; };
+		FA1E15D49525AA2E6D379F50 /* super-saiyan-goku-combat.webp */ = {isa = PBXFileReference; path = "super-saiyan-goku-combat.webp"; sourceTree = "<group>"; };
 		FFB7B35F20C3023A4D53AA2D /* ResponseTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseTelemetryTabView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -223,6 +235,7 @@
 			isa = PBXGroup;
 			children = (
 				E6357267E8D76DE704A2A302 /* Assets.xcassets */,
+				1FFB8521D6AFF20E3694B5C8 /* DefaultPet */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -234,6 +247,14 @@
 				33E3A022801BA5E9D7B462BA /* GravTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		1FFB8521D6AFF20E3694B5C8 /* DefaultPet */ = {
+			isa = PBXGroup;
+			children = (
+				FA1E15D49525AA2E6D379F50 /* super-saiyan-goku-combat.webp */,
+			);
+			path = DefaultPet;
 			sourceTree = "<group>";
 		};
 		69E51BFF9D37DD69D65DFE23 /* App */ = {
@@ -278,6 +299,7 @@
 				89DB957442A77B4D96BE4F37 /* AboutSettingsPane.swift */,
 				72CD0B6FECEE6F1844388B13 /* GeneralSettingsPane.swift */,
 				D955AE3AFBBD48C3582D82C0 /* MenuBarShortcutsPermissionsPanes.swift */,
+				91C5365F5C81059CA33138E1 /* MiniPetSettingsPane.swift */,
 				9AC6AD83E77E0351195E31D2 /* NotchHUDSettingsPane.swift */,
 				060C44C5CB0394A413A55346 /* SettingsAppearancePicker.swift */,
 				C3978D7EEA69E801935E810D /* SettingsNavigationState.swift */,
@@ -315,6 +337,7 @@
 		96C4209462DB50391133173C /* Notch */ = {
 			isa = PBXGroup;
 			children = (
+				7160022F8CF851ABB1BB5233 /* CodexMiniPetView.swift */,
 				505B023BBFB8599A956A2BD2 /* CollapsedNotchView.swift */,
 				A7C6FC432DEB452FF3AABBC2 /* ExpandedNotchHeaderView.swift */,
 				D80414C1DE01980C28A80A7E /* ExpandedNotchView.swift */,
@@ -335,6 +358,7 @@
 		999432103FBB72F90DF5A1A1 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				BE9C84A34D9425EF72DC0059 /* Pets */,
 				89E4170BDEABDBDEF7979B9B /* Telemetry */,
 			);
 			path = Core;
@@ -381,6 +405,15 @@
 			path = Features;
 			sourceTree = "<group>";
 		};
+		BE9C84A34D9425EF72DC0059 /* Pets */ = {
+			isa = PBXGroup;
+			children = (
+				35EC5A3DD76907E4720CA688 /* CodexPetModels.swift */,
+				6EDD28E7CFF0E04DB6F24635 /* CodexPetsService.swift */,
+			);
+			path = Pets;
+			sourceTree = "<group>";
+		};
 		DAE907FD7D0A55F337283AB9 /* Grav */ = {
 			isa = PBXGroup;
 			children = (
@@ -406,6 +439,7 @@
 			isa = PBXGroup;
 			children = (
 				A1F7C8358277B92CA02CE052 /* GravMockDesktopCanvas.swift */,
+				75BC90B5A519C021979038E0 /* GravMockMiniPetScene.swift */,
 				DB8BE24B233BB6DB74B351F1 /* GravOnboardingActionBar.swift */,
 				AF72E703711EF7C02C996F6F /* GravOnboardingChrome.swift */,
 				E559AA52928E30BCD6D980A0 /* GravOnboardingCompletionCard.swift */,
@@ -511,6 +545,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				735491AB9A43E5AC54BB29DC /* Assets.xcassets in Resources */,
+				F6C539002B43C8F7771375BE /* super-saiyan-goku-combat.webp in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -540,6 +575,9 @@
 				15A515F19FE62EC328A910A5 /* AntigravityAppDetector.swift in Sources */,
 				02FE7E1616846E92273B0631 /* AntigravityTelemetryStore.swift in Sources */,
 				8CA7E9A88CB1F1895C561CB7 /* AppDelegate.swift in Sources */,
+				87E6847E29063A8E39ABED8C /* CodexMiniPetView.swift in Sources */,
+				E8C3EA95A5423B1AD66652C3 /* CodexPetModels.swift in Sources */,
+				8918995A00E79E3C25738670 /* CodexPetsService.swift in Sources */,
 				F050502B2AE697B0E8640A73 /* CollapsedNotchView.swift in Sources */,
 				F0CA558E222110D05A0873EB /* ConversationDiscovery.swift in Sources */,
 				B92DE6AAE0187418B453176D /* ConversationSQLiteProbe.swift in Sources */,
@@ -558,6 +596,7 @@
 				A308F5FE2738E1576F19DC3F /* GravKeycapBadge.swift in Sources */,
 				1F673C8D3324B4B762E3A517 /* GravKeycapView.swift in Sources */,
 				13FEA7C991458936EE6E346A /* GravMockDesktopCanvas.swift in Sources */,
+				FAA849D16DA09E44FE92764E /* GravMockMiniPetScene.swift in Sources */,
 				E031E6062709194FAB3D56F2 /* GravMotionSpec.swift in Sources */,
 				CA5BB644FDF7B18B73D891DC /* GravOnboardingActionBar.swift in Sources */,
 				AA9467D1F610664C47AD30AD /* GravOnboardingChrome.swift in Sources */,
@@ -591,6 +630,7 @@
 				D349EE9BABF922ED9F60B2B9 /* MenuBarController.swift in Sources */,
 				45F518C3D7C1769690E52D52 /* MenuBarIconRenderer.swift in Sources */,
 				0380A4C73CD80FC418A91EE3 /* MenuBarShortcutsPermissionsPanes.swift in Sources */,
+				2E27405B0CD5047B0E97F6FE /* MiniPetSettingsPane.swift in Sources */,
 				7B90FA5A0FA52E5372524B22 /* NotchHUDCoordinator.swift in Sources */,
 				8CF109A20EDC98490D24E345 /* NotchHUDSettingsPane.swift in Sources */,
 				F500474F3FB13A751605CEF5 /* NotchSurfacePrimitives.swift in Sources */,

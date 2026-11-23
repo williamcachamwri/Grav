@@ -3,11 +3,13 @@ import Observation
 import SwiftUI
 
 /// `@MainActor` macOS menu bar controller managing Grav's `NSStatusItem`,
-/// monochrome template orbital icon, live status header, and quick actions.
+/// monochrome template orbital icon, live status header, Mini Pet controls,
+/// active session switcher, and rich HUD toggles.
 @MainActor
 public final class MenuBarController: NSObject, NSMenuDelegate {
     private let store: AntigravityTelemetryStore
     private let preferences: PreferencesStore
+    private let petsStore: CodexPetsStore
 
     private var statusItem: NSStatusItem?
     private let menu = NSMenu()
@@ -15,27 +17,38 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     private var lastRenderedState: MenuBarIconRenderer.VisualState?
 
     private var headerMenuItem: NSMenuItem?
+    private var pinNotchMenuItem: NSMenuItem?
+    private var hoverToExpandMenuItem: NSMenuItem?
+    private var autoPeekMenuItem: NSMenuItem?
+    private var playSoundsMenuItem: NSMenuItem?
     private var pauseResumeMenuItem: NSMenuItem?
+    private var miniPetSubmenu: NSMenu?
+    private var sessionsSubmenu: NSMenu?
     private var openAntigravityMenuItem: NSMenuItem?
 
     public var onToggleNotch: (() -> Void)?
     public var onReplayWelcome: (() -> Void)?
     public var onOpenPreferences: (() -> Void)?
+    public var onOpenSettingsTab: ((SettingsTab) -> Void)?
     public var onQuit: (() -> Void)?
 
     public init(
         store: AntigravityTelemetryStore,
         preferences: PreferencesStore,
+        petsStore: CodexPetsStore = .shared,
         onToggleNotch: (() -> Void)? = nil,
         onReplayWelcome: (() -> Void)? = nil,
         onOpenPreferences: (() -> Void)? = nil,
+        onOpenSettingsTab: ((SettingsTab) -> Void)? = nil,
         onQuit: (() -> Void)? = nil
     ) {
         self.store = store
         self.preferences = preferences
+        self.petsStore = petsStore
         self.onToggleNotch = onToggleNotch
         self.onReplayWelcome = onReplayWelcome
         self.onOpenPreferences = onOpenPreferences
+        self.onOpenSettingsTab = onOpenSettingsTab
         self.onQuit = onQuit
         super.init()
     }
@@ -70,7 +83,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         lastRenderedState = nil
     }
 
-    /// Immediately synchronizes the menu bar icon and dynamic menu item titles.
+    /// Immediately synchronizes the menu bar icon and dynamic menu item states.
     public func refresh() {
         updateStatusIcon()
         updateDynamicMenuItems()
@@ -90,13 +103,49 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let toggleNotchItem = makeMenuItem(
-            title: "Toggle Notch",
+        // Primary Notch & Telemetry Controls
+        menu.addItem(makeMenuItem(
+            title: "Toggle Notch HUD",
             action: #selector(handleToggleNotch),
             keyEquivalent: "",
             symbolName: "rectangle.topthird.inset.filled"
+        ))
+
+        let pinItem = makeMenuItem(
+            title: "Pin Notch Open",
+            action: #selector(handleTogglePinNotch),
+            keyEquivalent: "",
+            symbolName: "pin"
         )
-        menu.addItem(toggleNotchItem)
+        menu.addItem(pinItem)
+        pinNotchMenuItem = pinItem
+
+        let hoverItem = makeMenuItem(
+            title: "Hover to Expand",
+            action: #selector(handleToggleHoverToExpand),
+            keyEquivalent: "",
+            symbolName: "cursorarrow.motionlines"
+        )
+        menu.addItem(hoverItem)
+        hoverToExpandMenuItem = hoverItem
+
+        let autoPeekItem = makeMenuItem(
+            title: "Auto-Peek on Events",
+            action: #selector(handleToggleAutoPeek),
+            keyEquivalent: "",
+            symbolName: "sparkles"
+        )
+        menu.addItem(autoPeekItem)
+        autoPeekMenuItem = autoPeekItem
+
+        let soundsItem = makeMenuItem(
+            title: "Play Sounds",
+            action: #selector(handleToggleSounds),
+            keyEquivalent: "",
+            symbolName: "speaker.wave.2"
+        )
+        menu.addItem(soundsItem)
+        playSoundsMenuItem = soundsItem
 
         let pauseItem = makeMenuItem(
             title: "Pause Telemetry",
@@ -109,14 +158,35 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let replayWelcomeItem = makeMenuItem(
-            title: "Replay Welcome Screen",
-            action: #selector(handleReplayWelcome),
+        // Mini Pet Submenu
+        let petParent = makeMenuItem(
+            title: "Mini Pet",
+            action: nil,
             keyEquivalent: "",
-            symbolName: "arrow.counterclockwise"
+            symbolName: "pawprint.fill"
         )
-        menu.addItem(replayWelcomeItem)
+        let petSubmenu = NSMenu(title: "Mini Pet")
+        petSubmenu.autoenablesItems = false
+        petParent.submenu = petSubmenu
+        menu.addItem(petParent)
+        miniPetSubmenu = petSubmenu
 
+        // Active Session Submenu
+        let sessionParent = makeMenuItem(
+            title: "Active Session",
+            action: nil,
+            keyEquivalent: "",
+            symbolName: "bubble.left.and.bubble.right"
+        )
+        let sessionSubmenu = NSMenu(title: "Active Session")
+        sessionSubmenu.autoenablesItems = false
+        sessionParent.submenu = sessionSubmenu
+        menu.addItem(sessionParent)
+        sessionsSubmenu = sessionSubmenu
+
+        menu.addItem(.separator())
+
+        // Antigravity & Onboarding Quick Actions
         let openAntigravityItem = makeMenuItem(
             title: "Open Antigravity",
             action: #selector(handleOpenAntigravity),
@@ -126,37 +196,59 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(openAntigravityItem)
         openAntigravityMenuItem = openAntigravityItem
 
+        menu.addItem(makeMenuItem(
+            title: "Replay Welcome & Setup",
+            action: #selector(handleReplayWelcome),
+            keyEquivalent: "",
+            symbolName: "arrow.counterclockwise"
+        ))
+
         menu.addItem(.separator())
 
-        let preferencesItem = makeMenuItem(
+        // Direct Settings Jump Links
+        menu.addItem(makeMenuItem(
+            title: "Mini Pet Gallery & Export…",
+            action: #selector(handleOpenMiniPetSettings),
+            keyEquivalent: "",
+            symbolName: "square.grid.2x2"
+        ))
+
+        menu.addItem(makeMenuItem(
+            title: "Notch HUD Settings…",
+            action: #selector(handleOpenNotchHUDSettings),
+            keyEquivalent: "",
+            symbolName: "slider.horizontal.3"
+        ))
+
+        menu.addItem(makeMenuItem(
             title: "Preferences…",
             action: #selector(handleOpenPreferences),
             keyEquivalent: ",",
             symbolName: "gearshape"
-        )
-        menu.addItem(preferencesItem)
+        ))
 
         menu.addItem(.separator())
 
-        let quitItem = makeMenuItem(
+        menu.addItem(makeMenuItem(
             title: "Quit Grav",
             action: #selector(handleQuit),
             keyEquivalent: "q",
             symbolName: "power"
-        )
-        menu.addItem(quitItem)
+        ))
     }
 
     private func makeMenuItem(
         title: String,
-        action: Selector,
+        action: Selector?,
         keyEquivalent: String,
-        symbolName: String
+        symbolName: String? = nil
     ) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
-        item.target = self
+        item.target = action != nil ? self : nil
         item.isEnabled = true
-        if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: title) {
+        if let symbolName,
+           let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: title)
+        {
             image.isTemplate = true
             item.image = image
         }
@@ -194,21 +286,36 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func updateDynamicMenuItems() {
+        let contextPercent: Int? = store.tokenMetrics.latestContextTokens > 0
+            ? Int((store.tokenMetrics.contextFillRatio * 100.0).rounded())
+            : nil
+
         let snapshot = MenuBarStatusSnapshot(
             state: store.state,
             isPaused: isPaused,
             activeSessionTitle: store.activeSession?.title,
             tokenCount: store.tokenMetrics.totalTokens,
+            contextPercent: contextPercent,
             isAppRunning: store.connectionStatus.isAppRunning,
             isBrainAccessible: store.connectionStatus.isBrainAccessible
         )
 
         if let headerMenuItem {
-            let headerView = MenuBarStatusHeaderView(snapshot: snapshot)
+            let activePet = preferences.miniPetEnabled ? petsStore.pet(withID: preferences.activeMiniPetID) : nil
+            let headerView = MenuBarStatusHeaderView(
+                snapshot: snapshot,
+                activePet: activePet,
+                petsStore: petsStore
+            )
             let hostingView = NSHostingView(rootView: headerView)
-            hostingView.frame = NSRect(x: 0, y: 0, width: 248, height: 46)
+            hostingView.frame = NSRect(x: 0, y: 0, width: 264, height: 48)
             headerMenuItem.view = hostingView
         }
+
+        pinNotchMenuItem?.state = preferences.isNotchPinned ? .on : .off
+        hoverToExpandMenuItem?.state = preferences.hoverToExpand ? .on : .off
+        autoPeekMenuItem?.state = preferences.autoPeekOnEvents ? .on : .off
+        playSoundsMenuItem?.state = preferences.playSounds ? .on : .off
 
         if let pauseResumeMenuItem {
             let paused = isPaused
@@ -224,6 +331,123 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
             openAntigravityMenuItem.title = store.connectionStatus.isAppRunning
                 ? "Focus Antigravity"
                 : "Open Antigravity"
+        }
+
+        rebuildMiniPetSubmenu()
+        rebuildSessionsSubmenu()
+    }
+
+    private func rebuildMiniPetSubmenu() {
+        guard let submenu = miniPetSubmenu else { return }
+        submenu.removeAllItems()
+
+        let showItem = makeMenuItem(
+            title: "Show Mini Pet",
+            action: #selector(handleToggleMiniPet),
+            keyEquivalent: "",
+            symbolName: "eye"
+        )
+        showItem.state = preferences.miniPetEnabled ? .on : .off
+        submenu.addItem(showItem)
+
+        let interactItem = makeMenuItem(
+            title: "Wave / Jump",
+            action: #selector(handlePetInteract),
+            keyEquivalent: "",
+            symbolName: "hand.wave"
+        )
+        interactItem.isEnabled = preferences.miniPetEnabled
+        submenu.addItem(interactItem)
+
+        submenu.addItem(.separator())
+
+        let placementHeader = NSMenuItem(title: "Placement", action: nil, keyEquivalent: "")
+        placementHeader.isEnabled = false
+        submenu.addItem(placementHeader)
+
+        for placement in MiniPetPlacement.allCases {
+            let item = makeMenuItem(
+                title: placement.displayName,
+                action: #selector(handleSelectPetPlacement(_:)),
+                keyEquivalent: ""
+            )
+            item.representedObject = placement.rawValue
+            item.state = preferences.miniPetPlacement == placement ? .on : .off
+            submenu.addItem(item)
+        }
+
+        submenu.addItem(.separator())
+
+        let petsHeader = NSMenuItem(title: "Installed Pets", action: nil, keyEquivalent: "")
+        petsHeader.isEnabled = false
+        submenu.addItem(petsHeader)
+
+        for pet in petsStore.installedPets {
+            let item = makeMenuItem(
+                title: pet.displayName,
+                action: #selector(handleEquipPet(_:)),
+                keyEquivalent: ""
+            )
+            item.representedObject = pet.id
+            item.state = (preferences.activeMiniPetID == pet.id && preferences.miniPetEnabled) ? .on : .off
+            submenu.addItem(item)
+        }
+
+        submenu.addItem(.separator())
+
+        submenu.addItem(makeMenuItem(
+            title: "Browse codex-pets.net & Export GIFs…",
+            action: #selector(handleOpenMiniPetSettings),
+            keyEquivalent: "",
+            symbolName: "arrow.down.circle"
+        ))
+    }
+
+    private func rebuildSessionsSubmenu() {
+        guard let submenu = sessionsSubmenu else { return }
+        submenu.removeAllItems()
+
+        if store.sessions.isEmpty {
+            let emptyItem = NSMenuItem(title: "No active Antigravity conversations", action: nil, keyEquivalent: "")
+            emptyItem.isEnabled = false
+            submenu.addItem(emptyItem)
+        } else {
+            for session in store.sessions.prefix(12) {
+                let cleanTitle = session.title
+                    .replacingOccurrences(of: "<USER_REQUEST>", with: "")
+                    .replacingOccurrences(of: "</USER_REQUEST>", with: "")
+                    .replacingOccurrences(of: "\n", with: " ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let label = cleanTitle.isEmpty ? session.id : String(cleanTitle.prefix(48))
+                let item = makeMenuItem(
+                    title: label,
+                    action: #selector(handleSelectSession(_:)),
+                    keyEquivalent: ""
+                )
+                item.representedObject = session.id
+                item.state = session.id == store.activeSession?.id ? .on : .off
+                submenu.addItem(item)
+            }
+        }
+
+        submenu.addItem(.separator())
+
+        let revealItem = makeMenuItem(
+            title: "Reveal Transcript in Finder",
+            action: #selector(handleRevealTranscript),
+            keyEquivalent: "",
+            symbolName: "folder"
+        )
+        revealItem.isEnabled = store.activeSession != nil
+        submenu.addItem(revealItem)
+
+        if store.state.isActive {
+            submenu.addItem(makeMenuItem(
+                title: "Mark Idle",
+                action: #selector(handleForceIdle),
+                keyEquivalent: "",
+                symbolName: "moon.zzz"
+            ))
         }
     }
 
@@ -256,10 +480,70 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         onToggleNotch?()
     }
 
+    @objc private func handleTogglePinNotch() {
+        preferences.isNotchPinned.toggle()
+        refresh()
+    }
+
+    @objc private func handleToggleHoverToExpand() {
+        preferences.hoverToExpand.toggle()
+        refresh()
+    }
+
+    @objc private func handleToggleAutoPeek() {
+        preferences.autoPeekOnEvents.toggle()
+        refresh()
+    }
+
+    @objc private func handleToggleSounds() {
+        preferences.playSounds.toggle()
+        refresh()
+    }
+
     @objc private func handleTogglePauseTelemetry() {
         let nextPaused = !isPaused
         preferences.isTelemetryPaused = nextPaused
         store.setPaused(nextPaused)
+        refresh()
+    }
+
+    @objc private func handleToggleMiniPet() {
+        preferences.miniPetEnabled.toggle()
+        refresh()
+    }
+
+    @objc private func handlePetInteract() {
+        petsStore.triggerInteractionReaction()
+    }
+
+    @objc private func handleSelectPetPlacement(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let placement = MiniPetPlacement(rawValue: raw)
+        else { return }
+        preferences.miniPetPlacement = placement
+        preferences.miniPetEnabled = true
+        refresh()
+    }
+
+    @objc private func handleEquipPet(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        preferences.activeMiniPetID = id
+        preferences.miniPetEnabled = true
+        refresh()
+    }
+
+    @objc private func handleSelectSession(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        store.selectSessionByID(id)
+        refresh()
+    }
+
+    @objc private func handleRevealTranscript() {
+        store.revealActiveTranscriptInFinder()
+    }
+
+    @objc private func handleForceIdle() {
+        store.forceSettleIdle()
         refresh()
     }
 
@@ -269,6 +553,22 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func handleOpenAntigravity() {
         store.activateAntigravityApp()
+    }
+
+    @objc private func handleOpenMiniPetSettings() {
+        if let onOpenSettingsTab {
+            onOpenSettingsTab(.miniPet)
+        } else {
+            onOpenPreferences?()
+        }
+    }
+
+    @objc private func handleOpenNotchHUDSettings() {
+        if let onOpenSettingsTab {
+            onOpenSettingsTab(.notchHUD)
+        } else {
+            onOpenPreferences?()
+        }
     }
 
     @objc private func handleOpenPreferences() {
@@ -291,6 +591,7 @@ private struct MenuBarStatusSnapshot: Sendable {
     let isPaused: Bool
     let activeSessionTitle: String?
     let tokenCount: Int
+    let contextPercent: Int?
     let isAppRunning: Bool
     let isBrainAccessible: Bool
 
@@ -335,12 +636,19 @@ private struct MenuBarStatusSnapshot: Sendable {
         }
         var parts: [String] = []
         if let activeSessionTitle, !activeSessionTitle.isEmpty {
-            parts.append(activeSessionTitle)
+            let clean = activeSessionTitle
+                .replacingOccurrences(of: "<USER_REQUEST>", with: "")
+                .replacingOccurrences(of: "</USER_REQUEST>", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            parts.append(clean.isEmpty ? "Connected" : clean)
         } else {
             parts.append(isAppRunning ? "Connected" : "Local watcher ready")
         }
         if tokenCount > 0 {
             parts.append("\(TokenMetrics.formatCompact(tokenCount)) tok")
+        }
+        if let contextPercent {
+            parts.append("\(contextPercent)% ctx")
         }
         return parts.joined(separator: " · ")
     }
@@ -355,6 +663,8 @@ private struct MenuBarStatusSnapshot: Sendable {
 private struct MenuBarStatusHeaderView: View {
     @Environment(\.colorScheme) private var colorScheme
     let snapshot: MenuBarStatusSnapshot
+    let activePet: InstalledCodexPet?
+    let petsStore: CodexPetsStore
 
     var body: some View {
         let palette = GravAdaptivePalette(colorScheme: colorScheme)
@@ -381,10 +691,21 @@ private struct MenuBarStatusHeaderView: View {
                     .lineLimit(1)
             }
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 4)
+
+            if let activePet {
+                CodexPetSpriteView(
+                    pet: activePet,
+                    state: .idle,
+                    size: 24,
+                    speed: 1.0,
+                    reduceMotion: true,
+                    petsStore: petsStore
+                )
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
-        .frame(width: 248, height: 46, alignment: .leading)
+        .frame(width: 264, height: 48, alignment: .leading)
     }
 }

@@ -15,6 +15,7 @@ import SwiftUI
 enum GravOnboardingStep: String, CaseIterable, Identifiable, Hashable, Sendable {
     case connect
     case notchHud
+    case miniPet
     case preferences
 
     var id: String { rawValue }
@@ -23,7 +24,8 @@ enum GravOnboardingStep: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .connect: return 1
         case .notchHud: return 2
-        case .preferences: return 3
+        case .miniPet: return 3
+        case .preferences: return 4
         }
     }
 
@@ -31,6 +33,7 @@ enum GravOnboardingStep: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .connect: return "Connect"
         case .notchHud: return "Notch HUD"
+        case .miniPet: return "Mini Pet"
         case .preferences: return "Preferences"
         }
     }
@@ -39,6 +42,7 @@ enum GravOnboardingStep: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .connect: return "Connect to Antigravity"
         case .notchHud: return "Meet Your Notch HUD"
+        case .miniPet: return "Customize Your Mini Pet"
         case .preferences: return "Preferences & Startup"
         }
     }
@@ -49,6 +53,8 @@ enum GravOnboardingStep: String, CaseIterable, Identifiable, Hashable, Sendable 
             return "Grav reads Antigravity's local telemetry stream directly from disk — zero proxies, zero background polling, zero overhead."
         case .notchHud:
             return "Live agent reasoning, file diffs, and shell output stay tucked inside your MacBook notch until you glance or hover."
+        case .miniPet:
+            return "Bring a crisp pixel companion from codex-pets.net right into your Notch — reacting live as Antigravity thinks, edits, and runs."
         case .preferences:
             return "Tune how Grav starts up, peeks on telemetry events, and renders macOS Liquid Glass chrome."
         }
@@ -58,6 +64,7 @@ enum GravOnboardingStep: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .connect: return "antenna.radiowaves.left.and.right"
         case .notchHud: return "macbook"
+        case .miniPet: return "pawprint.fill"
         case .preferences: return "slider.horizontal.3"
         }
     }
@@ -68,6 +75,8 @@ enum GravOnboardingStep: String, CaseIterable, Identifiable, Hashable, Sendable 
             return "Click Refresh on the right to verify Antigravity and local telemetry access."
         case .notchHud:
             return "Hover or click the miniature MacBook notch on the right to expand the 3-tab HUD."
+        case .miniPet:
+            return "Test a live pet animation state or tweak placement & size on the right."
         case .preferences:
             return "Toggle any preference in System Settings on the right — changes apply live."
         }
@@ -79,6 +88,8 @@ enum GravOnboardingStep: String, CaseIterable, Identifiable, Hashable, Sendable 
             return "Grav watches ~/.gemini/antigravity/brain/ using kernel kqueue events so idle CPU stays at 0%."
         case .notchHud:
             return "While the Notch HUD is open, press 1, 2, or 3 to jump straight between Thinking, File Diffs, and Terminal Logs."
+        case .miniPet:
+            return "Search and download new pets from codex-pets.net or export transparent GIFs anytime in Settings → Mini Pet."
         case .preferences:
             return "You can adjust any of these later from the menu bar icon or by pressing ⌘,."
         }
@@ -90,6 +101,8 @@ enum GravOnboardingStep: String, CaseIterable, Identifiable, Hashable, Sendable 
             return [.detectAntigravity, .verifyBrainAccess]
         case .notchHud:
             return [.expandNotchPreview, .inspectTelemetryTabs]
+        case .miniPet:
+            return [.testMiniPetAnimation, .customizeMiniPet]
         case .preferences:
             return [.reviewPreferences]
         }
@@ -101,6 +114,8 @@ enum GravOnboardingChallenge: String, CaseIterable, Identifiable, Hashable, Send
     case verifyBrainAccess
     case expandNotchPreview
     case inspectTelemetryTabs
+    case testMiniPetAnimation
+    case customizeMiniPet
     case reviewPreferences
 
     var id: String { rawValue }
@@ -115,6 +130,10 @@ enum GravOnboardingChallenge: String, CaseIterable, Identifiable, Hashable, Send
             return "Expand the interactive Notch HUD"
         case .inspectTelemetryTabs:
             return "Explore Thinking, File Diffs & Logs"
+        case .testMiniPetAnimation:
+            return "Preview a live Mini Pet animation state"
+        case .customizeMiniPet:
+            return "Tune placement, size, or roaming"
         case .reviewPreferences:
             return "Review startup & HUD behavior"
         }
@@ -126,6 +145,8 @@ enum GravOnboardingChallenge: String, CaseIterable, Identifiable, Hashable, Send
         case .verifyBrainAccess: return []
         case .expandNotchPreview: return ["Space"]
         case .inspectTelemetryTabs: return ["1", "2", "3"]
+        case .testMiniPetAnimation: return []
+        case .customizeMiniPet: return []
         case .reviewPreferences: return ["⌘,"]
         }
     }
@@ -199,7 +220,10 @@ final class GravOnboardingState: ObservableObject {
     @Published var selectedMockNotchTab: GravMockNotchTab = .live
     @Published var visitedMockTabs: Set<GravMockNotchTab> = []
 
-    // Step 3: Preferences feedback state
+    // Step 3: Mini Pet live preview state
+    @Published var miniPetPreviewState: CodexPetAnimationState = .idle
+
+    // Step 4: Preferences feedback state
     @Published var hasReviewedPreferences: Bool = false
 
     var isCurrentStepComplete: Bool {
@@ -226,6 +250,7 @@ final class GravOnboardingState: ObservableObject {
         isMockNotchExpanded = false
         selectedMockNotchTab = .live
         visitedMockTabs = []
+        miniPetPreviewState = .idle
         hasReviewedPreferences = false
     }
 
@@ -305,6 +330,8 @@ final class GravOnboardingState: ObservableObject {
         case .notchHud:
             isMockNotchExpanded = false
             selectedMockNotchTab = .live
+        case .miniPet:
+            break
         case .preferences:
             break
         }
@@ -367,6 +394,15 @@ final class GravOnboardingState: ObservableObject {
             let next = all[(idx + 1) % all.count]
             selectMockNotchTab(next)
         }
+    }
+
+    func selectMiniPetPreviewState(_ newState: CodexPetAnimationState) {
+        miniPetPreviewState = newState
+        completeChallenge(.testMiniPetAnimation)
+    }
+
+    func markMiniPetCustomized() {
+        completeChallenge(.customizeMiniPet)
     }
 
     func markPreferencesReviewed() {

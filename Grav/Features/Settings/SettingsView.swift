@@ -135,6 +135,12 @@ public struct SettingsView: View {
                         onToggleNotch: onToggleNotch
                     )
                 }
+            case .miniPet:
+                SettingsLazyView {
+                    MiniPetSettingsPane(
+                        preferences: preferences
+                    )
+                }
             case .telemetry:
                 SettingsLazyView {
                     TelemetrySettingsPane(

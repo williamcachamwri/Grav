@@ -49,7 +49,9 @@ public final class NotchHUDCoordinator {
             configuration: Self.makeConfiguration(
                 hasPhysicalNotch: true,
                 hoverToExpand: preferences.hoverToExpand,
-                isPinned: preferences.isNotchPinned
+                isPinned: preferences.isNotchPinned,
+                hoverOpenDelay: preferences.hoverOpenDelay,
+                hapticsEnabled: preferences.hapticsEnabled
             ),
             motion: .resolved(gravMotion),
             style: .standard,
@@ -58,7 +60,9 @@ public final class NotchHUDCoordinator {
         initialPresenter.configuration = Self.makeConfiguration(
             hasPhysicalNotch: initialPresenter.geometry.hasPhysicalNotch,
             hoverToExpand: preferences.hoverToExpand,
-            isPinned: preferences.isNotchPinned
+            isPinned: preferences.isNotchPinned,
+            hoverOpenDelay: preferences.hoverOpenDelay,
+            hapticsEnabled: preferences.hapticsEnabled
         )
         self.presenter = initialPresenter
     }
@@ -81,7 +85,8 @@ public final class NotchHUDCoordinator {
         presenter.install {
             CollapsedNotchView(
                 store: storeRef,
-                presenter: presenterRef
+                presenter: presenterRef,
+                preferences: preferencesRef
             )
         } expanded: { [weak self] in
             ExpandedNotchView(
@@ -188,7 +193,9 @@ public final class NotchHUDCoordinator {
         let updated = Self.makeConfiguration(
             hasPhysicalNotch: presenter.geometry.hasPhysicalNotch,
             hoverToExpand: preferences.hoverToExpand,
-            isPinned: preferences.isNotchPinned
+            isPinned: preferences.isNotchPinned,
+            hoverOpenDelay: preferences.hoverOpenDelay,
+            hapticsEnabled: preferences.hapticsEnabled
         )
 
         if presenter.configuration != updated {
@@ -223,6 +230,20 @@ public final class NotchHUDCoordinator {
 
         if case .welcome = event {
             presenter.peek()
+            return
+        }
+
+        if case .needsInput = event, preferences.autoExpandOnNeedsInput, !store.isPaused {
+            if presenter.phase == .collapsed {
+                let now = Date()
+                if now.timeIntervalSince(lastTelemetryPeekAt) >= 1.2 {
+                    lastTelemetryPeekAt = now
+                    if preferences.playSounds {
+                        GravOnboardingWelcomeAudio.shared.playStepComplete()
+                    }
+                    presenter.expand(reason: .programmatic)
+                }
+            }
             return
         }
 
@@ -261,6 +282,9 @@ public final class NotchHUDCoordinator {
             _ = preferences.hoverToExpand
             _ = preferences.isNotchPinned
             _ = preferences.autoPeekOnEvents
+            _ = preferences.hoverOpenDelay
+            _ = preferences.hapticsEnabled
+            _ = preferences.autoExpandOnNeedsInput
             _ = presenter.geometry.hasPhysicalNotch
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
@@ -299,7 +323,9 @@ public final class NotchHUDCoordinator {
     private static func makeConfiguration(
         hasPhysicalNotch: Bool,
         hoverToExpand: Bool,
-        isPinned: Bool
+        isPinned: Bool,
+        hoverOpenDelay: Double,
+        hapticsEnabled: Bool
     ) -> NotchConfiguration {
         let collapsedWidth: NotchCollapsedWidth = hasPhysicalNotch
             ? .wrapCutout(reserve: notchedCollapsedReserve)
@@ -314,11 +340,11 @@ public final class NotchHUDCoordinator {
             expandedBottomCornerRadius: 22,
             expandedTopReserve: .cutoutOnly,
             expandsOnHover: hoverToExpand,
-            hoverOpenDelay: 0.15,
+            hoverOpenDelay: min(0.50, max(0.05, hoverOpenDelay)),
             hoverCancelGrace: 0.10,
             collapsesOnPointerExit: isPinned ? false : hoverToExpand,
             collapsesOnOutsideClick: !isPinned,
-            hapticOnHoverOpen: true
+            hapticOnHoverOpen: hapticsEnabled
         )
     }
 }

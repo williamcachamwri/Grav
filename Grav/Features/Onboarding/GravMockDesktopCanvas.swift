@@ -17,12 +17,14 @@ import SwiftUI
 enum GravMockApp: String, Equatable, Sendable {
     case antigravity
     case notchHud
+    case miniPet
     case settings
 
     var menuTitle: String {
         switch self {
         case .antigravity: "Antigravity"
         case .notchHud: "Grav"
+        case .miniPet: "Codex Pets"
         case .settings: "System Settings"
         }
     }
@@ -31,6 +33,7 @@ enum GravMockApp: String, Equatable, Sendable {
         switch self {
         case .antigravity: ["File", "Edit", "View", "Agent", "Help"]
         case .notchHud: ["Telemetry", "Notch", "View", "Window", "Help"]
+        case .miniPet: ["Stage", "Export", "Gallery", "Window", "Help"]
         case .settings: ["Edit", "View", "Window", "Help"]
         }
     }
@@ -54,6 +57,15 @@ enum GravMockApp: String, Equatable, Sendable {
                 .init(text: "File Diffs", opacity: 0.040),
                 .init(text: "Terminal"),
                 .init(text: "120Hz", opacity: 0.040),
+            ]
+        case .miniPet:
+            return [
+                .init(text: "Mini Pet"),
+                .init(text: "codex-pets.net", size: 28, weight: .heavy, opacity: 0.040),
+                .init(text: "Grav", size: 32, weight: .heavy, opacity: 0.042),
+                .init(text: "Pixel Art"),
+                .init(text: "120 ms · GIF", opacity: 0.040),
+                .init(text: "Notch Companion", size: 26, weight: .heavy, opacity: 0.038),
             ]
         case .settings:
             return [

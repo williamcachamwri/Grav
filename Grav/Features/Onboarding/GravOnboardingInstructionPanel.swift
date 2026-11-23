@@ -126,6 +126,15 @@ struct GravOnboardingInstructionPanel: View {
                 return "All telemetry tabs explored! Click here to keep cycling or press Continue."
             }
 
+        case .miniPet:
+            if !state.completedChallenges.contains(.testMiniPetAnimation) {
+                return "Click here (or tap a state on the right) to test how your Mini Pet reacts live."
+            } else if !state.completedChallenges.contains(.customizeMiniPet) {
+                return "Nice! Now try changing placement, size, or roaming on the right — or click here to toggle placement."
+            } else {
+                return "Your Codex Mini Pet is tuned and ready! Click here to cycle states or press Continue."
+            }
+
         case .preferences:
             if state.hasReviewedPreferences {
                 return "Preferences updated live. Click here to restore recommended defaults anytime."
@@ -176,6 +185,23 @@ struct GravOnboardingInstructionPanel: View {
 
         case .notchHud:
             state.advanceMockNotchDemo()
+
+        case .miniPet:
+            let demoCycle: [CodexPetAnimationState] = [.idle, .running, .review, .waving, .jumping]
+            if let idx = demoCycle.firstIndex(of: state.miniPetPreviewState) {
+                state.selectMiniPetPreviewState(demoCycle[(idx + 1) % demoCycle.count])
+            } else {
+                state.selectMiniPetPreviewState(.running)
+            }
+            if state.completedChallenges.contains(.testMiniPetAnimation),
+               !state.completedChallenges.contains(.customizeMiniPet)
+            {
+                let placements = MiniPetPlacement.allCases
+                if let pIdx = placements.firstIndex(of: preferences.miniPetPlacement) {
+                    preferences.miniPetPlacement = placements[(pIdx + 1) % placements.count]
+                }
+                state.markMiniPetCustomized()
+            }
 
         case .preferences:
             preferences.autoPeekOnEvents = true

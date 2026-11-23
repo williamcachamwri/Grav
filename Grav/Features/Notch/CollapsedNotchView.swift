@@ -12,15 +12,31 @@ import SwiftUI
 public struct CollapsedNotchView: View {
     public var store: AntigravityTelemetryStore
     public var presenter: NotchPresenter
+    public var preferences: PreferencesStore
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         store: AntigravityTelemetryStore,
-        presenter: NotchPresenter
+        presenter: NotchPresenter,
+        preferences: PreferencesStore = PreferencesStore()
     ) {
         self.store = store
         self.presenter = presenter
+        self.preferences = preferences
+    }
+
+    private var collapsedPetSize: CGFloat {
+        let maxAllowed = max(16, presenter.geometry.collapsedHeight - 4)
+        return min(CGFloat(preferences.miniPetSize), maxAllowed)
+    }
+
+    private var showsLeadingPet: Bool {
+        preferences.miniPetEnabled && preferences.miniPetPlacement == .leading
+    }
+
+    private var showsTrailingPet: Bool {
+        preferences.miniPetEnabled && preferences.miniPetPlacement == .trailing
     }
 
     private var effectiveState: TelemetryState {
@@ -67,7 +83,7 @@ public struct CollapsedNotchView: View {
     // MARK: - Leading Wing (Pure Grav Logo + Bare Optical Activity Cue)
 
     private func leadingWing(compact: Bool) -> some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 6) {
             Button {
                 store.activateAntigravityApp()
             } label: {
@@ -77,9 +93,19 @@ public struct CollapsedNotchView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Open Antigravity")
 
+            if showsLeadingPet {
+                NotchMiniPetBadge(
+                    store: store,
+                    preferences: preferences,
+                    size: collapsedPetSize
+                )
+                .transition(signalTransition)
+            }
+
             leadingActivityCue(compact: compact)
         }
         .animation(reduceMotion ? nil : islandSpring, value: effectiveState)
+        .animation(reduceMotion ? nil : islandSpring, value: showsLeadingPet)
         .animation(reduceMotion ? nil : GravMotion.subtleFade, value: store.isPaused)
     }
 
@@ -170,78 +196,90 @@ public struct CollapsedNotchView: View {
 
     @ViewBuilder
     private func trailingWing(compact: Bool) -> some View {
-        ZStack(alignment: .trailing) {
-            if !store.isPaused, let activeSwarm = store.activeSwarmSnapshot {
-                swarmTrailingSignal(for: activeSwarm, compact: compact)
-                    .id("collapsed-swarm-\(activeSwarm.runningWorkers.count)-\(activeSwarm.waitingWorkers.count)")
-                    .transition(signalTransition)
-            } else if !store.isPaused, store.runningTaskCount > 0, effectiveState == .idle {
-                runningTasksTrailingSignal(count: store.runningTaskCount, compact: compact)
-                    .id("collapsed-tasks-\(store.runningTaskCount)")
-                    .transition(signalTransition)
-            } else {
-                switch effectiveState {
-                case let .working(startedAt):
-                    workingTrailingSignal(startedAt: startedAt, compact: compact)
-                        .id("collapsed-working")
+        HStack(alignment: .center, spacing: 6) {
+            ZStack(alignment: .trailing) {
+                if !store.isPaused, let activeSwarm = store.activeSwarmSnapshot {
+                    swarmTrailingSignal(for: activeSwarm, compact: compact)
+                        .id("collapsed-swarm-\(activeSwarm.runningWorkers.count)-\(activeSwarm.waitingWorkers.count)")
                         .transition(signalTransition)
-
-                case .compacting:
-                    compactingTrailingSignal(compact: compact)
-                        .id("collapsed-compacting")
+                } else if !store.isPaused, store.runningTaskCount > 0, effectiveState == .idle {
+                    runningTasksTrailingSignal(count: store.runningTaskCount, compact: compact)
+                        .id("collapsed-tasks-\(store.runningTaskCount)")
                         .transition(signalTransition)
-
-                case .thinking:
-                    thinkingTrailingSignal(compact: compact)
-                        .id("collapsed-thinking")
-                        .transition(signalTransition)
-
-                case .replying:
-                    replyingTrailingSignal(compact: compact)
-                        .id("collapsed-replying")
-                        .transition(signalTransition)
-
-                case let .inspecting(event):
-                    inspectingTrailingSignal(for: event, compact: compact)
-                        .id("collapsed-inspect-\(event.id)")
-                        .transition(signalTransition)
-
-                case let .editing(event):
-                    editingTrailingSignal(for: event, compact: compact)
-                        .id("collapsed-edit-\(event.id)")
-                        .transition(signalTransition)
-
-                case let .runningCommand(command):
-                    if store.runningTaskCount >= 2 {
-                        runningTasksTrailingSignal(count: store.runningTaskCount, compact: compact)
-                            .id("collapsed-multi-tasks-\(store.runningTaskCount)")
+                } else {
+                    switch effectiveState {
+                    case let .working(startedAt):
+                        workingTrailingSignal(startedAt: startedAt, compact: compact)
+                            .id("collapsed-working")
                             .transition(signalTransition)
-                    } else {
-                        commandTrailingSignal(for: command, compact: compact)
-                            .id("collapsed-cmd-\(command.id)")
+
+                    case .compacting:
+                        compactingTrailingSignal(compact: compact)
+                            .id("collapsed-compacting")
                             .transition(signalTransition)
+
+                    case .thinking:
+                        thinkingTrailingSignal(compact: compact)
+                            .id("collapsed-thinking")
+                            .transition(signalTransition)
+
+                    case .replying:
+                        replyingTrailingSignal(compact: compact)
+                            .id("collapsed-replying")
+                            .transition(signalTransition)
+
+                    case let .inspecting(event):
+                        inspectingTrailingSignal(for: event, compact: compact)
+                            .id("collapsed-inspect-\(event.id)")
+                            .transition(signalTransition)
+
+                    case let .editing(event):
+                        editingTrailingSignal(for: event, compact: compact)
+                            .id("collapsed-edit-\(event.id)")
+                            .transition(signalTransition)
+
+                    case let .runningCommand(command):
+                        if store.runningTaskCount >= 2 {
+                            runningTasksTrailingSignal(count: store.runningTaskCount, compact: compact)
+                                .id("collapsed-multi-tasks-\(store.runningTaskCount)")
+                                .transition(signalTransition)
+                        } else {
+                            commandTrailingSignal(for: command, compact: compact)
+                                .id("collapsed-cmd-\(command.id)")
+                                .transition(signalTransition)
+                        }
+
+                    case let .waitingForInput(prompt):
+                        waitingTrailingSignal(prompt: prompt, compact: compact)
+                            .id("collapsed-waiting")
+                            .transition(signalTransition)
+
+                    case let .toolActivity(event):
+                        toolActivityTrailingSignal(for: event, compact: compact)
+                            .id("collapsed-tool-\(event.id)")
+                            .transition(signalTransition)
+
+                    case .idle:
+                        idleTrailingSignal(compact: compact)
+                            .id("collapsed-idle")
+                            .transition(.opacity)
                     }
-
-                case let .waitingForInput(prompt):
-                    waitingTrailingSignal(prompt: prompt, compact: compact)
-                        .id("collapsed-waiting")
-                        .transition(signalTransition)
-
-                case let .toolActivity(event):
-                    toolActivityTrailingSignal(for: event, compact: compact)
-                        .id("collapsed-tool-\(event.id)")
-                        .transition(signalTransition)
-
-                case .idle:
-                    idleTrailingSignal(compact: compact)
-                        .id("collapsed-idle")
-                        .transition(.opacity)
                 }
+            }
+
+            if showsTrailingPet {
+                NotchMiniPetBadge(
+                    store: store,
+                    preferences: preferences,
+                    size: collapsedPetSize
+                )
+                .transition(signalTransition)
             }
         }
         .animation(reduceMotion ? nil : islandSpring, value: effectiveState)
         .animation(reduceMotion ? nil : islandSpring, value: store.runningTaskCount)
         .animation(reduceMotion ? nil : islandSpring, value: store.activeSwarmSnapshot?.collapsedRatioBadge)
+        .animation(reduceMotion ? nil : islandSpring, value: showsTrailingPet)
     }
 
     private func swarmTrailingSignal(for swarm: SwarmSnapshot, compact: Bool) -> some View {
@@ -291,7 +329,7 @@ public struct CollapsedNotchView: View {
 
     private func workingTrailingSignal(startedAt: Date, compact: Bool) -> some View {
         HStack(alignment: .center, spacing: 5) {
-            if !compact, let focus = store.currentFocus, !focus.isEmpty {
+            if !compact, preferences.showCollapsedFocus, let focus = store.currentFocus, !focus.isEmpty {
                 NotchPingPongMarqueeText(
                     text: focus,
                     font: .system(size: 11.5, weight: .medium),
@@ -308,7 +346,7 @@ public struct CollapsedNotchView: View {
                 )
             }
 
-            if let steps = store.stepsProgress, !steps.isAllDone {
+            if preferences.showCollapsedStepProgress, let steps = store.stepsProgress, !steps.isAllDone {
                 miniStepsProgressBadge(steps, compact: compact)
             } else if !compact && store.runningTaskCount > 0 {
                 Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
@@ -334,7 +372,7 @@ public struct CollapsedNotchView: View {
 
     private func thinkingTrailingSignal(compact: Bool) -> some View {
         HStack(alignment: .center, spacing: 5) {
-            if !compact, let focus = store.currentFocus, !focus.isEmpty {
+            if !compact, preferences.showCollapsedFocus, let focus = store.currentFocus, !focus.isEmpty {
                 NotchPingPongMarqueeText(
                     text: focus,
                     font: .system(size: 11.5, weight: .medium),
@@ -351,7 +389,7 @@ public struct CollapsedNotchView: View {
                 )
             }
 
-            if let steps = store.stepsProgress, !steps.isAllDone {
+            if preferences.showCollapsedStepProgress, let steps = store.stepsProgress, !steps.isAllDone {
                 miniStepsProgressBadge(steps, compact: compact)
             } else if !compact && store.runningTaskCount > 0 {
                 Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
@@ -398,7 +436,7 @@ public struct CollapsedNotchView: View {
                 reduceMotion: reduceMotion
             )
 
-            if let steps = store.stepsProgress, !steps.isAllDone, !compact {
+            if preferences.showCollapsedStepProgress, let steps = store.stepsProgress, !steps.isAllDone, !compact {
                 miniStepsProgressBadge(steps, compact: true)
             }
         }
@@ -546,7 +584,7 @@ public struct CollapsedNotchView: View {
 
     private func idleTrailingSignal(compact: Bool) -> some View {
         HStack(spacing: 6) {
-            if !compact && store.tokenMetrics.totalTokens > 0 {
+            if !compact && preferences.showCollapsedTokens && store.tokenMetrics.totalTokens > 0 {
                 Text(TokenMetrics.formatCompact(store.tokenMetrics.totalTokens))
                     .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                     .monospacedDigit()

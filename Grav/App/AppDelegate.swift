@@ -88,6 +88,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onOpenPreferences: { [weak self] in
                 self?.openSettings()
             },
+            onOpenSettingsTab: { [weak self] tab in
+                self?.openSettings(tab: tab)
+            },
             onQuit: {
                 NSApp.terminate(nil)
             }

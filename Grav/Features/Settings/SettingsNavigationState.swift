@@ -5,6 +5,7 @@ import Observation
 public enum SettingsTab: String, CaseIterable, Identifiable, Hashable, Sendable {
     case general
     case notchHUD
+    case miniPet
     case telemetry
     case menuBar
     case shortcuts
@@ -28,6 +29,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .general: return "General"
         case .notchHUD: return "Notch HUD"
+        case .miniPet: return "Mini Pet"
         case .telemetry: return "Telemetry"
         case .menuBar: return "Menu Bar"
         case .shortcuts: return "Shortcuts"
@@ -41,6 +43,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Hashable, Sendable 
         switch self {
         case .general: return "gearshape.fill"
         case .notchHUD: return "rectangle.topthird.inset.filled"
+        case .miniPet: return "pawprint.fill"
         case .telemetry: return "waveform.path.ecg"
         case .menuBar: return "menubar.rectangle"
         case .shortcuts: return "command"
@@ -58,7 +61,9 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .general:
             return ["startup", "login", "appearance", "theme", "light", "dark", "system", "liquid glass", "onboarding", "welcome"]
         case .notchHUD:
-            return ["notch", "hud", "hover", "pin", "peek", "expand", "collapse", "dynamic island", "toggle"]
+            return ["notch", "hud", "hover", "pin", "peek", "expand", "collapse", "dynamic island", "toggle", "delay", "haptics", "sounds", "focus", "steps", "tokens"]
+        case .miniPet:
+            return ["pet", "mini pet", "codex", "codex-pets", "goku", "gif", "export", "spritesheet", "pixel", "companion", "download", "gallery", "roaming"]
         case .telemetry:
             return ["antigravity", "brain", "transcript", "session", "conversation", "tokens", "model", "pause", "resume", "watcher"]
         case .menuBar:
@@ -74,7 +79,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Hashable, Sendable 
 
     /// Sidebar tabs grouped into 3 System Settings sections separated by vertical breathing room.
     public static let groups: [[SettingsTab]] = [
-        [.general, .notchHUD, .telemetry],
+        [.general, .notchHUD, .miniPet, .telemetry],
         [.menuBar, .shortcuts, .permissions],
         [.about],
     ]
@@ -190,6 +195,109 @@ public struct SettingsSearchEntry: Identifiable, Hashable, Sendable {
                 detail: "Briefly surface the notch on new thinking bursts, file edits, and completed commands.",
                 keywords: ["notify", "alert", "toast", "activity", "thinking", "command"]
             ),
+            SettingsSearchEntry(
+                .notchHUD,
+                section: "Interaction",
+                title: "Hover Open Delay",
+                detail: "Adjust how long the pointer must rest on the notch before expanding.",
+                keywords: ["hover", "delay", "timing", "speed", "ms"]
+            ),
+            SettingsSearchEntry(
+                .notchHUD,
+                section: "Interaction",
+                title: "Auto-Expand on Input Needed",
+                detail: "Automatically open the Notch HUD whenever Antigravity asks a question or waits for approval.",
+                keywords: ["waiting", "input", "ask question", "expand", "alert"]
+            ),
+            SettingsSearchEntry(
+                .notchHUD,
+                section: "Display & Feedback",
+                title: "Show Live Focus",
+                detail: "Show Antigravity's current update_focus status text in the collapsed Notch pill.",
+                keywords: ["focus", "marquee", "collapsed", "status"]
+            ),
+            SettingsSearchEntry(
+                .notchHUD,
+                section: "Display & Feedback",
+                title: "Show Step Progress Ring",
+                detail: "Display the circular N/M step progress indicator in the collapsed Notch pill.",
+                keywords: ["steps", "progress", "ring", "checklist"]
+            ),
+            SettingsSearchEntry(
+                .notchHUD,
+                section: "Display & Feedback",
+                title: "Show Idle Token Count",
+                detail: "Display cumulative compact session tokens while Antigravity is idle.",
+                keywords: ["tokens", "idle", "metrics", "compact"]
+            ),
+            SettingsSearchEntry(
+                .notchHUD,
+                section: "Display & Feedback",
+                title: "Haptic Feedback",
+                detail: "Play subtle trackpad haptics when expanding the Notch HUD.",
+                keywords: ["haptic", "taptic", "vibration", "trackpad"]
+            ),
+            SettingsSearchEntry(
+                .notchHUD,
+                section: "Display & Feedback",
+                title: "Play Sounds",
+                detail: "Play crisp subtle sound cues for completions, errors, and Mini Pet taps.",
+                keywords: ["audio", "sound", "chime", "mute"]
+            ),
+
+            // Mini Pet
+            SettingsSearchEntry(
+                .miniPet,
+                section: "Notch Mini Pet",
+                title: "Show Mini Pet",
+                detail: "Display a reactive Codex pixel companion inside Grav's Notch HUD.",
+                keywords: ["pet", "codex", "goku", "toggle", "enable"]
+            ),
+            SettingsSearchEntry(
+                .miniPet,
+                section: "Notch Mini Pet",
+                title: "Pet Placement",
+                detail: "Place the Mini Pet on the leading wing, trailing wing, or expanded HUD only.",
+                keywords: ["position", "leading", "trailing", "expanded"]
+            ),
+            SettingsSearchEntry(
+                .miniPet,
+                section: "Notch Mini Pet",
+                title: "Pet Size",
+                detail: "Adjust pixel height of the Mini Pet inside the collapsed Notch pill.",
+                keywords: ["scale", "height", "size", "slider"]
+            ),
+            SettingsSearchEntry(
+                .miniPet,
+                section: "Notch Mini Pet",
+                title: "Animation Speed",
+                detail: "Speed up or slow down the Mini Pet's sprite frame rate.",
+                keywords: ["fps", "cadence", "tempo", "speed"]
+            ),
+            SettingsSearchEntry(
+                .miniPet,
+                section: "Notch Mini Pet",
+                title: "Idle Roaming & Glances",
+                detail: "Allow the Mini Pet to look around and patrol while Antigravity is idle.",
+                keywords: ["roam", "patrol", "look", "idle"]
+            ),
+            SettingsSearchEntry(
+                .miniPet,
+                section: "Notch Mini Pet",
+                title: "Click to Interact",
+                detail: "Click the Mini Pet in the Notch to trigger wave and jump animations.",
+                keywords: ["click", "tap", "wave", "jump", "interact"]
+            ),
+            SettingsSearchEntry(
+                .miniPet,
+                section: "Codex Pets Gallery",
+                title: "Download & Export GIFs",
+                detail: "Search codex-pets.net, install new pixel pets, or export state GIFs and sprite sheets.",
+                keywords: ["codex-pets", "gif", "export", "download", "sheet", "search"],
+                anchored: false
+            ),
+
+            // Quick Actions
             SettingsSearchEntry(
                 .notchHUD,
                 section: "Quick Actions",

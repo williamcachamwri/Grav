@@ -61,6 +61,14 @@ public struct ExpandedNotchHeaderView: View {
             .help("Focus Antigravity")
             .accessibilityLabel("Open Antigravity")
 
+            if preferences.miniPetEnabled {
+                NotchMiniPetBadge(
+                    store: store,
+                    preferences: preferences,
+                    size: min(24, max(20, CGFloat(preferences.miniPetSize)))
+                )
+            }
+
             sessionSwitcherMenu
 
             inlineStatusReadout

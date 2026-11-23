@@ -32,6 +32,72 @@ struct NotchHUDSettingsPane: View {
                     Toggle("", isOn: $preferences.autoPeekOnEvents)
                         .labelsHidden()
                 }
+
+                SettingRow(
+                    title: "Auto-Expand on Input Needed",
+                    description: "Automatically expand the Notch HUD when Antigravity asks a question or waits for approval."
+                ) {
+                    Toggle("", isOn: $preferences.autoExpandOnNeedsInput)
+                        .labelsHidden()
+                }
+
+                SettingRow(
+                    title: "Hover Open Delay",
+                    description: "How long the pointer must rest over the notch before expanding."
+                ) {
+                    HStack(spacing: 8) {
+                        Slider(value: $preferences.hoverOpenDelay, in: 0.05...0.50, step: 0.05)
+                            .frame(width: 120)
+                        Text("\(Int((preferences.hoverOpenDelay * 1000).rounded())) ms")
+                            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
+                .disabled(!preferences.hoverToExpand)
+            }
+
+            Section("Display & Feedback") {
+                SettingRow(
+                    title: "Show Live Focus",
+                    description: "Show Antigravity's live task focus headline inside the collapsed Notch pill."
+                ) {
+                    Toggle("", isOn: $preferences.showCollapsedFocus)
+                        .labelsHidden()
+                }
+
+                SettingRow(
+                    title: "Show Step Progress Ring",
+                    description: "Display the circular N/M step progress indicator in the collapsed pill."
+                ) {
+                    Toggle("", isOn: $preferences.showCollapsedStepProgress)
+                        .labelsHidden()
+                }
+
+                SettingRow(
+                    title: "Show Idle Token Count",
+                    description: "Display compact session token totals in the collapsed pill while idle."
+                ) {
+                    Toggle("", isOn: $preferences.showCollapsedTokens)
+                        .labelsHidden()
+                }
+
+                SettingRow(
+                    title: "Haptic Feedback",
+                    description: "Trigger subtle Force Touch haptics when the Notch HUD opens on hover."
+                ) {
+                    Toggle("", isOn: $preferences.hapticsEnabled)
+                        .labelsHidden()
+                }
+
+                SettingRow(
+                    title: "Play Sounds",
+                    description: "Play crisp audio cues for turn completions, command failures, and Mini Pet interactions."
+                ) {
+                    Toggle("", isOn: $preferences.playSounds)
+                        .labelsHidden()
+                }
             }
 
             Section("Quick Actions") {
