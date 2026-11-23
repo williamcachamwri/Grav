@@ -1146,4 +1146,41 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(agentHits.count, 1)
         XCTAssertTrue(agentHits.first?.snippet.lowercased().contains("quota") == true)
     }
+
+    func testAntigravityProfileProbeReadsAccountUsageAndModels() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("grav-profile-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: tmp) }
+
+        let antiRoot = tmp.appendingPathComponent("antigravity", isDirectory: true)
+        let sessionLogs = antiRoot.appendingPathComponent("brain/s1/.system_generated/logs", isDirectory: true)
+        let appSupport = tmp.appendingPathComponent("AppSupport", isDirectory: true)
+        let agySupport = appSupport.appendingPathComponent("Antigravity", isDirectory: true)
+        try fm.createDirectory(at: sessionLogs, withIntermediateDirectories: true)
+        try fm.createDirectory(at: agySupport, withIntermediateDirectories: true)
+
+        let storageJSON = #"{"agy.onboarding.lastLoginUsername":"dev.user@example.com"}"#
+        try storageJSON.write(to: agySupport.appendingPathComponent("app_storage.json"), atomically: true, encoding: .utf8)
+
+        let nowISO = ISO8601DateFormatter().string(from: Date())
+        let transcript = """
+        {"step_index":1,"type":"PLANNER_RESPONSE","status":"DONE","created_at":"\(nowISO)","model":"gemini-4-neon-high","input_tokens":5000,"output_tokens":1200}
+        {"step_index":2,"type":"PLANNER_RESPONSE","status":"DONE","created_at":"\(nowISO)","model":"gemini-4-argon-high","input_tokens":3000,"output_tokens":800}
+        """
+        try transcript.write(to: sessionLogs.appendingPathComponent("transcript.jsonl"), atomically: true, encoding: .utf8)
+
+        let snapshot = AntigravityProfileProbe.loadProfile(
+            antigravityRootURL: antiRoot,
+            appSupportURL: appSupport,
+            activeModel: "gemini-4-neon-high"
+        )
+        XCTAssertEqual(snapshot.email, "dev.user@example.com")
+        XCTAssertEqual(snapshot.displayName, "Dev User")
+        XCTAssertEqual(snapshot.totalTokens5h, 10_000)
+        XCTAssertEqual(snapshot.totalTokens7d, 10_000)
+        XCTAssertEqual(snapshot.usageGroups.count, 3)
+        XCTAssertTrue(snapshot.availableModels.contains { $0.displayName == "Gemini 4 Neon (High)" })
+        XCTAssertTrue(snapshot.availableModels.contains { $0.displayName == "Gemini 4 Argon (High)" })
+        XCTAssertEqual(AntigravityProfileProbe.prettifyModelIdentifier("gemini-4-neon-high"), "Gemini 4 Neon (High)")
+    }
 }

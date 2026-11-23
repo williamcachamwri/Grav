@@ -1,85 +1,107 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Feature #1: Inline FTS5 Spotlight Search Overlay (`⌘K`)
+// MARK: - Profile, Usage & Available Models Drawer (`⌘U`)
 
-/// Raycast-grade inline full-text Spotlight palette querying Antigravity's native SQLite FTS5 index
-/// (`conversations_fts`) across every local workspace, prompt, and reply.
-public struct AntigravitySpotlightOverlayView: View {
+/// Precision macOS Craft inline Profile, Usage & Available Models drawer inside Grav's Expanded Notch.
+/// Anti-AI-slop design: pure obsidian matte surfaces, `0.5px` hairlines, tabular monospaced figures,
+/// animated circular quota rings, and `matchedGeometryEffect` spring tab switching.
+public struct AntigravityProfileDrawerView: View {
     public var store: AntigravityTelemetryStore
-    public var onSelectSession: (String, Bool) -> Void
     public var onDismiss: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @FocusState private var isSearchFocused: Bool
+    @Namespace private var profileTabNamespace
 
-    @State private var query: String = ""
-    @State private var hits: [AntigravitySpotlightHit] = []
-    @State private var selectedIndex: Int = 0
-    @State private var isSearching: Bool = false
-    @State private var searchTask: Task<Void, Never>?
+    private enum ProfileSection: String, CaseIterable, Identifiable {
+        case usage = "Usage"
+        case models = "Models"
+        var id: String { rawValue }
+    }
+
+    @State private var selectedSection: ProfileSection = .usage
+    @State private var animateRings: Bool = false
+    @State private var isRefreshing: Bool = false
 
     public init(
         store: AntigravityTelemetryStore,
-        onSelectSession: @escaping (String, Bool) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.store = store
-        self.onSelectSession = onSelectSession
         self.onDismiss = onDismiss
+    }
+
+    private var snapshot: AntigravityProfileSnapshot {
+        store.profileSnapshot ?? AntigravityProfileSnapshot(
+            displayName: NSFullUserName().isEmpty ? "Antigravity User" : NSFullUserName(),
+            planName: "Antigravity"
+        )
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            searchInputBar
+            accountHeaderBar
 
             Rectangle()
                 .fill(Color.white.opacity(0.08))
                 .frame(height: 0.5)
 
-            resultsList
+            ZStack {
+                switch selectedSection {
+                case .usage:
+                    usageContent
+                        .id(ProfileSection.usage)
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .asymmetric(
+                                    insertion: .opacity.combined(with: .move(edge: .leading)),
+                                    removal: .opacity.combined(with: .move(edge: .leading))
+                                )
+                        )
+
+                case .models:
+                    modelsContent
+                        .id(ProfileSection.models)
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .asymmetric(
+                                    insertion: .opacity.combined(with: .move(edge: .trailing)),
+                                    removal: .opacity.combined(with: .move(edge: .trailing))
+                                )
+                        )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .animation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.06), value: selectedSection)
 
             Rectangle()
                 .fill(Color.white.opacity(0.07))
                 .frame(height: 0.5)
 
-            footerHints
+            footerSummaryStrip
         }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(red: 0.075, green: 0.080, blue: 0.098).opacity(0.98))
+                .fill(Color(red: 0.072, green: 0.076, blue: 0.090).opacity(0.985))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.13), lineWidth: 0.75)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.65)
                 )
         )
-        .shadow(color: Color.black.opacity(0.55), radius: 18, y: 8)
+        .shadow(color: Color.black.opacity(0.50), radius: 16, y: 6)
         .onAppear {
-            // Ensure the floating Notch NSPanel becomes key immediately so typing works without extra clicks
-            NSApp.activate(ignoringOtherApps: true)
-            if let notchPanel = NSApp.windows.first(where: { $0 is NSPanel && $0.isVisible }) {
-                notchPanel.makeKeyAndOrderFront(nil)
+            store.refreshProfileSnapshot()
+            if reduceMotion {
+                animateRings = true
+            } else {
+                animateRings = false
+                withAnimation(.spring(duration: 0.55, bounce: 0.08).delay(0.04)) {
+                    animateRings = true
+                }
             }
-            isSearchFocused = true
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(40))
-                isSearchFocused = true
-            }
-            runSearch(query: "")
-        }
-        .onDisappear {
-            searchTask?.cancel()
-        }
-        .onChange(of: query) { _, newValue in
-            runSearch(query: newValue)
-        }
-        .onKeyPress(.downArrow) {
-            moveSelection(delta: 1)
-            return .handled
-        }
-        .onKeyPress(.upArrow) {
-            moveSelection(delta: -1)
-            return .handled
         }
         .onKeyPress(.escape) {
             onDismiss()
@@ -87,277 +109,436 @@ public struct AntigravitySpotlightOverlayView: View {
         }
     }
 
-    private var searchInputBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.52))
+    // MARK: - Account Header Bar
 
-            TextField("Search all Antigravity chats, prompts & replies…", text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12.5, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.94))
-                .focused($isSearchFocused)
-                .onSubmit {
-                    confirmSelected(focusAntigravity: false)
+    private var accountHeaderBar: some View {
+        HStack(spacing: 9) {
+            avatarBadge
+
+            VStack(alignment: .leading, spacing: 1.5) {
+                HStack(spacing: 6) {
+                    Text(snapshot.displayName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(-0.15)
+                        .foregroundStyle(Color.white.opacity(0.95))
+                        .lineLimit(1)
+
+                    Text(snapshot.planName)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.72))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1.5)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.085))
+                                .overlay(
+                                    Capsule(style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+                                )
+                        )
+                        .fixedSize(horizontal: true, vertical: false)
                 }
 
-            if isSearching {
-                ProgressView()
-                    .controlSize(.mini)
-                    .scaleEffect(0.72)
-            } else if !query.isEmpty {
-                Button {
-                    query = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.white.opacity(0.36))
+                if let email = snapshot.email, !email.isEmpty {
+                    Text(email)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.white.opacity(0.46))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .buttonStyle(.plain)
             }
+
+            Spacer(minLength: 6)
+
+            sectionSegmentedPill
+
+            Button {
+                triggerRefresh()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.52))
+                    .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                    .frame(width: 22, height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white.opacity(0.055))
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("Refresh Usage & Models")
 
             Button {
                 onDismiss()
             } label: {
-                Text("ESC")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.46))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
+                Image(systemName: "xmark")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.52))
+                    .frame(width: 22, height: 22)
                     .background(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.white.opacity(0.07))
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white.opacity(0.055))
                     )
             }
             .buttonStyle(.plain)
+            .help("Close Profile (Esc)")
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.vertical, 8.5)
     }
 
-    @ViewBuilder
-    private var resultsList: some View {
-        if hits.isEmpty {
-            VStack(spacing: 6) {
-                Image(systemName: query.isEmpty ? "tray" : "magnifyingglass")
-                    .font(.system(size: 16, weight: .light))
-                    .foregroundStyle(Color.white.opacity(0.28))
-                Text(query.isEmpty ? "No Antigravity sessions indexed yet" : "No matches for “\(query)”")
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.46))
+    private var avatarBadge: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.09))
+
+            if let url = snapshot.avatarURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case let .success(image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        initialsText
+                    }
+                }
+            } else {
+                initialsText
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(spacing: 2) {
-                        ForEach(Array(hits.enumerated()), id: \.element.id) { index, hit in
-                            spotlightRow(hit: hit, isSelected: index == selectedIndex)
-                                .id(hit.id)
-                                .onTapGesture {
-                                    selectedIndex = index
-                                    confirmSelected(focusAntigravity: false)
-                                }
+        }
+        .frame(width: 28, height: 28)
+        .clipShape(Circle())
+        .overlay(
+            Circle()
+                .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.6)
+        )
+    }
+
+    private var initialsText: some View {
+        Text(snapshot.initials)
+            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+            .foregroundStyle(Color.white.opacity(0.84))
+    }
+
+    private var sectionSegmentedPill: some View {
+        HStack(spacing: 2) {
+            ForEach(ProfileSection.allCases) { section in
+                let isSelected = selectedSection == section
+                Button {
+                    GravOnboardingWelcomeAudio.shared.playTabSwitch()
+                    withAnimation(reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.10)) {
+                        selectedSection = section
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(section.rawValue)
+                            .font(.system(size: 10.5, weight: isSelected ? .semibold : .regular))
+                            .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.50))
+
+                        if section == .models && !snapshot.availableModels.isEmpty {
+                            Text("\(snapshot.availableModels.count)")
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .monospacedDigit()
+                                .foregroundStyle(isSelected ? Color.white.opacity(0.66) : Color.white.opacity(0.32))
                         }
                     }
-                    .padding(6)
-                }
-                .onChange(of: selectedIndex) { _, idx in
-                    if hits.indices.contains(idx) {
-                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.14)) {
-                            proxy.scrollTo(hits[idx].id, anchor: .center)
+                    .padding(.horizontal, 8.5)
+                    .frame(height: 21)
+                    .background {
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                                .fill(Color.white.opacity(0.12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                                )
+                                .matchedGeometryEffect(id: "grav-profile-section-pill", in: profileTabNamespace)
                         }
                     }
                 }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                .fill(Color.white.opacity(0.045))
+        )
+    }
+
+    // MARK: - Tab 1: Usage Quota Groups (Clean Circular Rings)
+
+    private var usageContent: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 11) {
+                ForEach(snapshot.usageGroups) { group in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(group.title)
+                            .font(.system(size: 12, weight: .semibold))
+                            .tracking(-0.15)
+                            .foregroundStyle(Color.white.opacity(0.94))
+
+                        VStack(spacing: 6) {
+                            ForEach(group.windows) { window in
+                                usageWindowRow(window)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 10)
+        }
+    }
+
+    private func usageWindowRow(_ window: AntigravityUsageWindow) -> some View {
+        let resetText = window.resetCountdownLabel()
+        let ringColor = quotaRingColor(for: window.remainingFraction)
+
+        return HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 1.5) {
+                if window.inlineResetCaption, let resetText {
+                    Text("\(window.label), resets in \(resetText)")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.58))
+                } else {
+                    Text(window.label)
+                        .font(.system(size: 11.5, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.68))
+
+                    if let resetText {
+                        Text("Resets in \(resetText)")
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.40))
+                    }
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 8) {
+                Text("\(window.remainingPercent)% left")
+                    .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.68))
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+
+                QuotaCircularRing(
+                    progress: animateRings ? window.remainingFraction : 0,
+                    color: ringColor,
+                    size: 15.5,
+                    lineWidth: 2.2
+                )
             }
         }
     }
 
-    private func spotlightRow(hit: AntigravitySpotlightHit, isSelected: Bool) -> some View {
-        let isActiveSession = store.activeSession?.id == hit.conversationID
+    // MARK: - Tab 2: Available Models Catalog
 
-        return HStack(alignment: .top, spacing: 8) {
+    private var modelsContent: some View {
+        let families = AntigravityAvailableModel.Family.allCases.filter { fam in
+            snapshot.availableModels.contains { $0.family == fam }
+        }
+
+        return ScrollView(.vertical, showsIndicators: false) {
+            if snapshot.availableModels.isEmpty {
+                VStack(spacing: 5) {
+                    Image(systemName: "cpu")
+                        .font(.system(size: 16, weight: .light))
+                        .foregroundStyle(Color.white.opacity(0.28))
+                    Text("No models discovered yet")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.46))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 36)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(families, id: \.self) { family in
+                        let items = snapshot.availableModels.filter { $0.family == family }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(family.rawValue.uppercased())
+                                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                .tracking(0.6)
+                                .foregroundStyle(Color.white.opacity(0.40))
+                                .padding(.horizontal, 2)
+
+                            VStack(spacing: 2.5) {
+                                ForEach(items) { model in
+                                    modelRow(model)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+            }
+        }
+    }
+
+    private func modelRow(_ model: AntigravityAvailableModel) -> some View {
+        let isActive = isCurrentActiveModel(model)
+        let ringColor = quotaRingColor(for: model.remainingFraction)
+
+        return HStack(spacing: 8) {
             Circle()
-                .fill(statusColor(for: hit))
-                .frame(width: 6, height: 6)
-                .padding(.top, 5)
+                .fill(isActive ? GravPalette.emerald : Color.white.opacity(0.20))
+                .frame(width: 5.5, height: 5.5)
 
-            VStack(alignment: .leading, spacing: 2.5) {
-                HStack(spacing: 6) {
-                    Text(hit.title)
-                        .font(.system(size: 11.5, weight: isSelected ? .semibold : .medium))
-                        .foregroundStyle(Color.white.opacity(isSelected ? 0.96 : 0.84))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+            Text(model.displayName)
+                .font(.system(size: 11.5, weight: isActive ? .semibold : .regular))
+                .foregroundStyle(Color.white.opacity(isActive ? 0.96 : 0.78))
+                .lineLimit(1)
 
-                    if isActiveSession {
-                        Text("ACTIVE")
-                            .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(Color.white.opacity(0.65))
-                            .padding(.horizontal, 4.5)
-                            .padding(.vertical, 1)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.white.opacity(0.10))
-                            )
-                    } else if hit.isUnread {
-                        Text("UNREAD")
-                            .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(GravPalette.glacialCyan)
-                            .padding(.horizontal, 4.5)
-                            .padding(.vertical, 1)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(GravPalette.glacialCyan.opacity(0.16))
-                            )
-                    }
-
-                    Spacer(minLength: 4)
-
-                    if let stepLabel = hit.chunkStepLabel {
-                        Text(stepLabel)
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .monospacedDigit()
-                            .foregroundStyle(Color.white.opacity(0.42))
-                            .padding(.horizontal, 4.5)
-                            .padding(.vertical, 1)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.white.opacity(0.06))
-                            )
-                    }
-
-                    if let ws = hit.workspaceName, !ws.isEmpty {
-                        Text(ws)
-                            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color.white.opacity(0.42))
-                            .lineLimit(1)
-                    }
-
-                    if let modified = hit.lastModified {
-                        Text(relativeShortTime(modified))
-                            .font(.system(size: 9.5, weight: .regular, design: .monospaced))
-                            .monospacedDigit()
-                            .foregroundStyle(Color.white.opacity(0.34))
-                    }
-                }
-
-                if !hit.snippet.isEmpty {
-                    Text(hit.snippet)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(Color.white.opacity(isSelected ? 0.62 : 0.42))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
+            if isActive {
+                modelPillTag("Active", tint: GravPalette.emerald)
+            } else if let tag = model.tag, !tag.isEmpty {
+                modelPillTag(tag, tint: Color.white.opacity(0.65))
             }
 
-            if isSelected {
-                Button {
-                    onSelectSession(hit.conversationID, true)
-                } label: {
-                    Image(systemName: "arrow.up.forward.app")
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.75))
-                        .frame(width: 22, height: 22)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5.5, style: .continuous)
-                                .fill(Color.white.opacity(0.09))
-                        )
-                }
-                .buttonStyle(.plain)
-                .help("Open in Grav & Focus Antigravity")
+            Spacer(minLength: 6)
+
+            HStack(spacing: 6) {
+                Text("\(model.remainingPercent)%")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.44))
+
+                QuotaCircularRing(
+                    progress: animateRings ? model.remainingFraction : 0,
+                    color: ringColor,
+                    size: 12.5,
+                    lineWidth: 1.8
+                )
             }
         }
         .padding(.horizontal, 9)
-        .padding(.vertical, 7)
+        .padding(.vertical, 5.5)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? Color.white.opacity(0.095) : Color.clear)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(isActive ? Color.white.opacity(0.075) : Color.white.opacity(0.028))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(isSelected ? Color.white.opacity(0.12) : Color.clear, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(isActive ? Color.white.opacity(0.11) : Color.clear, lineWidth: 0.5)
                 )
         )
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private var footerHints: some View {
+    private func modelPillTag(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1.5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(tint.opacity(0.14))
+            )
+    }
+
+    // MARK: - Footer Summary Strip
+
+    private var footerSummaryStrip: some View {
         HStack(spacing: 12) {
-            hintBadge(keys: "↑↓", label: "Navigate")
-            hintBadge(keys: "↵", label: "Inspect in Notch")
-            Spacer()
-            Text("\(hits.count) indexed")
-                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(Color.white.opacity(0.32))
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-    }
-
-    private func hintBadge(keys: String, label: String) -> some View {
-        HStack(spacing: 4) {
-            Text(keys)
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.55))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(
-                    RoundedRectangle(cornerRadius: 3.5, style: .continuous)
-                        .fill(Color.white.opacity(0.07))
-                )
-            Text(label)
-                .font(.system(size: 9.5))
-                .foregroundStyle(Color.white.opacity(0.38))
-        }
-    }
-
-    private func statusColor(for hit: AntigravitySpotlightHit) -> Color {
-        if hit.isRunning { return GravPalette.glacialCyan }
-        if hit.isUnread { return GravPalette.emerald }
-        return Color.white.opacity(0.24)
-    }
-
-    private func relativeShortTime(_ date: Date) -> String {
-        let delta = max(0, Int(Date().timeIntervalSince(date)))
-        if delta < 60 { return "now" }
-        if delta < 3600 { return "\(delta / 60)m" }
-        if delta < 86_400 { return "\(delta / 3600)h" }
-        return "\(delta / 86_400)d"
-    }
-
-    private func moveSelection(delta: Int) {
-        guard !hits.isEmpty else { return }
-        selectedIndex = max(0, min(hits.count - 1, selectedIndex + delta))
-    }
-
-    private func confirmSelected(focusAntigravity: Bool) {
-        guard hits.indices.contains(selectedIndex) else { return }
-        GravOnboardingWelcomeAudio.shared.playButtonTap()
-        onSelectSession(hits[selectedIndex].conversationID, focusAntigravity)
-    }
-
-    private func runSearch(query: String) {
-        searchTask?.cancel()
-        isSearching = true
-        searchTask = Task {
-            if !query.isEmpty {
-                try? await Task.sleep(for: .milliseconds(85))
+            HStack(spacing: 4) {
+                Text("5h")
+                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.36))
+                Text(TokenMetrics.formatCompact(snapshot.totalTokens5h))
+                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.62))
             }
-            guard !Task.isCancelled else { return }
-            let results = await store.searchConversations(query: query, limit: 24)
-            guard !Task.isCancelled else { return }
-            hits = results
-            selectedIndex = 0
-            isSearching = false
+
+            HStack(spacing: 4) {
+                Text("7d")
+                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.36))
+                Text(TokenMetrics.formatCompact(snapshot.totalTokens7d))
+                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.62))
+            }
+
+            if let credits = snapshot.availableCredits {
+                HStack(spacing: 4) {
+                    Text("Credits")
+                        .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.36))
+                    Text("\(credits)")
+                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(0.62))
+                }
+            }
+
+            Spacer()
+
+            if let activeModel = store.activeModel, !activeModel.isEmpty {
+                Text(AntigravityProfileProbe.prettifyModelIdentifier(activeModel))
+                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.42))
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 6.5)
+    }
+
+    private func isCurrentActiveModel(_ model: AntigravityAvailableModel) -> Bool {
+        guard let active = store.activeModel?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !active.isEmpty
+        else { return false }
+        return model.rawIdentifier.caseInsensitiveCompare(active) == .orderedSame
+            || model.displayName.caseInsensitiveCompare(AntigravityProfileProbe.prettifyModelIdentifier(active)) == .orderedSame
+    }
+
+    private func quotaRingColor(for fraction: Double) -> Color {
+        if fraction <= 0.15 { return GravPalette.coral }
+        if fraction <= 0.35 { return Color(red: 0.96, green: 0.72, blue: 0.28) }
+        return Color(red: 0.31, green: 0.67, blue: 0.36) // Crisp Antigravity emerald ring
+    }
+
+    private func triggerRefresh() {
+        GravOnboardingWelcomeAudio.shared.playButtonTap()
+        store.refreshProfileSnapshot()
+        guard !reduceMotion else { return }
+        withAnimation(.easeInOut(duration: 0.45)) {
+            isRefreshing.toggle()
         }
     }
 }
 
-// MARK: - Feature #2: Approval & Question Banner Strip
+/// Crisp circular progress ring matching Antigravity's native Usage panel.
+private struct QuotaCircularRing: View {
+    let progress: Double
+    let color: Color
+    let size: CGFloat
+    let lineWidth: CGFloat
 
-/// Compact, anti-AI-slop matte alert strip shown only when Antigravity needs user approval or an answer.
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.15), lineWidth: lineWidth)
+
+            Circle()
+                .trim(from: 0, to: CGFloat(min(1.0, max(0.0, progress))))
+                .stroke(
+                    color,
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Feature #2 & A2: Approval, Question & Quota/Model Incident Banner Strip
+
+/// Compact, anti-AI-slop matte alert strip shown only when Antigravity needs user approval/answer
+/// or hits a Quota / HTTP 429 Rate-Limit / Capacity / Model Fallback event.
 public struct AntigravityRadarBannerView: View {
     public let alert: AntigravityRadarAlert
     public let onFocusAntigravity: () -> Void

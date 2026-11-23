@@ -457,10 +457,10 @@ struct ShortcutsSettingsPane: View {
                 SettingsRowDivider()
 
                 SettingRow(
-                    title: "Spotlight Search History",
-                    description: "Full-text FTS5 search across all Antigravity chats, prompts, and replies."
+                    title: "Account, Usage & Models",
+                    description: "Open your Antigravity profile, quota rings, and available models drawer."
                 ) {
-                    SettingsKeycapPlate(keys: ["⌘", "K"])
+                    SettingsKeycapPlate(keys: ["⌘", "U"])
                 }
 
                 SettingsRowDivider()

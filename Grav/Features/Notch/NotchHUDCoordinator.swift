@@ -116,7 +116,7 @@ public final class NotchHUDCoordinator {
             NotificationCenter.default.removeObserver(spotlightObserver)
         }
         spotlightObserver = NotificationCenter.default.addObserver(
-            forName: .gravOpenNotchSpotlight,
+            forName: .gravOpenNotchProfile,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -124,9 +124,8 @@ public final class NotchHUDCoordinator {
                 guard let self else { return }
                 if self.presenter.phase != .expanded {
                     self.presenter.expand(reason: .programmatic)
-                    // Allow ExpandedNotchView to mount if it was collapsed before opening Spotlight
                     try? await Task.sleep(for: .milliseconds(80))
-                    NotificationCenter.default.post(name: .gravOpenNotchSpotlight, object: self)
+                    NotificationCenter.default.post(name: .gravOpenNotchProfile, object: self)
                 }
             }
         }

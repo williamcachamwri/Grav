@@ -1,12 +1,12 @@
 import SwiftUI
 
 extension Notification.Name {
-    static let gravOpenNotchSpotlight = Notification.Name("com.grav.openNotchSpotlight")
+    static let gravOpenNotchProfile = Notification.Name("com.grav.openNotchProfile")
 }
 
 /// Expanded 120Hz interactive Notch HUD combining clean header telemetry, live radar banner,
-/// inline FTS5 Spotlight search (`⌘K`), segmented mode rail, directional slide tab transitions,
-/// ephemeral copy confirmation toast, and full keyboard navigation (`1`–`5`, `⌘K`, `⌘C`, `ESC`).
+/// inline Account/Usage/Models profile drawer (`⌘U`), segmented mode rail, directional slide
+/// tab transitions, ephemeral copy confirmation toast, and full keyboard navigation.
 public struct ExpandedNotchView: View {
     public var store: AntigravityTelemetryStore
     public var preferences: PreferencesStore
@@ -20,7 +20,7 @@ public struct ExpandedNotchView: View {
     @State private var selectedFileID: String?
     @State private var selectedCommandID: String?
     @State private var isTerminalSearchFocused: Bool = false
-    @State private var isShowingSpotlight: Bool = false
+    @State private var isShowingProfile: Bool = false
     @State private var statusBannerMessage: String?
     @State private var statusBannerTask: Task<Void, Never>?
 
@@ -43,14 +43,15 @@ public struct ExpandedNotchView: View {
                     store: store,
                     preferences: preferences,
                     onOpenSettings: onOpenSettings,
-                    onOpenSpotlight: {
-                        withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.08)) {
-                            isShowingSpotlight.toggle()
+                    onOpenProfile: {
+                        withAnimation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.08)) {
+                            isShowingProfile.toggle()
                         }
-                    }
+                    },
+                    isProfileOpen: isShowingProfile
                 )
 
-                if let radarAlert = store.activeRadarAlert, !isShowingSpotlight {
+                if let radarAlert = store.activeRadarAlert, !isShowingProfile {
                     AntigravityRadarBannerView(
                         alert: radarAlert,
                         onFocusAntigravity: {
@@ -87,23 +88,12 @@ public struct ExpandedNotchView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-            if isShowingSpotlight {
-                AntigravitySpotlightOverlayView(
+            if isShowingProfile {
+                AntigravityProfileDrawerView(
                     store: store,
-                    onSelectSession: { conversationID, focusAntigravity in
-                        store.selectSessionByID(conversationID)
-                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
-                            isShowingSpotlight = false
-                        }
-                        if focusAntigravity {
-                            store.activateAntigravityApp()
-                        } else {
-                            showBanner("Switched session")
-                        }
-                    },
                     onDismiss: {
                         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
-                            isShowingSpotlight = false
+                            isShowingProfile = false
                         }
                     }
                 )
@@ -154,14 +144,14 @@ public struct ExpandedNotchView: View {
         .onKeyPress(keys: [.escape, "1", "2", "3", "4", "5"]) { keyPress in
             handleKeyPress(keyPress)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .gravOpenNotchSpotlight)) { _ in
-            withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.08)) {
-                isShowingSpotlight = true
+        .onReceive(NotificationCenter.default.publisher(for: .gravOpenNotchProfile)) { _ in
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.08)) {
+                isShowingProfile = true
             }
         }
         .onDisappear {
             statusBannerTask?.cancel()
-            isShowingSpotlight = false
+            isShowingProfile = false
         }
     }
 
@@ -245,9 +235,9 @@ public struct ExpandedNotchView: View {
     private var hiddenShortcutControls: some View {
         Group {
             Button("") {
-                if isShowingSpotlight {
+                if isShowingProfile {
                     withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
-                        isShowingSpotlight = false
+                        isShowingProfile = false
                     }
                 } else {
                     onCollapse()
@@ -257,13 +247,13 @@ public struct ExpandedNotchView: View {
 
             Button("") {
                 GravOnboardingWelcomeAudio.shared.playButtonTap()
-                withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.08)) {
-                    isShowingSpotlight.toggle()
+                withAnimation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.08)) {
+                    isShowingProfile.toggle()
                 }
             }
-            .keyboardShortcut("k", modifiers: [.command])
+            .keyboardShortcut("u", modifiers: [.command])
 
-            if !isTerminalSearchFocused && !isShowingSpotlight {
+            if !isTerminalSearchFocused && !isShowingProfile {
                 Button("") {
                     copyActiveContext()
                 }
@@ -311,16 +301,16 @@ public struct ExpandedNotchView: View {
 
     private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
         if keyPress.key == .escape {
-            if isShowingSpotlight {
+            if isShowingProfile {
                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
-                    isShowingSpotlight = false
+                    isShowingProfile = false
                 }
             } else {
                 onCollapse()
             }
             return .handled
         }
-        guard !isTerminalSearchFocused, !isShowingSpotlight, keyPress.modifiers.isEmpty else {
+        guard !isTerminalSearchFocused, !isShowingProfile, keyPress.modifiers.isEmpty else {
             return .ignored
         }
         switch keyPress.characters {

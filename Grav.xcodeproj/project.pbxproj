@@ -76,6 +76,7 @@
 		8EDFA650984F9578AE8D84BD /* GravPrecisionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB45B5A97F54C0C237DC9B6 /* GravPrecisionSettings.swift */; };
 		91D3F498CDC55C2DBAFDBA40 /* ExpandedNotchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D80414C1DE01980C28A80A7E /* ExpandedNotchView.swift */; };
 		99C6DDB49219B483546F383D /* SwarmSubagentWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AA4D5DAB9532096AF75857D /* SwarmSubagentWatcher.swift */; };
+		9A5DAAA531A0C673E19CFEB8 /* AntigravityProfileProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = F610D26D611EDA8DE818756C /* AntigravityProfileProbe.swift */; };
 		A067CAF76F04349D2BCC5E94 /* GravOnboardingInstructionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0ED16A6DD522EF786F805CC /* GravOnboardingInstructionPanel.swift */; };
 		A308F5FE2738E1576F19DC3F /* GravKeycapBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAE3AC855B91A25DE4BFBA52 /* GravKeycapBadge.swift */; };
 		A8348B77222EB7F1CC64241C /* TelemetryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40E846C8A8D0F975578DC4A3 /* TelemetryModels.swift */; };
@@ -232,6 +233,7 @@
 		F0358A05600CF6B26370D0C1 /* TelemetryStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryStateMachineTests.swift; sourceTree = "<group>"; };
 		F4153587F6F624469A3FFCE7 /* GravOnboardingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingState.swift; sourceTree = "<group>"; };
 		F4F8A085700195064961A25A /* GravBrandMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravBrandMark.swift; sourceTree = "<group>"; };
+		F610D26D611EDA8DE818756C /* AntigravityProfileProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityProfileProbe.swift; sourceTree = "<group>"; };
 		F80A76ADD6985FC5058D991B /* GravOnboardingWelcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingWelcome.swift; sourceTree = "<group>"; };
 		FA1E15D49525AA2E6D379F50 /* super-saiyan-goku-combat.webp */ = {isa = PBXFileReference; path = "super-saiyan-goku-combat.webp"; sourceTree = "<group>"; };
 		FFB7B35F20C3023A4D53AA2D /* ResponseTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseTelemetryTabView.swift; sourceTree = "<group>"; };
@@ -347,6 +349,7 @@
 			children = (
 				EEB8704214D5B8BD94C2F70D /* ANSIStripper.swift */,
 				7374544BF8CD44B6A91F576D /* AntigravityAppDetector.swift */,
+				F610D26D611EDA8DE818756C /* AntigravityProfileProbe.swift */,
 				5AE67EBB45BCAEE88C65CAC5 /* AntigravityRuntimeInspector.swift */,
 				C2E730098AEB351C1ED95E3C /* AntigravityTelemetryStore.swift */,
 				3415985EECA17346AAFB0089 /* ConversationDiscovery.swift */,
@@ -608,6 +611,7 @@
 				317F03128A8F1809196E1B17 /* AboutSettingsPane.swift in Sources */,
 				76BBBB98AF50A8F1E4B7B446 /* AdaptiveThemePalette.swift in Sources */,
 				15A515F19FE62EC328A910A5 /* AntigravityAppDetector.swift in Sources */,
+				9A5DAAA531A0C673E19CFEB8 /* AntigravityProfileProbe.swift in Sources */,
 				550E5A5FCB1B9D9A5C691FB4 /* AntigravityRuntimeInspector.swift in Sources */,
 				2B9CBE57E453705D10A957B1 /* AntigravitySpotlightOverlayView.swift in Sources */,
 				02FE7E1616846E92273B0631 /* AntigravityTelemetryStore.swift in Sources */,

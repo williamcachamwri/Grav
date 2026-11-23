@@ -7,7 +7,8 @@ public struct ExpandedNotchHeaderView: View {
     public var store: AntigravityTelemetryStore
     public var preferences: PreferencesStore
     public var onOpenSettings: () -> Void
-    public var onOpenSpotlight: (() -> Void)?
+    public var onOpenProfile: (() -> Void)?
+    public var isProfileOpen: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHoveringLogo = false
@@ -18,12 +19,14 @@ public struct ExpandedNotchHeaderView: View {
         store: AntigravityTelemetryStore,
         preferences: PreferencesStore,
         onOpenSettings: @escaping () -> Void,
-        onOpenSpotlight: (() -> Void)? = nil
+        onOpenProfile: (() -> Void)? = nil,
+        isProfileOpen: Bool = false
     ) {
         self.store = store
         self.preferences = preferences
         self.onOpenSettings = onOpenSettings
-        self.onOpenSpotlight = onOpenSpotlight
+        self.onOpenProfile = onOpenProfile
+        self.isProfileOpen = isProfileOpen
     }
 
     private var stateLabel: String {
@@ -336,19 +339,45 @@ public struct ExpandedNotchHeaderView: View {
                 .frame(width: 0.5, height: 11)
                 .padding(.horizontal, 3)
 
-            if let onOpenSpotlight {
+            if let onOpenProfile {
                 Button {
                     GravOnboardingWelcomeAudio.shared.playButtonTap()
-                    onOpenSpotlight()
+                    onOpenProfile()
                 } label: {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.54))
-                        .frame(width: 22, height: 22)
+                    Group {
+                        if let avatarURL = store.profileSnapshot?.avatarURL {
+                            AsyncImage(url: avatarURL) { phase in
+                                switch phase {
+                                case let .success(image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 15, height: 15)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle()
+                                                .strokeBorder(
+                                                    isProfileOpen ? Color.white.opacity(0.65) : Color.white.opacity(0.22),
+                                                    lineWidth: 0.75
+                                                )
+                                        )
+                                default:
+                                    Image(systemName: "person.crop.circle")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(isProfileOpen ? Color.white : Color.white.opacity(0.58))
+                                }
+                            }
+                        } else {
+                            Image(systemName: "person.crop.circle")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(isProfileOpen ? Color.white : Color.white.opacity(0.58))
+                        }
+                    }
+                    .frame(width: 22, height: 22)
                 }
-                .buttonStyle(NotchChromeButtonStyle(isActive: false, cornerRadius: 6))
-                .help("Search Antigravity History (⌘K)")
-                .accessibilityLabel("Search Antigravity History")
+                .buttonStyle(NotchChromeButtonStyle(isActive: isProfileOpen, cornerRadius: 6))
+                .help("Account, Usage & Available Models (⌘U)")
+                .accessibilityLabel("Account, Usage and Models")
             }
 
             pauseTelemetryButton

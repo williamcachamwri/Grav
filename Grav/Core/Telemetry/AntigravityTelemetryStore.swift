@@ -61,6 +61,8 @@ public final class AntigravityTelemetryStore {
     public internal(set) var scheduledTasks: [ScheduledTaskRecord] = []
     /// Most recent Quota / HTTP 429 Rate-Limit / Capacity / Model Fallback incident (Feature A2).
     public internal(set) var latestModelIncident: ModelIncidentEvent?
+    /// Local Antigravity account, usage quota windows, and available models catalog.
+    public internal(set) var profileSnapshot: AntigravityProfileSnapshot?
     /// Last radar alert ID explicitly dismissed by the user (Feature #2).
     public internal(set) var dismissedRadarAlertID: String?
 
@@ -156,6 +158,7 @@ public final class AntigravityTelemetryStore {
     private var unreadRefreshTask: Task<Void, Never>?
     private var artifactsRefreshTask: Task<Void, Never>?
     private var runtimeInspectionTask: Task<Void, Never>?
+    private var profileRefreshTask: Task<Void, Never>?
     private var previousObservedModel: String?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var sessionGeneration: UInt64 = 0
@@ -196,6 +199,7 @@ public final class AntigravityTelemetryStore {
         startConversationDiscovery()
         refreshUnreadSessions()
         refreshRuntimeInspection()
+        refreshProfileSnapshot()
     }
 
     public func stop() {
@@ -207,6 +211,8 @@ public final class AntigravityTelemetryStore {
         artifactsRefreshTask = nil
         runtimeInspectionTask?.cancel()
         runtimeInspectionTask = nil
+        profileRefreshTask?.cancel()
+        profileRefreshTask = nil
         removeWorkspaceObservers()
 
         let currentDiscovery = discovery
@@ -297,6 +303,23 @@ public final class AntigravityTelemetryStore {
     /// Root `~/.gemini/antigravity/` directory derived from the active brain folder.
     public var antigravityRootURL: URL {
         appDetector.brainDirectoryURL.deletingLastPathComponent()
+    }
+
+    /// Refreshes local Antigravity account info, 5h/Weekly usage windows, and available models off-main-actor.
+    public func refreshProfileSnapshot() {
+        let rootURL = antigravityRootURL
+        let currentModel = activeModel
+        profileRefreshTask?.cancel()
+        profileRefreshTask = Task { [weak self] in
+            let snapshot = await Task.detached(priority: .utility) {
+                AntigravityProfileProbe.loadProfile(
+                    antigravityRootURL: rootURL,
+                    activeModel: currentModel
+                )
+            }.value
+            guard !Task.isCancelled, let self else { return }
+            self.profileSnapshot = snapshot
+        }
     }
 
     /// Executes an off-main-actor SQLite FTS5 Spotlight search across all local Antigravity conversations (Feature #1).
@@ -1778,6 +1801,7 @@ public final class AntigravityTelemetryStore {
             refreshUnreadSessions()
             refreshSessionArtifacts()
             refreshRuntimeInspection()
+            refreshProfileSnapshot()
         }
     }
 

@@ -115,10 +115,10 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         ))
 
         menu.addItem(makeMenuItem(
-            title: "Search Antigravity History…",
-            action: #selector(handleSearchHistory),
+            title: "Account & Usage…",
+            action: #selector(handleOpenProfile),
             keyEquivalent: "",
-            symbolName: "magnifyingglass"
+            symbolName: "person.crop.circle"
         ))
 
         let pinItem = makeMenuItem(
@@ -531,8 +531,8 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         onToggleNotch?()
     }
 
-    @objc private func handleSearchHistory() {
-        NotificationCenter.default.post(name: .gravOpenNotchSpotlight, object: nil)
+    @objc private func handleOpenProfile() {
+        NotificationCenter.default.post(name: .gravOpenNotchProfile, object: nil)
     }
 
     @objc private func handleTogglePinNotch() {
