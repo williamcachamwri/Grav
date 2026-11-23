@@ -9,6 +9,9 @@ public struct ExpandedNotchHeaderView: View {
     public var onOpenSettings: () -> Void
     public var onOpenProfile: (() -> Void)?
     public var isProfileOpen: Bool
+    public var onOpenTray: (() -> Void)?
+    public var isTrayOpen: Bool
+    public var trayBadgeCount: Int
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHoveringLogo = false
@@ -20,13 +23,19 @@ public struct ExpandedNotchHeaderView: View {
         preferences: PreferencesStore,
         onOpenSettings: @escaping () -> Void,
         onOpenProfile: (() -> Void)? = nil,
-        isProfileOpen: Bool = false
+        isProfileOpen: Bool = false,
+        onOpenTray: (() -> Void)? = nil,
+        isTrayOpen: Bool = false,
+        trayBadgeCount: Int = 0
     ) {
         self.store = store
         self.preferences = preferences
         self.onOpenSettings = onOpenSettings
         self.onOpenProfile = onOpenProfile
         self.isProfileOpen = isProfileOpen
+        self.onOpenTray = onOpenTray
+        self.isTrayOpen = isTrayOpen
+        self.trayBadgeCount = trayBadgeCount
     }
 
     private var stateLabel: String {
@@ -338,6 +347,34 @@ public struct ExpandedNotchHeaderView: View {
                 .fill(Color.white.opacity(0.10))
                 .frame(width: 0.5, height: 11)
                 .padding(.horizontal, 3)
+
+            if let onOpenTray {
+                Button {
+                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                    onOpenTray()
+                } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: isTrayOpen ? "tray.and.arrow.down.fill" : "tray.and.arrow.down")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(
+                                isTrayOpen
+                                    ? Color.white
+                                    : (trayBadgeCount > 0 ? Color.white.opacity(0.84) : Color.white.opacity(0.54))
+                            )
+                            .frame(width: 22, height: 22)
+
+                        if trayBadgeCount > 0 && !isTrayOpen {
+                            Circle()
+                                .fill(GravPalette.glacialCyan)
+                                .frame(width: 5, height: 5)
+                                .offset(x: -2.5, y: 2.5)
+                        }
+                    }
+                }
+                .buttonStyle(NotchChromeButtonStyle(isActive: isTrayOpen, cornerRadius: 6))
+                .help("Drop Shelf & Prompt Queue (⌘D)")
+                .accessibilityLabel("Drop Shelf and Prompt Queue")
+            }
 
             if let onOpenProfile {
                 Button {

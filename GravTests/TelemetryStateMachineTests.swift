@@ -1188,4 +1188,56 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertTrue(snapshot.availableModels.contains { $0.displayName == "Gemini 4 Argon (High)" })
         XCTAssertEqual(AntigravityProfileProbe.prettifyModelIdentifier("gemini-4-neon-high"), "Gemini 4 Neon (High)")
     }
+
+    @MainActor
+    func testNotchDropShelfPromptQueueAndWindowPerchingPreference() throws {
+        let suiteName = "grav.test.tray.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("grav-drop-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let sampleFile = tmpDir.appendingPathComponent("bug.swift")
+        try "let x = 1\n".write(to: sampleFile, atomically: true, encoding: .utf8)
+
+        let tray = NotchTrayStore(defaults: defaults, cacheDirectoryURL: tmpDir)
+        XCTAssertEqual(tray.stageFileURLs([sampleFile, sampleFile]), 1)
+        XCTAssertEqual(tray.stagedItems.count, 1)
+
+        // Stage raw dropped image bytes
+        let fakePNG = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        let stagedImage = tray.stageDroppedImageData(fakePNG, preferredExtension: "png")
+        XCTAssertNotNil(stagedImage)
+        XCTAssertEqual(stagedImage?.isImage, true)
+        XCTAssertEqual(tray.stagedItems.count, 2)
+
+        // Compose prompt + enqueue -> persists across store instances
+        tray.draftPrompt = "Fix this crash on launch"
+        let queued = try XCTUnwrap(tray.enqueueCurrentDraft())
+        XCTAssertEqual(queued.text, "Fix this crash on launch")
+        XCTAssertEqual(queued.attachedPaths.count, 2)
+        XCTAssertTrue(tray.draftPrompt.isEmpty)
+        XCTAssertTrue(tray.stagedItems.isEmpty)
+
+        let reloaded = NotchTrayStore(defaults: defaults, cacheDirectoryURL: tmpDir)
+        XCTAssertEqual(reloaded.queuedPrompts.count, 1)
+        XCTAssertEqual(reloaded.queuedPrompts.first?.text, "Fix this crash on launch")
+
+        // Verify bundle formatting
+        let formatted = NotchTrayStore.formatPromptBundle(
+            text: "Check layout",
+            filePaths: ["/tmp/a.png", "/tmp/b.swift"]
+        )
+        XCTAssertEqual(formatted, "Check layout\n\n@/tmp/a.png\n@/tmp/b.swift")
+
+        // Verify Window-Edge Perching preference persistence
+        let prefs1 = PreferencesStore(defaults: defaults)
+        XCTAssertTrue(prefs1.miniPetWindowPerching)
+        prefs1.miniPetWindowPerching = false
+        let prefs2 = PreferencesStore(defaults: defaults)
+        XCTAssertFalse(prefs2.miniPetWindowPerching)
+    }
 }

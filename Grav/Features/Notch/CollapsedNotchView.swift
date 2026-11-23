@@ -1,5 +1,7 @@
+import AppKit
 import NotchKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Collapsed 120Hz Dynamic Island / Notch pill surface.
 ///
@@ -15,6 +17,9 @@ public struct CollapsedNotchView: View {
     public var preferences: PreferencesStore
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isDropTargeted: Bool = false
+
+    private var trayStore: NotchTrayStore { NotchTrayStore.shared }
 
     public init(
         store: AntigravityTelemetryStore,
@@ -59,6 +64,19 @@ public struct CollapsedNotchView: View {
             }
         }
         .frame(height: pillHeight)
+        .onDrop(of: [.fileURL, .image, .plainText], isTargeted: $isDropTargeted) { providers in
+            NotificationCenter.default.post(name: .gravOpenNotchTray, object: nil)
+            return trayStore.handleDrop(providers: providers) {
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                GravOnboardingWelcomeAudio.shared.playButtonTap()
+            }
+        }
+        .onChange(of: isDropTargeted) { _, targeted in
+            if targeted {
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                NotificationCenter.default.post(name: .gravOpenNotchTray, object: nil)
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityStatusLabel)
     }
@@ -598,6 +616,17 @@ public struct CollapsedNotchView: View {
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .monospacedDigit()
                         .foregroundStyle(GravPalette.glacialCyan.opacity(0.92))
+                        .lineLimit(1)
+                }
+            } else if trayStore.queuedPrompts.count > 0 && !store.isPaused {
+                HStack(spacing: 4) {
+                    Image(systemName: "tray.and.arrow.down.fill")
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.68))
+                    Text(compact ? "\(trayStore.queuedPrompts.count)" : "\(trayStore.queuedPrompts.count) queued")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(0.76))
                         .lineLimit(1)
                 }
             } else if preferences.showCollapsedTokens && store.tokenMetrics.totalTokens > 0 {

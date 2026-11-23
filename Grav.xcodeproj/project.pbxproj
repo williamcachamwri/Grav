@@ -23,6 +23,7 @@
 		1940B0E8A7F2C61E35B37300 /* GravOnboardingWelcomeAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AF84ABC6939425A99D95535 /* GravOnboardingWelcomeAudio.swift */; };
 		1F673C8D3324B4B762E3A517 /* GravKeycapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F03068745124FF09F8AAFC /* GravKeycapView.swift */; };
 		1F8ED10D4158BDFD6B886EEB /* ArtifactsQuickLookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 880AE25C7807B0D37644B9B7 /* ArtifactsQuickLookView.swift */; };
+		215D9A923A04581717B2E466 /* NotchTrayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36174FD56AE209B6827AF82D /* NotchTrayStore.swift */; };
 		220A388048F22F57D801797A /* GravUnevenRoundedRectangle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D9D0878C3CE388D1D66853 /* GravUnevenRoundedRectangle.swift */; };
 		2296303BDAE924F5CE36F00D /* DiffComputer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EAA8B09A6284B1B6BE9DC71 /* DiffComputer.swift */; };
 		22A3279FBBE55A4BEA886A3C /* NotchKit in Frameworks */ = {isa = PBXBuildFile; productRef = A2A348B0E7334E8657975F89 /* NotchKit */; };
@@ -83,6 +84,7 @@
 		A8EF34D0A303948C1FB2B25C /* SwarmTelemetryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963418B974EA472DFDB529F9 /* SwarmTelemetryTabView.swift */; };
 		A96AECB5987FD2B690B30363 /* ResponseTelemetryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFB7B35F20C3023A4D53AA2D /* ResponseTelemetryTabView.swift */; };
 		AA9467D1F610664C47AD30AD /* GravOnboardingChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF72E703711EF7C02C996F6F /* GravOnboardingChrome.swift */; };
+		AC07AC8E7485B20B5CBD985B /* NotchDropComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FFF09A8118FE0849679F023 /* NotchDropComposerView.swift */; };
 		B6364C0B87177A4045319E2C /* TaskLogTailerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27BA097A7AA63BB6924CA2C9 /* TaskLogTailerTests.swift */; };
 		B92DE6AAE0187418B453176D /* ConversationSQLiteProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B6F9331B5887AA30D02286A /* ConversationSQLiteProbe.swift */; };
 		BB14A74A8328E1D5636BD5B4 /* GravOnboardingWelcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = F80A76ADD6985FC5058D991B /* GravOnboardingWelcome.swift */; };
@@ -149,6 +151,7 @@
 		3415985EECA17346AAFB0089 /* ConversationDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationDiscovery.swift; sourceTree = "<group>"; };
 		34F03068745124FF09F8AAFC /* GravKeycapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravKeycapView.swift; sourceTree = "<group>"; };
 		35EC5A3DD76907E4720CA688 /* CodexPetModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexPetModels.swift; sourceTree = "<group>"; };
+		36174FD56AE209B6827AF82D /* NotchTrayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchTrayStore.swift; sourceTree = "<group>"; };
 		3AA30702A27E78DEF0415086 /* TaskLogTailer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskLogTailer.swift; sourceTree = "<group>"; };
 		3DA05462AA23FE2D576017E3 /* LiquidGlassContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassContainer.swift; sourceTree = "<group>"; };
 		3FCDFDB2CAD4122B82BB0F56 /* LiveTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTelemetryTabView.swift; sourceTree = "<group>"; };
@@ -180,6 +183,7 @@
 		7ED4B2A0D94552FAB23AB341 /* GravTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravTokens.swift; sourceTree = "<group>"; };
 		7F1A494C81801D1F154CC3A9 /* RadiusTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadiusTokens.swift; sourceTree = "<group>"; };
 		7F8016017308216597D832BE /* NotchHUDCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchHUDCoordinator.swift; sourceTree = "<group>"; };
+		7FFF09A8118FE0849679F023 /* NotchDropComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchDropComposerView.swift; sourceTree = "<group>"; };
 		81CC611757009E75C131812E /* MenuBarIconRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconRenderer.swift; sourceTree = "<group>"; };
 		822AB1974605B1FF90493F9A /* GravOnboardingMockScenes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingMockScenes.swift; sourceTree = "<group>"; };
 		852BD2EC804A1743843856FE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -358,6 +362,7 @@
 				0EAA8B09A6284B1B6BE9DC71 /* DiffComputer.swift */,
 				5D5D7A3171BFD3583CB88FEB /* EventClassifier.swift */,
 				B8212969EB91066FDF724464 /* JSONValue.swift */,
+				36174FD56AE209B6827AF82D /* NotchTrayStore.swift */,
 				7A88509B96DB07EB20A5B641 /* SwarmModels.swift */,
 				9AA4D5DAB9532096AF75857D /* SwarmSubagentWatcher.swift */,
 				3AA30702A27E78DEF0415086 /* TaskLogTailer.swift */,
@@ -378,6 +383,7 @@
 				D80414C1DE01980C28A80A7E /* ExpandedNotchView.swift */,
 				A189B95D103E3C1285184C3F /* FilesTelemetryTabView.swift */,
 				3FCDFDB2CAD4122B82BB0F56 /* LiveTelemetryTabView.swift */,
+				7FFF09A8118FE0849679F023 /* NotchDropComposerView.swift */,
 				7F8016017308216597D832BE /* NotchHUDCoordinator.swift */,
 				943F323D0FFF409F539D13E7 /* NotchSurfacePrimitives.swift */,
 				8AD2BFC0EB482A7BD92E7778 /* NotchTab.swift */,
@@ -677,11 +683,13 @@
 				45F518C3D7C1769690E52D52 /* MenuBarIconRenderer.swift in Sources */,
 				0380A4C73CD80FC418A91EE3 /* MenuBarShortcutsPermissionsPanes.swift in Sources */,
 				2E27405B0CD5047B0E97F6FE /* MiniPetSettingsPane.swift in Sources */,
+				AC07AC8E7485B20B5CBD985B /* NotchDropComposerView.swift in Sources */,
 				7B90FA5A0FA52E5372524B22 /* NotchHUDCoordinator.swift in Sources */,
 				8CF109A20EDC98490D24E345 /* NotchHUDSettingsPane.swift in Sources */,
 				F500474F3FB13A751605CEF5 /* NotchSurfacePrimitives.swift in Sources */,
 				FBAECBE5803734C0BAEB64EA /* NotchTab.swift in Sources */,
 				D88A3AFBAC1F8328ABA2A58B /* NotchTokenFlowDisplay.swift in Sources */,
+				215D9A923A04581717B2E466 /* NotchTrayStore.swift in Sources */,
 				3BB9FFAFC1669FEB1FA2B771 /* OnboardingWindowController.swift in Sources */,
 				423500D769BA183722D748AF /* OpticalMotionHelpers.swift in Sources */,
 				C890187EDA513327457EFE31 /* PreferencesStore.swift in Sources */,

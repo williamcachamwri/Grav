@@ -1,4 +1,6 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let gravOpenNotchProfile = Notification.Name("com.grav.openNotchProfile")
@@ -21,8 +23,14 @@ public struct ExpandedNotchView: View {
     @State private var selectedCommandID: String?
     @State private var isTerminalSearchFocused: Bool = false
     @State private var isShowingProfile: Bool = false
+    @State private var isShowingTray: Bool = false
+    @State private var isTrayInputFocused: Bool = false
+    @State private var isOuterDropTargeted: Bool = false
     @State private var statusBannerMessage: String?
     @State private var statusBannerTask: Task<Void, Never>?
+
+    private var trayStore: NotchTrayStore { NotchTrayStore.shared }
+    private var isAnyTextFieldFocused: Bool { isTerminalSearchFocused || isTrayInputFocused }
 
     public init(
         store: AntigravityTelemetryStore,
@@ -44,14 +52,25 @@ public struct ExpandedNotchView: View {
                     preferences: preferences,
                     onOpenSettings: onOpenSettings,
                     onOpenProfile: {
-                        withAnimation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.08)) {
-                            isShowingProfile.toggle()
+                        withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                            let next = !isShowingProfile
+                            isShowingProfile = next
+                            if next { isShowingTray = false }
                         }
                     },
-                    isProfileOpen: isShowingProfile
+                    isProfileOpen: isShowingProfile,
+                    onOpenTray: {
+                        withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                            let next = !isShowingTray
+                            isShowingTray = next
+                            if next { isShowingProfile = false }
+                        }
+                    },
+                    isTrayOpen: isShowingTray,
+                    trayBadgeCount: trayStore.totalBadgeCount
                 )
 
-                if let radarAlert = store.activeRadarAlert, !isShowingProfile {
+                if let radarAlert = store.activeRadarAlert, !isShowingProfile, !isShowingTray {
                     AntigravityRadarBannerView(
                         alert: radarAlert,
                         onFocusAntigravity: {
@@ -80,18 +99,28 @@ public struct ExpandedNotchView: View {
                     hasStreamingReply: store.latestResponse?.isStreaming == true && !store.isPaused,
                     hasRunningCommand: store.activeCommand != nil && !store.isPaused,
                     hasActiveSwarm: (store.activeSwarmSnapshot != nil || store.runningSubagentCount > 0) && !store.isPaused,
-                    isSelectionDimmed: isShowingProfile,
+                    isSelectionDimmed: isShowingProfile || isShowingTray,
                     onSelectAnyTab: { _ in
-                        if isShowingProfile {
+                        if isShowingProfile || isShowingTray {
                             withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
                                 isShowingProfile = false
+                                isShowingTray = false
                             }
                         }
                     }
                 )
 
                 ZStack {
-                    if isShowingProfile {
+                    if isShowingTray {
+                        NotchDropComposerView(
+                            store: store,
+                            trayStore: trayStore,
+                            isInputFocused: $isTrayInputFocused,
+                            onShowToast: { msg in showBanner(msg) }
+                        )
+                        .id("notch-inline-tray")
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 4)))
+                    } else if isShowingProfile {
                         AntigravityProfileDrawerView(
                             store: store,
                             onDismiss: {
@@ -111,6 +140,7 @@ public struct ExpandedNotchView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
                 .animation(reduceMotion ? nil : GravMotion.contentSlide, value: isShowingProfile)
+                .animation(reduceMotion ? nil : GravMotion.contentSlide, value: isShowingTray)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
@@ -152,13 +182,42 @@ public struct ExpandedNotchView: View {
             handleKeyPress(keyPress)
         }
         .onReceive(NotificationCenter.default.publisher(for: .gravOpenNotchProfile)) { _ in
-            withAnimation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.08)) {
+            withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                isShowingTray = false
                 isShowingProfile = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gravOpenNotchTray)) { _ in
+            withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                isShowingProfile = false
+                isShowingTray = true
+            }
+        }
+        .onDrop(of: [.fileURL, .image, .plainText], isTargeted: $isOuterDropTargeted) { providers in
+            withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                isShowingProfile = false
+                isShowingTray = true
+            }
+            return trayStore.handleDrop(providers: providers) {
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                GravOnboardingWelcomeAudio.shared.playButtonTap()
+                showBanner("Staged on Notch")
+            }
+        }
+        .onChange(of: isOuterDropTargeted) { _, targeted in
+            if targeted && !isShowingTray {
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                    isShowingProfile = false
+                    isShowingTray = true
+                }
             }
         }
         .onDisappear {
             statusBannerTask?.cancel()
             isShowingProfile = false
+            isShowingTray = false
+            isTrayInputFocused = false
         }
     }
 
@@ -242,7 +301,11 @@ public struct ExpandedNotchView: View {
     private var hiddenShortcutControls: some View {
         Group {
             Button("") {
-                if isShowingProfile {
+                if isShowingTray {
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+                        isShowingTray = false
+                    }
+                } else if isShowingProfile {
                     withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
                         isShowingProfile = false
                     }
@@ -254,13 +317,25 @@ public struct ExpandedNotchView: View {
 
             Button("") {
                 GravOnboardingWelcomeAudio.shared.playButtonTap()
-                withAnimation(reduceMotion ? nil : .spring(duration: 0.26, bounce: 0.08)) {
-                    isShowingProfile.toggle()
+                withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                    let next = !isShowingProfile
+                    isShowingProfile = next
+                    if next { isShowingTray = false }
                 }
             }
             .keyboardShortcut("u", modifiers: [.command])
 
-            if !isTerminalSearchFocused && !isShowingProfile {
+            Button("") {
+                GravOnboardingWelcomeAudio.shared.playButtonTap()
+                withAnimation(reduceMotion ? nil : GravMotion.contentSlide) {
+                    let next = !isShowingTray
+                    isShowingTray = next
+                    if next { isShowingProfile = false }
+                }
+            }
+            .keyboardShortcut("d", modifiers: [.command])
+
+            if !isAnyTextFieldFocused && !isShowingProfile && !isShowingTray {
                 Button("") {
                     copyActiveContext()
                 }
@@ -308,7 +383,11 @@ public struct ExpandedNotchView: View {
 
     private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
         if keyPress.key == .escape {
-            if isShowingProfile {
+            if isShowingTray {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+                    isShowingTray = false
+                }
+            } else if isShowingProfile {
                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
                     isShowingProfile = false
                 }
@@ -317,7 +396,7 @@ public struct ExpandedNotchView: View {
             }
             return .handled
         }
-        guard !isTerminalSearchFocused, !isShowingProfile, keyPress.modifiers.isEmpty else {
+        guard !isAnyTextFieldFocused, !isShowingProfile, !isShowingTray, keyPress.modifiers.isEmpty else {
             return .ignored
         }
         switch keyPress.characters {
@@ -342,14 +421,16 @@ public struct ExpandedNotchView: View {
     }
 
     private func switchTab(to target: NotchTab) {
-        guard target != selectedTab || isShowingProfile else { return }
+        guard target != selectedTab || isShowingProfile || isShowingTray else { return }
         slideDirection = target.rawValue >= selectedTab.rawValue ? 1 : -1
         if reduceMotion {
             isShowingProfile = false
+            isShowingTray = false
             selectedTab = target
         } else {
             withAnimation(GravMotion.contentSlide) {
                 isShowingProfile = false
+                isShowingTray = false
                 selectedTab = target
             }
         }

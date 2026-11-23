@@ -31,6 +31,7 @@ public final class NotchHUDCoordinator {
     @ObservationIgnored private var lastTelemetryPeekAt: Date = .distantPast
     @ObservationIgnored private var accessibilityObserver: NSObjectProtocol?
     @ObservationIgnored private var spotlightObserver: NSObjectProtocol?
+    @ObservationIgnored private var trayObserver: NSObjectProtocol?
 
     // MARK: - Init
 
@@ -129,6 +130,24 @@ public final class NotchHUDCoordinator {
                 }
             }
         }
+
+        if let trayObserver {
+            NotificationCenter.default.removeObserver(trayObserver)
+        }
+        trayObserver = NotificationCenter.default.addObserver(
+            forName: .gravOpenNotchTray,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.presenter.phase != .expanded {
+                    self.presenter.expand(reason: .programmatic)
+                    try? await Task.sleep(for: .milliseconds(80))
+                    NotificationCenter.default.post(name: .gravOpenNotchTray, object: self)
+                }
+            }
+        }
     }
 
     /// Tears down the Notch HUD panel and detaches all observers.
@@ -145,6 +164,10 @@ public final class NotchHUDCoordinator {
         if let spotlightObserver {
             NotificationCenter.default.removeObserver(spotlightObserver)
             self.spotlightObserver = nil
+        }
+        if let trayObserver {
+            NotificationCenter.default.removeObserver(trayObserver)
+            self.trayObserver = nil
         }
 
         presenter.uninstall()

@@ -60,6 +60,7 @@ public enum GravPreferenceKeys {
     public static let miniPetShowBubble = "grav.miniPetShowBubble"
     public static let miniPetAlwaysOnTop = "grav.miniPetAlwaysOnTop"
     public static let miniPetAutoHideFullscreen = "grav.miniPetAutoHideFullscreen"
+    public static let miniPetWindowPerching = "grav.miniPetWindowPerching"
     public static let miniPetOriginX = "grav.miniPetOriginX"
     public static let miniPetOriginY = "grav.miniPetOriginY"
 
@@ -184,6 +185,10 @@ public final class PreferencesStore {
 
     public var miniPetAutoHideFullscreen: Bool {
         didSet { defaults.set(miniPetAutoHideFullscreen, forKey: GravPreferenceKeys.miniPetAutoHideFullscreen) }
+    }
+
+    public var miniPetWindowPerching: Bool {
+        didSet { defaults.set(miniPetWindowPerching, forKey: GravPreferenceKeys.miniPetWindowPerching) }
     }
 
     /// Saved screen X coordinate when user drags the desktop pet freely (`nil` uses `miniPetPlacement` snap).
@@ -317,6 +322,7 @@ public final class PreferencesStore {
         self.miniPetShowBubble = defaults.object(forKey: GravPreferenceKeys.miniPetShowBubble) as? Bool ?? true
         self.miniPetAlwaysOnTop = defaults.object(forKey: GravPreferenceKeys.miniPetAlwaysOnTop) as? Bool ?? true
         self.miniPetAutoHideFullscreen = defaults.object(forKey: GravPreferenceKeys.miniPetAutoHideFullscreen) as? Bool ?? true
+        self.miniPetWindowPerching = defaults.object(forKey: GravPreferenceKeys.miniPetWindowPerching) as? Bool ?? true
         self.miniPetOriginX = defaults.object(forKey: GravPreferenceKeys.miniPetOriginX) as? Double
         self.miniPetOriginY = defaults.object(forKey: GravPreferenceKeys.miniPetOriginY) as? Double
 

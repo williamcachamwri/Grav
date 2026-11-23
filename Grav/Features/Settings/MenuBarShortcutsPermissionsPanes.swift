@@ -457,6 +457,15 @@ struct ShortcutsSettingsPane: View {
                 SettingsRowDivider()
 
                 SettingRow(
+                    title: "Drop Shelf & Prompt Queue",
+                    description: "Stage files/screenshots, compose a prompt, or queue follow-ups directly on the Notch."
+                ) {
+                    SettingsKeycapPlate(keys: ["⌘", "D"])
+                }
+
+                SettingsRowDivider()
+
+                SettingRow(
                     title: "Account, Usage & Models",
                     description: "Open your Antigravity profile, quota rings, and available models drawer."
                 ) {

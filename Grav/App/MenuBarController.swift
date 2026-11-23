@@ -115,6 +115,13 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         ))
 
         menu.addItem(makeMenuItem(
+            title: "Drop Shelf & Prompt Queue…",
+            action: #selector(handleOpenTray),
+            keyEquivalent: "",
+            symbolName: "tray.and.arrow.down"
+        ))
+
+        menu.addItem(makeMenuItem(
             title: "Account & Usage…",
             action: #selector(handleOpenProfile),
             keyEquivalent: "",
@@ -529,6 +536,10 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func handleToggleNotch() {
         onToggleNotch?()
+    }
+
+    @objc private func handleOpenTray() {
+        NotificationCenter.default.post(name: .gravOpenNotchTray, object: nil)
     }
 
     @objc private func handleOpenProfile() {
