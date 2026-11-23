@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "LICENSE"
+      - "Assets/**"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test (macOS 15)
+    runs-on: macos-15
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: |
+          XCODE_APP=$(ls -d /Applications/Xcode_*.app /Applications/Xcode.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$XCODE_APP" ]; then
+            echo "Using Xcode: $XCODE_APP"
+            sudo xcode-select -s "$XCODE_APP"
+          fi
+          xcodebuild -version
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Grav.xcodeproj \
+            -scheme Grav
+
+      - name: Run unit tests (Debug, arm64)
+        run: |
+          xcodebuild test \
+            -project Grav.xcodeproj \
+            -scheme Grav \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath .build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify Universal Release build (arm64 + x86_64)
+        run: |
+          xcodebuild build \
+            -project Grav.xcodeproj \
+            -scheme Grav \
+            -configuration Release \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            -derivedDataPath .build/DerivedData \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO

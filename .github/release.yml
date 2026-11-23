@@ -1,0 +1,30 @@
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+    authors:
+      - dependabot
+      - github-actions
+  categories:
+    - title: Features
+      labels:
+        - feat
+        - feature
+        - enhancement
+    - title: Performance
+      labels:
+        - perf
+        - performance
+    - title: Bug Fixes
+      labels:
+        - fix
+        - bug
+    - title: Documentation & Maintenance
+      labels:
+        - docs
+        - documentation
+        - chore
+        - ci
+    - title: Other Changes
+      labels:
+        - "*"

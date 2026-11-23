@@ -1,0 +1,494 @@
+name: Release DMG
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+          - custom
+      custom_version:
+        description: "Custom semver without 'v' (only used when bump = custom, e.g. 1.2.0)"
+        type: string
+        required: false
+        default: ""
+      prerelease:
+        description: "Mark GitHub Release as pre-release"
+        type: boolean
+        required: false
+        default: false
+      skip_tests:
+        description: "Skip XCTest suite before packaging DMG"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare Version & Tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      build_number: ${{ steps.version.outputs.build_number }}
+      target_sha: ${{ steps.version.outputs.target_sha }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve or bump version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          BUMP_KIND: ${{ inputs.bump }}
+          CUSTOM_VERSION: ${{ inputs.custom_version }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess
+          from pathlib import Path
+
+          event = os.environ["EVENT_NAME"]
+          out_path = Path(os.environ["GITHUB_OUTPUT"])
+
+          def write_out(**kwargs):
+              with out_path.open("a", encoding="utf-8") as f:
+                  for k, v in kwargs.items():
+                      f.write(f"{k}={v}\n")
+
+          project_yml = Path("project.yml")
+          pbxproj = Path("Grav.xcodeproj/project.pbxproj")
+
+          yml_text = project_yml.read_text(encoding="utf-8")
+          m_ver = re.search(r'MARKETING_VERSION:\s*"([^"]+)"', yml_text)
+          m_build = re.search(r'CURRENT_PROJECT_VERSION:\s*"([^"]+)"', yml_text)
+          current_ver = m_ver.group(1) if m_ver else "1.0.0"
+          current_build = int(m_build.group(1)) if m_build and m_build.group(1).isdigit() else 1
+
+          if event == "push":
+              tag = os.environ["REF_NAME"]
+              version = tag.lstrip("v")
+              is_pre = "true" if "-" in version else "false"
+              sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+              write_out(
+                  version=version,
+                  tag=tag,
+                  build_number=str(current_build),
+                  target_sha=sha,
+                  is_prerelease=is_pre,
+              )
+              print(f"Tag push release: {tag} (build {current_build}) @ {sha}")
+              raise SystemExit(0)
+
+          bump = os.environ.get("BUMP_KIND", "patch")
+          custom = os.environ.get("CUSTOM_VERSION", "").strip().lstrip("v")
+
+          base_parts = re.match(r"^(\d+)\.(\d+)\.(\d+)", current_ver)
+          major, minor, patch = (int(base_parts.group(1)), int(base_parts.group(2)), int(base_parts.group(3))) if base_parts else (1, 0, 0)
+
+          if bump == "major":
+              next_ver = f"{major + 1}.0.0"
+          elif bump == "minor":
+              next_ver = f"{major}.{minor + 1}.0"
+          elif bump == "patch":
+              next_ver = f"{major}.{minor}.{patch + 1}"
+          elif bump == "custom":
+              if not re.match(r"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$", custom):
+                  raise SystemExit(f"Invalid custom_version: {custom!r} (expected semver like 1.2.0 or 1.2.0-beta.1)")
+              next_ver = custom
+          else:
+              raise SystemExit(f"Unsupported bump kind: {bump}")
+
+          next_build = current_build + 1
+          next_tag = f"v{next_ver}"
+
+          existing = subprocess.run(
+              ["git", "rev-parse", "-q", "--verify", f"refs/tags/{next_tag}"],
+              stdout=subprocess.DEVNULL,
+              stderr=subprocess.DEVNULL,
+          )
+          if existing.returncode == 0:
+              raise SystemExit(f"Tag {next_tag} already exists. Choose a higher version or push the tag directly.")
+
+          # Update project.yml
+          yml_new = re.sub(r'(MARKETING_VERSION:\s*)"[^"]+"', rf'\1"{next_ver}"', yml_text)
+          yml_new = re.sub(r'(CURRENT_PROJECT_VERSION:\s*)"[^"]+"', rf'\1"{next_build}"', yml_new)
+          project_yml.write_text(yml_new, encoding="utf-8")
+
+          # Update Grav.xcodeproj/project.pbxproj
+          pbx_text = pbxproj.read_text(encoding="utf-8")
+          pbx_new = re.sub(r'(MARKETING_VERSION\s*=\s*)[^;]+;', rf'\g<1>{next_ver};', pbx_text)
+          pbx_new = re.sub(r'(CURRENT_PROJECT_VERSION\s*=\s*)[^;]+;', rf'\g<1>{next_build};', pbx_new)
+          pbxproj.write_text(pbx_new, encoding="utf-8")
+
+          branch = os.environ["REF_NAME"]
+          subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
+          subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True)
+          subprocess.run(["git", "add", "project.yml", "Grav.xcodeproj/project.pbxproj"], check=True)
+          subprocess.run(["git", "commit", "-m", f"chore(release): bump version to {next_tag}"], check=True)
+          subprocess.run(["git", "tag", "-a", next_tag, "-m", f"Grav {next_ver}"], check=True)
+          subprocess.run(["git", "push", "origin", f"HEAD:{branch}"], check=True)
+          subprocess.run(["git", "push", "origin", next_tag], check=True)
+
+          sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          is_pre = "true" if (os.environ.get("INPUT_PRERELEASE") == "true" or "-" in next_ver) else "false"
+          write_out(
+              version=next_ver,
+              tag=next_tag,
+              build_number=str(next_build),
+              target_sha=sha,
+              is_prerelease=is_pre,
+          )
+          print(f"Bumped {current_ver} ({current_build}) -> {next_ver} ({next_build}), tagged {next_tag} @ {sha}")
+          PY
+
+  build-and-publish:
+    name: Build Universal DMG & Publish Release
+    needs: prepare
+    runs-on: macos-15
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Select latest Xcode
+        run: |
+          XCODE_APP=$(ls -d /Applications/Xcode_*.app /Applications/Xcode.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$XCODE_APP" ]; then
+            echo "Using Xcode: $XCODE_APP"
+            sudo xcode-select -s "$XCODE_APP"
+          fi
+          xcodebuild -version
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Grav.xcodeproj \
+            -scheme Grav
+
+      - name: Run unit tests
+        if: ${{ inputs.skip_tests != true }}
+        run: |
+          xcodebuild test \
+            -project Grav.xcodeproj \
+            -scheme Grav \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath .build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Import signing certificate (optional Developer ID)
+        id: signing
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -n "$CERT_P12" ] && [ -n "$CERT_PASSWORD" ]; then
+            KEYCHAIN_PATH="$RUNNER_TEMP/grav-signing.keychain-db"
+            KEYCHAIN_PASS="$(uuidgen)"
+            echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+
+            security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+            security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+            security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+            security list-keychain -d user -s "$KEYCHAIN_PATH"
+            security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+
+            SIGN_ID=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+            echo "identity=$SIGN_ID" >> "$GITHUB_OUTPUT"
+            echo "has_cert=true" >> "$GITHUB_OUTPUT"
+            echo "Imported signing identity: $SIGN_ID"
+          else
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+            echo "has_cert=false" >> "$GITHUB_OUTPUT"
+            echo "No Developer ID secrets configured; using ad-hoc code signing."
+          fi
+
+      - name: Build Universal Release Grav.app (arm64 + x86_64)
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
+        run: |
+          xcodebuild build \
+            -project Grav.xcodeproj \
+            -scheme Grav \
+            -configuration Release \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            -derivedDataPath .build/DerivedData \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO
+
+          APP_PATH=".build/DerivedData/Build/Products/Release/Grav.app"
+          test -d "$APP_PATH"
+          lipo -info "$APP_PATH/Contents/MacOS/Grav"
+
+      - name: Code sign Grav.app
+        env:
+          SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          HAS_CERT: ${{ steps.signing.outputs.has_cert }}
+        run: |
+          APP_PATH=".build/DerivedData/Build/Products/Release/Grav.app"
+          if [ "$HAS_CERT" = "true" ]; then
+            codesign --force --deep --timestamp --options runtime \
+              --entitlements Grav/Resources/Grav.entitlements \
+              --sign "$SIGN_IDENTITY" \
+              "$APP_PATH"
+          else
+            codesign --force --deep \
+              --entitlements Grav/Resources/Grav.entitlements \
+              --sign - \
+              "$APP_PATH"
+          fi
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      - name: Package Grav Universal DMG & SHA-256 checksum
+        id: dmg
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          HAS_CERT: ${{ steps.signing.outputs.has_cert }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          APP_PATH=".build/DerivedData/Build/Products/Release/Grav.app"
+          STAGE_DIR="$RUNNER_TEMP/dmg-stage"
+          DMG_NAME="Grav-${TAG}-universal.dmg"
+          DMG_PATH="$RUNNER_TEMP/${DMG_NAME}"
+          CHECKSUM_PATH="${DMG_PATH}.sha256"
+
+          rm -rf "$STAGE_DIR" "$DMG_PATH" "$CHECKSUM_PATH"
+          mkdir -p "$STAGE_DIR"
+          ditto "$APP_PATH" "$STAGE_DIR/Grav.app"
+          ln -s /Applications "$STAGE_DIR/Applications"
+
+          hdiutil create \
+            -volname "Grav ${VERSION}" \
+            -srcfolder "$STAGE_DIR" \
+            -ov \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            "$DMG_PATH"
+
+          if [ "$HAS_CERT" = "true" ]; then
+            codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG_PATH"
+            if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+              xcrun notarytool submit "$DMG_PATH" \
+                --apple-id "$APPLE_ID" \
+                --password "$APPLE_APP_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID" \
+                --wait
+              xcrun stapler staple "$DMG_PATH"
+            fi
+          fi
+
+          (cd "$RUNNER_TEMP" && shasum -a 256 "$DMG_NAME" > "${DMG_NAME}.sha256")
+          SHA256=$(awk '{print $1}' "$CHECKSUM_PATH")
+
+          echo "dmg_name=$DMG_NAME" >> "$GITHUB_OUTPUT"
+          echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
+          echo "checksum_path=$CHECKSUM_PATH" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          ls -lh "$DMG_PATH" "$CHECKSUM_PATH"
+
+      - name: Generate Release Notes with @contributors
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          DMG_NAME: ${{ steps.dmg.outputs.dmg_name }}
+          SHA256: ${{ steps.dmg.outputs.sha256 }}
+          HAS_CERT: ${{ steps.signing.outputs.has_cert }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+
+          repo = os.environ["REPO"]
+          tag = os.environ["TAG"]
+          version = os.environ["VERSION"]
+          dmg_name = os.environ["DMG_NAME"]
+          sha256 = os.environ["SHA256"]
+          has_cert = os.environ["HAS_CERT"] == "true"
+
+          # Find nearest reachable previous semantic tag (if any)
+          prev_proc = subprocess.run(
+              ["git", "describe", "--tags", "--abbrev=0", "--match", "v*", f"{tag}^"],
+              text=True,
+              capture_output=True,
+          )
+          prev_tag = prev_proc.stdout.strip() if prev_proc.returncode == 0 and prev_proc.stdout.strip() else None
+          commit_range = f"{prev_tag}..{tag}" if prev_tag else tag
+
+          log_raw = subprocess.check_output(
+              ["git", "log", commit_range, "--no-merges", "--format=%H%x1f%s%x1f%an%x1f%ae"],
+              text=True,
+          ).splitlines()
+
+          # Resolve GitHub @logins for commits via GitHub API (falls back gracefully to author name)
+          sha_to_login = {}
+          contributors = []
+          seen_contributors = set()
+
+          def fetch_login(sha):
+              if sha in sha_to_login:
+                  return sha_to_login[sha]
+              try:
+                  res = subprocess.check_output(
+                      ["gh", "api", f"repos/{repo}/commits/{sha}", "--jq", ".author.login // empty"],
+                      text=True,
+                      stderr=subprocess.DEVNULL,
+                  ).strip()
+              except Exception:
+                  res = ""
+              sha_to_login[sha] = res
+              return res
+
+          # Batch-resolve unique author emails via latest commit per email (fast & rate-limit friendly)
+          email_to_login = {}
+          entries = []
+          for line in log_raw:
+              parts = line.split("\x1f")
+              if len(parts) != 4:
+                  continue
+              sha, subj, author_name, author_email = parts
+              if "github-actions[bot]" in author_name or "github-actions[bot]" in author_email:
+                  continue
+              if author_email not in email_to_login:
+                  login = fetch_login(sha)
+                  email_to_login[author_email] = login
+              login = email_to_login[author_email]
+              mention = f"@{login}" if login else author_name
+              if mention not in seen_contributors:
+                  seen_contributors.add(mention)
+                  contributors.append(mention)
+              entries.append((sha[:7], subj, mention))
+
+          buckets = {
+              "Features": [],
+              "Performance": [],
+              "Bug Fixes": [],
+              "Other Changes": [],
+          }
+
+          for short_sha, subj, mention in entries:
+              # Skip internal version bump commit in notes
+              if subj.startswith("chore(release):"):
+                  continue
+              m = re.match(r"^(feat|fix|perf|docs|chore|refactor|test|style|build|ci)(\(([^)]+)\))?:\s*(.+)$", subj)
+              if m:
+                  kind, _, scope, desc = m.groups()
+                  prefix = f"**{scope}:** " if scope else ""
+                  bullet = f"- {prefix}{desc} by {mention} (`{short_sha}`)"
+                  if kind == "feat":
+                      buckets["Features"].append(bullet)
+                  elif kind == "perf":
+                      buckets["Performance"].append(bullet)
+                  elif kind == "fix":
+                      buckets["Bug Fixes"].append(bullet)
+                  else:
+                      buckets["Other Changes"].append(bullet)
+              else:
+                  buckets["Other Changes"].append(f"- {subj} by {mention} (`{short_sha}`)")
+
+          lines = [f"## Grav {tag}", ""]
+
+          # Cap huge initial release lists cleanly while showing all recent highlights
+          for title, items in buckets.items():
+              if not items:
+                  continue
+              lines.append(f"### {title}")
+              shown = items[:25]
+              lines.extend(shown)
+              if len(items) > 25:
+                  lines.append(f"- *…and {len(items) - 25} more {title.lower()} commits*")
+              lines.append("")
+
+          if contributors:
+              lines.append("### Contributors")
+              lines.append("Thanks to " + ", ".join(contributors) + " for contributing to this release.")
+              lines.append("")
+
+          lines.extend([
+              "### Install",
+              f"1. Download **`{dmg_name}`** (Universal Binary — Apple Silicon & Intel, macOS 14+).",
+              "2. Open the DMG and drag **Grav.app** into **Applications**.",
+          ])
+          if not has_cert:
+              lines.append("3. If macOS Gatekeeper flags the ad-hoc build on first launch, run:")
+              lines.append("   ```bash")
+              lines.append("   xattr -cr /Applications/Grav.app")
+              lines.append("   ```")
+          lines.extend([
+              "",
+              "### Checksum (SHA-256)",
+              "```text",
+              f"{sha256}  {dmg_name}",
+              "```",
+          ])
+
+          if prev_tag:
+              lines.extend([
+                  "",
+                  f"**Full Changelog**: https://github.com/{repo}/compare/{prev_tag}...{tag}",
+              ])
+
+          Path("/tmp/release-notes.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print(Path("/tmp/release-notes.md").read_text(encoding="utf-8"))
+          PY
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          IS_PRERELEASE: ${{ needs.prepare.outputs.is_prerelease }}
+          DMG_PATH: ${{ steps.dmg.outputs.dmg_path }}
+          CHECKSUM_PATH: ${{ steps.dmg.outputs.checksum_path }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "Grav ${TAG}" \
+              --notes-file /tmp/release-notes.md
+            gh release upload "$TAG" "$DMG_PATH" "$CHECKSUM_PATH" --clobber
+          else
+            EXTRA_ARGS=""
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              EXTRA_ARGS="--prerelease"
+            fi
+            gh release create "$TAG" "$DMG_PATH" "$CHECKSUM_PATH" \
+              --title "Grav ${TAG}" \
+              --notes-file /tmp/release-notes.md \
+              $EXTRA_ARGS
+          fi
