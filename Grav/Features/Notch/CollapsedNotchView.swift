@@ -12,80 +12,48 @@ import SwiftUI
 public struct CollapsedNotchView: View {
     public var store: AntigravityTelemetryStore
     public var presenter: NotchPresenter
-    public var preferences: PreferencesStore
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         store: AntigravityTelemetryStore,
-        presenter: NotchPresenter,
-        preferences: PreferencesStore
+        presenter: NotchPresenter
     ) {
         self.store = store
         self.presenter = presenter
-        self.preferences = preferences
     }
 
     private var effectiveState: TelemetryState {
         store.isPaused ? .idle : store.state
     }
 
-    private var isTurbo: Bool {
-        store.isTurboMode && !store.isPaused && preferences.turboAuraEnabled
-    }
-
-    private var turboTheme: SuperSaiyanAuraTheme {
-        preferences.turboAuraTheme
-    }
-
     public var body: some View {
         let hasPhysicalNotch = presenter.geometry.hasPhysicalNotch
         let pillHeight = presenter.geometry.collapsedHeight
 
-        let isPowerSurging = effectiveState.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil
-
-        ZStack(alignment: .center) {
-            if isTurbo {
-                TurboKineticAuraCanvas(
-                    style: .collapsed,
-                    isPowerSurging: isPowerSurging,
-                    theme: turboTheme,
-                    cornerRadius: pillHeight * 0.5,
-                    reduceMotion: reduceMotion
-                )
-                .frame(
-                    width: hasPhysicalNotch ? nil : presenter.collapsedSurfaceWidth,
-                    height: pillHeight
-                )
-                .frame(maxWidth: .infinity, maxHeight: pillHeight)
-                .transition(.opacity)
-            }
-
-            Group {
-                if hasPhysicalNotch {
-                    NotchCutoutLayout(
-                        cutoutWidth: presenter.geometry.notchWidth,
-                        gutterWidth: presenter.collapsedGutterWidth,
-                        pillHeight: pillHeight,
-                        edgeInset: 11,
-                        alignment: .center
-                    ) {
-                        leadingWing(compact: true)
-                    } trailing: {
-                        trailingWing(compact: true)
-                    }
-                } else {
-                    HStack(alignment: .center, spacing: 10) {
-                        leadingWing(compact: false)
-                            .fixedSize(horizontal: true, vertical: false)
-                        trailingWing(compact: false)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(width: presenter.collapsedSurfaceWidth, height: pillHeight, alignment: .center)
+        Group {
+            if hasPhysicalNotch {
+                NotchCutoutLayout(
+                    cutoutWidth: presenter.geometry.notchWidth,
+                    gutterWidth: presenter.collapsedGutterWidth,
+                    pillHeight: pillHeight,
+                    edgeInset: 11,
+                    alignment: .center
+                ) {
+                    leadingWing(compact: true)
+                } trailing: {
+                    trailingWing(compact: true)
                 }
+            } else {
+                HStack(alignment: .center, spacing: 10) {
+                    leadingWing(compact: false)
+                        .fixedSize(horizontal: true, vertical: false)
+                    trailingWing(compact: false)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .padding(.horizontal, 12)
+                .frame(width: presenter.collapsedSurfaceWidth, height: pillHeight, alignment: .center)
             }
-            .frame(height: pillHeight)
         }
         .frame(height: pillHeight)
         .accessibilityElement(children: .combine)
@@ -103,26 +71,8 @@ public struct CollapsedNotchView: View {
             Button {
                 store.activateAntigravityApp()
             } label: {
-                ZStack {
-                    if isTurbo {
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: [
-                                        turboTheme.primaryColor.opacity(effectiveState.isActive ? 0.52 : 0.25),
-                                        Color.clear,
-                                    ],
-                                    center: .center,
-                                    startRadius: 2,
-                                    endRadius: 14
-                                )
-                            )
-                            .frame(width: 26, height: 26)
-                            .blendMode(.plusLighter)
-                    }
-                    GravAppIconTile(size: compact ? 18 : 19)
-                        .opacity(store.isPaused ? 0.42 : 1.0)
-                }
+                GravAppIconTile(size: compact ? 18 : 19)
+                    .opacity(store.isPaused ? 0.42 : 1.0)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open Antigravity")
@@ -201,7 +151,7 @@ public struct CollapsedNotchView: View {
             case let .toolActivity(event):
                 Image(systemName: event.kind.symbolName)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(isTurbo ? turboTheme.primaryColor : GravPalette.glacialCyan)
+                    .foregroundStyle(GravPalette.glacialCyan)
                     .transition(signalTransition)
 
             case .idle:
@@ -209,7 +159,7 @@ public struct CollapsedNotchView: View {
                     Text("Grav")
                         .font(.system(size: 11.5, weight: .medium))
                         .tracking(-0.2)
-                        .foregroundStyle(isTurbo ? turboTheme.coreColor : Color.white.opacity(0.78))
+                        .foregroundStyle(Color.white.opacity(0.78))
                         .transition(.opacity)
                 }
             }
@@ -334,8 +284,6 @@ public struct CollapsedNotchView: View {
             baseOpacity: 0.46,
             peakOpacity: 0.96,
             period: 1.75,
-            turboMode: isTurbo,
-            turboTheme: turboTheme,
             reduceMotion: reduceMotion
         )
         .monospacedDigit()
@@ -347,7 +295,7 @@ public struct CollapsedNotchView: View {
                 NotchPingPongMarqueeText(
                     text: focus,
                     font: .system(size: 11.5, weight: .medium),
-                    color: isTurbo ? turboTheme.coreColor : Color.white.opacity(0.88),
+                    color: Color.white.opacity(0.88),
                     alignment: .trailing,
                     reduceMotion: reduceMotion
                 )
@@ -356,8 +304,6 @@ public struct CollapsedNotchView: View {
                     startDate: startedAt,
                     compact: compact,
                     font: .system(size: compact ? 11 : 11.5, weight: .medium),
-                    turboMode: isTurbo,
-                    turboTheme: turboTheme,
                     reduceMotion: reduceMotion
                 )
             }
@@ -368,7 +314,7 @@ public struct CollapsedNotchView: View {
                 Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .monospacedDigit()
-                    .foregroundStyle((isTurbo ? turboTheme.primaryColor : GravPalette.glacialCyan).opacity(0.90))
+                    .foregroundStyle(GravPalette.glacialCyan.opacity(0.88))
                     .fixedSize(horizontal: true, vertical: false)
             }
         }
@@ -382,8 +328,6 @@ public struct CollapsedNotchView: View {
             baseOpacity: 0.46,
             peakOpacity: 0.96,
             period: 1.85,
-            turboMode: isTurbo,
-            turboTheme: turboTheme,
             reduceMotion: reduceMotion
         )
     }
@@ -394,7 +338,7 @@ public struct CollapsedNotchView: View {
                 NotchPingPongMarqueeText(
                     text: focus,
                     font: .system(size: 11.5, weight: .medium),
-                    color: isTurbo ? turboTheme.coreColor : Color.white.opacity(0.86),
+                    color: Color.white.opacity(0.86),
                     alignment: .trailing,
                     reduceMotion: reduceMotion
                 )
@@ -403,8 +347,6 @@ public struct CollapsedNotchView: View {
                     startDate: store.currentPhaseStartedAt,
                     compact: compact,
                     font: .system(size: compact ? 11 : 11.5, weight: .medium),
-                    turboMode: isTurbo,
-                    turboTheme: turboTheme,
                     reduceMotion: reduceMotion
                 )
             }
@@ -415,7 +357,7 @@ public struct CollapsedNotchView: View {
                 Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .monospacedDigit()
-                    .foregroundStyle((isTurbo ? turboTheme.primaryColor : GravPalette.glacialCyan).opacity(0.90))
+                    .foregroundStyle(GravPalette.glacialCyan.opacity(0.88))
                     .fixedSize(horizontal: true, vertical: false)
             }
         }
@@ -431,8 +373,6 @@ public struct CollapsedNotchView: View {
                     baseOpacity: 0.60,
                     peakOpacity: 1.0,
                     period: 1.35,
-                    turboMode: isTurbo,
-                    turboTheme: turboTheme,
                     reduceMotion: reduceMotion
                 )
             )
@@ -453,7 +393,7 @@ public struct CollapsedNotchView: View {
             NotchPingPongMarqueeText(
                 text: compact ? event.kind.shortLabel : event.title,
                 font: .system(size: compact ? 11 : 11.5, weight: .medium),
-                color: isTurbo ? turboTheme.coreColor : Color.white.opacity(0.88),
+                color: Color.white.opacity(0.88),
                 alignment: .trailing,
                 reduceMotion: reduceMotion
             )
@@ -472,7 +412,7 @@ public struct CollapsedNotchView: View {
                 Circle()
                     .trim(from: 0, to: CGFloat(max(0.08, steps.fraction)))
                     .stroke(
-                        isTurbo ? turboTheme.primaryColor : Color.white.opacity(0.86),
+                        Color.white.opacity(0.86),
                         style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
@@ -482,7 +422,7 @@ public struct CollapsedNotchView: View {
             Text(verbatim: "\(steps.completedCount)/\(steps.totalCount)")
                 .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
                 .monospacedDigit()
-                .foregroundStyle((isTurbo ? turboTheme.innerColor : Color.white.opacity(0.68)))
+                .foregroundStyle(Color.white.opacity(0.68))
         }
         .fixedSize(horizontal: true, vertical: false)
     }
@@ -495,8 +435,6 @@ public struct CollapsedNotchView: View {
             baseOpacity: 0.50,
             peakOpacity: 0.98,
             period: 1.55,
-            turboMode: isTurbo,
-            turboTheme: turboTheme,
             reduceMotion: reduceMotion
         )
     }
@@ -636,7 +574,7 @@ public struct CollapsedNotchView: View {
     }
 
     private var workingWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? turboTheme.primaryColor : Color.white.opacity(0.72)
+        let tint = Color.white.opacity(0.72)
         if reduceMotion {
             return .steady([0.38, 0.78, 0.50], barWidth: 1.5, spacing: 1.7, height: 9, tint: tint)
         }
@@ -647,14 +585,14 @@ public struct CollapsedNotchView: View {
             barWidth: 1.5,
             spacing: 1.7,
             height: 9,
-            period: isTurbo ? 0.48 : 0.86,
-            stagger: isTurbo ? 0.09 : 0.14,
+            period: 0.86,
+            stagger: 0.14,
             tint: tint
         )
     }
 
     private var thinkingWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? turboTheme.innerColor : GravPalette.thinking
+        let tint = GravPalette.thinking
         if reduceMotion {
             return .steady([0.38, 0.85, 0.55, 0.92], barWidth: 1.6, spacing: 1.7, height: 10, tint: tint)
         }
@@ -665,14 +603,14 @@ public struct CollapsedNotchView: View {
             barWidth: 1.6,
             spacing: 1.7,
             height: 10,
-            period: isTurbo ? 0.44 : 0.72,
-            stagger: isTurbo ? 0.08 : 0.13,
+            period: 0.72,
+            stagger: 0.13,
             tint: tint
         )
     }
 
     private var replyingWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? turboTheme.coreColor : GravPalette.emerald
+        let tint = GravPalette.emerald
         if reduceMotion {
             return .steady([0.52, 0.88, 0.64], barWidth: 1.6, spacing: 1.7, height: 9.5, tint: tint)
         }
@@ -683,14 +621,14 @@ public struct CollapsedNotchView: View {
             barWidth: 1.6,
             spacing: 1.7,
             height: 9.5,
-            period: isTurbo ? 0.40 : 0.62,
+            period: 0.62,
             stagger: 0.10,
             tint: tint
         )
     }
 
     private var commandWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? turboTheme.outerColor : Color.white.opacity(0.85)
+        let tint = Color.white.opacity(0.85)
         if reduceMotion {
             return .steady([0.45, 0.9, 0.55], barWidth: 1.6, spacing: 1.7, height: 9.5, tint: tint)
         }
@@ -701,7 +639,7 @@ public struct CollapsedNotchView: View {
             barWidth: 1.6,
             spacing: 1.7,
             height: 9.5,
-            period: isTurbo ? 0.42 : 0.56,
+            period: 0.56,
             stagger: 0.10,
             tint: tint
         )

@@ -145,14 +145,9 @@ public struct ExpandedNotchHeaderView: View {
     }
 
     private var inlineStatusReadout: some View {
-        let isTurbo = store.isTurboMode && !store.isPaused && preferences.turboAuraEnabled
-        let turboTheme = preferences.turboAuraTheme
         let runningTasks = store.isPaused ? 0 : store.runningTaskCount
         let effectivePulsing = isActivelyStreaming || runningTasks > 0
         let effectiveDotColor: Color = {
-            if isTurbo && (isActivelyStreaming || runningTasks > 0) {
-                return turboTheme.primaryColor
-            }
             if runningTasks > 0 && !isActivelyStreaming {
                 return GravPalette.glacialCyan
             }
@@ -160,15 +155,6 @@ public struct ExpandedNotchHeaderView: View {
         }()
 
         return HStack(spacing: 5) {
-            if isTurbo {
-                TurboSolarEmblem(
-                    isSurging: isActivelyStreaming || runningTasks > 0,
-                    theme: turboTheme,
-                    reduceMotion: reduceMotion
-                )
-                .padding(.trailing, 3)
-            }
-
             NotchSemanticDot(
                 color: effectiveDotColor,
                 size: 5,
@@ -181,8 +167,6 @@ public struct ExpandedNotchHeaderView: View {
                         startDate: store.currentPhaseStartedAt,
                         compact: true,
                         font: .system(size: 11, weight: .medium),
-                        turboMode: isTurbo,
-                        turboTheme: turboTheme,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -194,8 +178,6 @@ public struct ExpandedNotchHeaderView: View {
                         baseOpacity: 0.48,
                         peakOpacity: 0.96,
                         period: 1.55,
-                        turboMode: isTurbo,
-                        turboTheme: turboTheme,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -204,8 +186,6 @@ public struct ExpandedNotchHeaderView: View {
                         startDate: startedAt,
                         compact: true,
                         font: .system(size: 11, weight: .medium),
-                        turboMode: isTurbo,
-                        turboTheme: turboTheme,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -217,8 +197,6 @@ public struct ExpandedNotchHeaderView: View {
                         baseOpacity: 0.46,
                         peakOpacity: 0.94,
                         period: 1.8,
-                        turboMode: isTurbo,
-                        turboTheme: turboTheme,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -230,8 +208,6 @@ public struct ExpandedNotchHeaderView: View {
                         baseOpacity: 0.48,
                         peakOpacity: 0.96,
                         period: 1.75,
-                        turboMode: isTurbo,
-                        turboTheme: turboTheme,
                         reduceMotion: reduceMotion
                     )
                     .monospacedDigit()
@@ -249,13 +225,13 @@ public struct ExpandedNotchHeaderView: View {
                     Text("· \(runningTasks) task\(runningTasks == 1 ? "" : "s")")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .monospacedDigit()
-                        .foregroundStyle((isTurbo ? turboTheme.primaryColor : GravPalette.glacialCyan).opacity(0.90))
+                        .foregroundStyle(GravPalette.glacialCyan.opacity(0.88))
                         .fixedSize(horizontal: true, vertical: false)
                 } else if store.activeRunningChatsCount >= 2 {
                     Text("· \(store.activeRunningChatsCount) chats")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .monospacedDigit()
-                        .foregroundStyle((isTurbo ? turboTheme.innerColor : GravPalette.glacialCyan).opacity(0.84))
+                        .foregroundStyle(GravPalette.glacialCyan.opacity(0.84))
                         .fixedSize(horizontal: true, vertical: false)
                 }
             } else {
@@ -334,7 +310,6 @@ public struct ExpandedNotchHeaderView: View {
         .popover(isPresented: $isShowingMetricsPopover, arrowEdge: .bottom) {
             SessionTelemetryInspectorPopover(
                 store: store,
-                turboTheme: preferences.turboAuraTheme,
                 reduceMotion: reduceMotion
             )
         }
@@ -402,7 +377,6 @@ public struct ExpandedNotchHeaderView: View {
 /// 3-segment proportional bar.
 private struct SessionTelemetryInspectorPopover: View {
     var store: AntigravityTelemetryStore
-    var turboTheme: SuperSaiyanAuraTheme
     var reduceMotion: Bool
 
     @State private var revealProgress: CGFloat = 0
@@ -482,7 +456,7 @@ private struct SessionTelemetryInspectorPopover: View {
                     value: metrics.inputTokens.formatted()
                 )
                 ledgerRow(
-                    dotColor: store.isTurboMode ? turboTheme.primaryColor : GravPalette.glacialCyan,
+                    dotColor: GravPalette.glacialCyan,
                     label: "Output",
                     detail: nil,
                     value: metrics.outputTokens.formatted()
@@ -498,10 +472,7 @@ private struct SessionTelemetryInspectorPopover: View {
                 VStack(alignment: .leading, spacing: 6) {
                     if metrics.latestContextTokens > 0 {
                         let ctxPct = Int((metrics.contextFillRatio * 100.0).rounded())
-                        let barColor: Color = {
-                            if metrics.isContextNearCompaction { return GravPalette.fileEdit }
-                            return store.isTurboMode ? turboTheme.primaryColor : GravPalette.glacialCyan
-                        }()
+                        let barColor: Color = metrics.isContextNearCompaction ? GravPalette.fileEdit : GravPalette.glacialCyan
 
                         HStack(spacing: 6) {
                             Text("Context")
@@ -551,16 +522,9 @@ private struct SessionTelemetryInspectorPopover: View {
 
                         Spacer()
 
-                        HStack(spacing: 3.5) {
-                            if store.isTurboMode {
-                                Image(systemName: "bolt.fill")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(turboTheme.primaryColor)
-                            }
-                            Text(store.executionMode.rawValue)
-                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                                .foregroundStyle(store.isTurboMode ? turboTheme.primaryColor : Color.white.opacity(0.44))
-                        }
+                        Text(store.executionMode.rawValue)
+                            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.46))
                     }
                 }
             }

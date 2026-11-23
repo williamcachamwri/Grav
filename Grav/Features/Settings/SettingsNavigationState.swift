@@ -58,7 +58,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .general:
             return ["startup", "login", "appearance", "theme", "light", "dark", "system", "liquid glass", "onboarding", "welcome"]
         case .notchHUD:
-            return ["notch", "hud", "hover", "pin", "peek", "expand", "collapse", "dynamic island", "toggle", "turbo", "saiyan", "super saiyan", "aura", "color", "goku", "ultra instinct", "audio", "sound"]
+            return ["notch", "hud", "hover", "pin", "peek", "expand", "collapse", "dynamic island", "toggle"]
         case .telemetry:
             return ["antigravity", "brain", "transcript", "session", "conversation", "tokens", "model", "pause", "resume", "watcher"]
         case .menuBar:
@@ -189,34 +189,6 @@ public struct SettingsSearchEntry: Identifiable, Hashable, Sendable {
                 title: "Auto-Peek on Events",
                 detail: "Briefly surface the notch on new thinking bursts, file edits, and completed commands.",
                 keywords: ["notify", "alert", "toast", "activity", "thinking", "command"]
-            ),
-            SettingsSearchEntry(
-                .notchHUD,
-                section: "Turbo Mode (Super Saiyan)",
-                title: "Super Saiyan Aura",
-                detail: "Enable or disable the 120Hz Metal GPU Super Saiyan energy aura on the Notch in Turbo mode.",
-                keywords: ["turbo", "saiyan", "goku", "aura", "metal", "flame", "lightning", "toggle"]
-            ),
-            SettingsSearchEntry(
-                .notchHUD,
-                section: "Turbo Mode (Super Saiyan)",
-                title: "Transformation Color",
-                detail: "Choose between Super Saiyan, God, Blue, Rosé, Ultra Instinct, and Legendary color forms.",
-                keywords: ["turbo", "saiyan", "color", "theme", "gold", "god", "blue", "rose", "ultra instinct", "legendary", "broly"]
-            ),
-            SettingsSearchEntry(
-                .notchHUD,
-                section: "Turbo Mode (Super Saiyan)",
-                title: "Turbo Power-Up Audio",
-                detail: "Play seismic Super Saiyan power-up roars and SSJ2 lightning surges while chatting in Turbo mode.",
-                keywords: ["turbo", "sound", "audio", "roar", "lightning", "saiyan", "sfx"]
-            ),
-            SettingsSearchEntry(
-                .notchHUD,
-                section: "Turbo Mode (Super Saiyan)",
-                title: "Continuous Aura Resonance",
-                detail: "Sustain a subtle atmospheric Super Saiyan Ki hum while Antigravity is actively executing in Turbo mode.",
-                keywords: ["turbo", "hum", "loop", "ambient", "audio", "ki"]
             ),
             SettingsSearchEntry(
                 .notchHUD,

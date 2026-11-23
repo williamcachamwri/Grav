@@ -529,7 +529,7 @@ public struct LiveTelemetryTabView: View {
                     case .replying:
                         liveInlineStatusRow(
                             symbol: "text.bubble",
-                            symbolColor: store.isTurboMode ? GravPalette.turboEmber : GravPalette.emerald,
+                            symbolColor: GravPalette.emerald,
                             label: "Replying",
                             startedAt: store.currentPhaseStartedAt
                         )

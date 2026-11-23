@@ -32,22 +32,7 @@ public struct ExpandedNotchView: View {
     }
 
     public var body: some View {
-        let isTurbo = store.isTurboMode && !store.isPaused && preferences.turboAuraEnabled
-        let turboTheme = preferences.turboAuraTheme
-
         ZStack(alignment: .bottom) {
-            if isTurbo {
-                TurboKineticAuraCanvas(
-                    style: .expanded,
-                    isPowerSurging: store.state.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil,
-                    theme: turboTheme,
-                    cornerRadius: 22,
-                    reduceMotion: reduceMotion
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .transition(.opacity)
-            }
-
             VStack(spacing: 8) {
                 ExpandedNotchHeaderView(
                     store: store,
@@ -64,16 +49,13 @@ public struct ExpandedNotchView: View {
                     swarmCount: store.totalAgentsBadgeCount,
                     hasStreamingReply: store.latestResponse?.isStreaming == true && !store.isPaused,
                     hasRunningCommand: store.activeCommand != nil && !store.isPaused,
-                    hasActiveSwarm: (store.activeSwarmSnapshot != nil || store.runningSubagentCount > 0) && !store.isPaused,
-                    isTurboMode: isTurbo,
-                    turboTheme: turboTheme
+                    hasActiveSwarm: (store.activeSwarmSnapshot != nil || store.runningSubagentCount > 0) && !store.isPaused
                 )
 
                 tabViewport
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             }
-            .padding(EdgeInsets(top: 8, leading: 30, bottom: 16, trailing: 30))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             if let message = statusBannerMessage {

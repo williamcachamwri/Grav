@@ -12,8 +12,6 @@ public struct SegmentedModeRail: View {
     public var hasStreamingReply: Bool
     public var hasRunningCommand: Bool
     public var hasActiveSwarm: Bool
-    public var isTurboMode: Bool
-    public var turboTheme: SuperSaiyanAuraTheme
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var railNamespace
@@ -28,9 +26,7 @@ public struct SegmentedModeRail: View {
         swarmCount: Int = 0,
         hasStreamingReply: Bool = false,
         hasRunningCommand: Bool = false,
-        hasActiveSwarm: Bool = false,
-        isTurboMode: Bool = false,
-        turboTheme: SuperSaiyanAuraTheme = .superSaiyan
+        hasActiveSwarm: Bool = false
     ) {
         self._selection = selection
         self.liveCount = liveCount
@@ -41,8 +37,6 @@ public struct SegmentedModeRail: View {
         self.hasStreamingReply = hasStreamingReply
         self.hasRunningCommand = hasRunningCommand
         self.hasActiveSwarm = hasActiveSwarm
-        self.isTurboMode = isTurboMode
-        self.turboTheme = turboTheme
     }
 
     public var body: some View {
@@ -78,11 +72,11 @@ public struct SegmentedModeRail: View {
                     .lineLimit(1)
 
                 if tab == .terminal && hasRunningCommand {
-                    NotchSemanticDot(color: isTurboMode ? turboTheme.primaryColor : GravPalette.glacialCyan, size: 4.5, isPulsing: true)
+                    NotchSemanticDot(color: GravPalette.glacialCyan, size: 4.5, isPulsing: true)
                 } else if tab == .reply && hasStreamingReply {
-                    NotchSemanticDot(color: isTurboMode ? turboTheme.coreColor : GravPalette.thinking, size: 4.5, isPulsing: true)
+                    NotchSemanticDot(color: GravPalette.thinking, size: 4.5, isPulsing: true)
                 } else if tab == .swarm && hasActiveSwarm {
-                    NotchSemanticDot(color: isTurboMode ? turboTheme.lightningColor : GravPalette.prismViolet, size: 4.5, isPulsing: true)
+                    NotchSemanticDot(color: GravPalette.prismViolet, size: 4.5, isPulsing: true)
                 } else if count > 0 {
                     Text(formatBadgeCount(count))
                         .font(.system(size: 9.5, weight: .medium, design: .monospaced))
@@ -102,47 +96,21 @@ public struct SegmentedModeRail: View {
 
                     if isSelected {
                         RoundedRectangle(cornerRadius: 6.5, style: .continuous)
-                            .fill(Color.white.opacity(isTurboMode ? 0.095 : 0.105))
+                            .fill(Color.white.opacity(0.105))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6.5, style: .continuous)
                                     .strokeBorder(
                                         LinearGradient(
-                                            colors: isTurboMode
-                                                ? [
-                                                    turboTheme.innerColor.opacity(0.42),
-                                                    Color.white.opacity(0.04),
-                                                ]
-                                                : [
-                                                    Color.white.opacity(0.18),
-                                                    Color.white.opacity(0.03),
-                                                ],
+                                            colors: [
+                                                Color.white.opacity(0.18),
+                                                Color.white.opacity(0.03),
+                                            ],
                                             startPoint: .top,
                                             endPoint: .bottom
                                         ),
                                         lineWidth: 0.5
                                     )
                             )
-                            .overlay(alignment: .bottom) {
-                                if isTurboMode {
-                                    Capsule(style: .continuous)
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [
-                                                    Color.clear,
-                                                    turboTheme.primaryColor,
-                                                    turboTheme.coreColor,
-                                                    turboTheme.primaryColor,
-                                                    Color.clear,
-                                                ],
-                                                startPoint: .leading,
-                                                endPoint: .trailing
-                                            )
-                                        )
-                                        .frame(height: 1.4)
-                                        .padding(.horizontal, 12)
-                                        .shadow(color: turboTheme.primaryColor.opacity(0.78), radius: 3.5, y: 0)
-                                }
-                            }
                             .matchedGeometryEffect(id: "grav-notch-mode-rail-pill", in: railNamespace)
                     }
                 }

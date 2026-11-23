@@ -637,34 +637,6 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertTrue(finalOut.peekEvents.contains(.turnCompleted))
     }
 
-    @MainActor
-    func testSuperSaiyanTurboPreferencesPersistenceAndForms() {
-        let suiteName = "com.grav.tests.turbo.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            XCTFail("Failed to allocate isolated UserDefaults suite")
-            return
-        }
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let store = PreferencesStore(defaults: defaults)
-        XCTAssertTrue(store.turboAuraEnabled)
-        XCTAssertTrue(store.turboAudioEnabled)
-        XCTAssertTrue(store.turboAuraLoopEnabled)
-        XCTAssertEqual(store.turboAuraTheme, .superSaiyan)
-        XCTAssertEqual(SuperSaiyanAuraTheme.allCases.count, 6)
-
-        store.turboAuraEnabled = false
-        store.turboAudioEnabled = false
-        store.turboAuraLoopEnabled = false
-        store.turboAuraTheme = .ultraInstinct
-
-        let reloaded = PreferencesStore(defaults: defaults)
-        XCTAssertFalse(reloaded.turboAuraEnabled)
-        XCTAssertFalse(reloaded.turboAudioEnabled)
-        XCTAssertFalse(reloaded.turboAuraLoopEnabled)
-        XCTAssertEqual(reloaded.turboAuraTheme, .ultraInstinct)
-    }
-
     func testUpdateFocusStepsAndAllChatToolStatesClassification() {
         var classifier = EventClassifier()
 
@@ -805,17 +777,5 @@ final class TelemetryStateMachineTests: XCTestCase {
         let outArt = classifier.process(step: artifactWrite)
         XCTAssertEqual(outArt.toolActivities.first?.kind, .artifact)
         XCTAssertEqual(outArt.toolActivities.first?.title, "Artifact · plan.md")
-    }
-
-    func testSuperSaiyanAudioSourceNodeRendersSafelyOffMainThread() {
-        let expectation = expectation(description: "Offline AVAudioSourceNode render off main thread")
-        var renderedPeak: Float = 0
-        DispatchQueue.global(qos: .userInteractive).async {
-            XCTAssertFalse(Thread.isMainThread)
-            renderedPeak = SuperSaiyanAudioEngine.renderTestFramesOffMainThread(theme: .superSaiyan)
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 5.0)
-        XCTAssertGreaterThan(renderedPeak, 0.001, "Super Saiyan real-time DSP should render non-zero audio frames safely off the main thread")
     }
 }
