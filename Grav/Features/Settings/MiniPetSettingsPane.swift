@@ -749,14 +749,6 @@ struct MiniPetSettingsPane: View {
                 rowDivider
 
                 tuningToggleRow(
-                    title: "Idle Roaming & Patrol",
-                    subtitle: "Let your pet glance around and take short walks while Antigravity is idle.",
-                    isOn: $preferences.miniPetRoaming
-                )
-
-                rowDivider
-
-                tuningToggleRow(
                     title: "Click to Interact",
                     subtitle: "Clicking the pet triggers a spring bounce with wave and jump animations.",
                     isOn: $preferences.miniPetInteractiveClick

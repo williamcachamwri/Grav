@@ -865,7 +865,6 @@ final class TelemetryStateMachineTests: XCTestCase {
         store1.miniPetPlacement = .bottomRight
         store1.miniPetSize = 104.0
         store1.miniPetSpeed = 1.4
-        store1.miniPetRoaming = false
         store1.miniPetShowBubble = false
         store1.miniPetAlwaysOnTop = false
         store1.hoverOpenDelay = 0.25
@@ -882,5 +881,18 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(store2.hoverOpenDelay, 0.25, accuracy: 0.001)
         XCTAssertFalse(store2.showCollapsedTokens)
         XCTAssertFalse(store2.autoExpandOnNeedsInput)
+
+        // Verify Mini Pet stays deterministically `.idle` when Antigravity is idle (never random actions)
+        let telemetry = AntigravityTelemetryStore()
+        for offset in stride(from: 0.0, through: 60.0, by: 3.5) {
+            let mapped = CodexPetTelemetryMapper.animationState(
+                for: telemetry,
+                reactionOverride: nil,
+                roamingEnabled: true,
+                spriteVersion: 2,
+                now: Date(timeIntervalSinceReferenceDate: offset)
+            )
+            XCTAssertEqual(mapped, .idle)
+        }
     }
 }

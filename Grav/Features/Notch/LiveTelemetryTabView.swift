@@ -263,6 +263,7 @@ public struct LiveTelemetryTabView: View {
             && loadedFullThoughts[snapshot.stepIndex] == nil
         let isLoadingFull = loadingStepIndex == snapshot.stepIndex
         let modelLabel = snapshot.model ?? store.activeModel
+        let isLiveThinking = snapshot.isActive && !store.isPaused && store.state.isActive
 
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
@@ -271,12 +272,12 @@ public struct LiveTelemetryTabView: View {
                 } label: {
                     HStack(spacing: 6) {
                         NotchSemanticDot(
-                            color: snapshot.isActive ? GravPalette.thinking : Color.white.opacity(0.32),
+                            color: isLiveThinking ? GravPalette.thinking : Color.white.opacity(0.32),
                             size: 5,
-                            isPulsing: snapshot.isActive && !store.isPaused
+                            isPulsing: isLiveThinking
                         )
 
-                        if snapshot.isActive && !store.isPaused {
+                        if isLiveThinking {
                             NotchThinkingShimmerLabel(
                                 startDate: snapshot.startedAt,
                                 compact: false,
@@ -303,9 +304,9 @@ public struct LiveTelemetryTabView: View {
                         ActiveElapsedTimerText(
                             startDate: snapshot.startedAt,
                             endDate: snapshot.completedAt,
-                            isActive: snapshot.isActive && !store.isPaused,
+                            isActive: isLiveThinking,
                             font: .system(size: 10.5, weight: .medium, design: .monospaced),
-                            color: snapshot.isActive ? GravPalette.thinking.opacity(0.92) : Color.white.opacity(0.42)
+                            color: isLiveThinking ? GravPalette.thinking.opacity(0.92) : Color.white.opacity(0.42)
                         )
                     }
                     .contentShape(Rectangle())

@@ -1259,6 +1259,11 @@ public final class AntigravityTelemetryStore {
         isSpeculativeWALWorking = false
         state = output.state
 
+        if output.state == .idle {
+            finalizeActiveThinking()
+            finalizeActiveCompactions()
+        }
+
         if output.state == .idle && previousState != .idle && !suppressPeeks {
             lastFinalIdleAt = Date()
         } else if output.state != previousState {
@@ -1555,17 +1560,23 @@ public final class AntigravityTelemetryStore {
         classifier.markIdle()
         state = classifier.state
 
-        if state == .idle, var thinking = currentThinking, thinking.isActive {
-            thinking.isActive = false
-            thinking.completedAt = thinking.completedAt ?? Date()
-            currentThinking = thinking
-            if let idx = thinkingHistory.firstIndex(where: { $0.stepIndex == thinking.stepIndex }) {
-                thinkingHistory[idx] = thinking
-                upsertActivity(.thinking(thinking))
-            }
-        }
         if state == .idle {
+            finalizeActiveThinking()
             finalizeActiveCompactions()
+        }
+    }
+
+    private func finalizeActiveThinking() {
+        let now = Date()
+        if var thinking = currentThinking, thinking.isActive {
+            thinking.isActive = false
+            thinking.completedAt = thinking.completedAt ?? now
+            currentThinking = thinking
+        }
+        for idx in thinkingHistory.indices where thinkingHistory[idx].isActive {
+            thinkingHistory[idx].isActive = false
+            thinkingHistory[idx].completedAt = thinkingHistory[idx].completedAt ?? now
+            upsertActivity(.thinking(thinkingHistory[idx]))
         }
     }
 

@@ -71,20 +71,9 @@ public struct CodexPetSpriteView: View {
     }
 }
 
-/// Maps live Antigravity telemetry + user interaction reactions + idle roaming cadence
-/// to the exact `CodexPetAnimationState` row on the equipped pet's sprite sheet.
+/// Maps live Antigravity telemetry + explicit user click reactions strictly and deterministically
+/// to the exact `CodexPetAnimationState` row on the equipped pet's sprite sheet (zero random actions).
 public enum CodexPetTelemetryMapper {
-    private static let idlePatrolCycle: [CodexPetAnimationState] = [
-        .idle,
-        .idle,
-        .lookRightSide,
-        .idle,
-        .lookLeftSide,
-        .idle,
-        .runningRight,
-        .runningLeft,
-    ]
-
     @MainActor
     public static func latestFailedTool(in store: AntigravityTelemetryStore) -> AgentToolActivityEvent? {
         for item in store.recentActivity.prefix(8) {
@@ -103,6 +92,7 @@ public enum CodexPetTelemetryMapper {
         spriteVersion: Int,
         now: Date = Date()
     ) -> CodexPetAnimationState {
+        _ = roamingEnabled
         if let reactionOverride {
             return normalize(reactionOverride, spriteVersion: spriteVersion)
         }
@@ -141,10 +131,6 @@ public enum CodexPetTelemetryMapper {
         case .idle:
             if store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil {
                 mapped = .running
-            } else if roamingEnabled {
-                let slot = Int(floor(now.timeIntervalSinceReferenceDate / 4.5))
-                let idx = ((slot % idlePatrolCycle.count) + idlePatrolCycle.count) % idlePatrolCycle.count
-                mapped = idlePatrolCycle[idx]
             } else {
                 mapped = .idle
             }

@@ -135,57 +135,56 @@ private struct GravMenuBarPreviewCard: View {
             // Authentic Apple Pro Black macOS dark desktop wallpaper (same engine as Onboarding!)
             GravMockWallpaper(app: .settings).equatable()
 
-            VStack(alignment: .trailing, spacing: 5) {
-                // 1:1 Translucent macOS Menu Bar Strip
+            VStack(alignment: .trailing, spacing: 6) {
+                // 1:1 Authentic macOS Tahoe Liquid Glass Menu Bar Strip
                 HStack(spacing: 11) {
                     Spacer(minLength: 0)
 
                     if preferences.showMenuBarIcon {
                         GravOrbitalMark(size: 13.5, tint: .white)
-                            .frame(width: 28, height: 19)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.white.opacity(0.20))
+                            .frame(width: 30, height: 20)
+                            .liquidGlassSurface(
+                                shape: Capsule(style: .continuous),
+                                substrate: 0.16,
+                                tint: 0.22,
+                                highlight: .custom(top: 0.36, bottom: 0.10),
+                                layer: .control,
+                                isInteractive: true,
+                                nativeGlassTint: Color.white.opacity(0.16),
+                                nativeHighlight: .custom(top: 0.34, bottom: 0.10),
+                                nativeVariant: .clear
                             )
                             .transition(.opacity.combined(with: .scale(scale: 0.9)))
                     }
 
                     Image(systemName: "switch.2")
                         .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .foregroundStyle(.white.opacity(0.90))
 
                     Image(systemName: "wifi")
                         .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .foregroundStyle(.white.opacity(0.90))
 
                     Image(systemName: "battery.100percent")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .foregroundStyle(.white.opacity(0.90))
 
                     Text(formattedClock)
                         .font(.system(size: 11.5, weight: .medium))
                         .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.94))
+                        .foregroundStyle(.white.opacity(0.95))
                 }
                 .padding(.horizontal, 12)
-                .frame(height: 26)
-                .background(
-                    ZStack {
-                        Color.black.opacity(0.42)
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.06), Color.clear],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    }
-                )
+                .frame(height: 27)
+                .background(.ultraThinMaterial)
+                .background(Color.black.opacity(0.18))
                 .overlay(alignment: .bottom) {
                     Rectangle()
-                        .fill(Color.white.opacity(0.10))
+                        .fill(Color.white.opacity(0.12))
                         .frame(height: 0.5)
                 }
 
-                // 1:1 Authentic macOS Frosted-Glass Status Menu Dropdown
+                // 1:1 Authentic macOS Tahoe Liquid Glass Status Menu Dropdown
                 if preferences.showMenuBarIcon {
                     VStack(alignment: .leading, spacing: 1) {
                         // Live Status Header (matches real MenuBarController header 1:1!)
@@ -197,12 +196,12 @@ private struct GravMenuBarPreviewCard: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(isPaused ? "Telemetry Paused" : (store.state.isActive ? store.state.label : "Antigravity Idle"))
                                     .font(.system(size: 11.5, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.95))
+                                    .foregroundStyle(.white.opacity(0.96))
                                     .lineLimit(1)
 
                                 Text(cleanSessionSubtitle)
                                     .font(.system(size: 9.8))
-                                    .foregroundStyle(.white.opacity(0.54))
+                                    .foregroundStyle(.white.opacity(0.58))
                                     .lineLimit(1)
                             }
 
@@ -255,28 +254,22 @@ private struct GravMenuBarPreviewCard: View {
                         previewRow(id: "prefs", title: "Preferences…", checkmark: false, hasSubmenu: false, shortcut: "⌘,")
                         previewRow(id: "quit", title: "Quit Grav", checkmark: false, hasSubmenu: false, shortcut: "⌘Q")
                     }
-                    .padding(5)
-                    .frame(width: 236)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color(red: 0.11, green: 0.115, blue: 0.125).opacity(0.84))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [Color.white.opacity(0.08), Color.clear, Color.black.opacity(0.12)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                            )
+                    .padding(6)
+                    .frame(width: 242)
+                    .liquidGlassSurface(
+                        shape: RoundedRectangle(cornerRadius: 15, style: .continuous),
+                        substrate: 0.26,
+                        tint: 0.14,
+                        highlight: .custom(top: 0.34, bottom: 0.10),
+                        layer: .control,
+                        withRimLighting: true,
+                        isInteractive: false,
+                        nativeGlassTint: Color(white: 0.08).opacity(0.32),
+                        nativeHighlight: .custom(top: 0.30, bottom: 0.08),
+                        nativeVariant: .clear
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
-                    )
-                    .shadow(color: .black.opacity(0.55), radius: 22, y: 10)
-                    .padding(.trailing, 86)
+                    .shadow(color: .black.opacity(0.42), radius: 24, y: 12)
+                    .padding(.trailing, 84)
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 } else {
                     HStack {
@@ -292,7 +285,8 @@ private struct GravMenuBarPreviewCard: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: 318)
+        .environment(\.colorScheme, .dark)
+        .frame(height: 326)
         .clipShape(Radius.rect(Radius.card))
         .overlay(
             Radius.rect(Radius.card)

@@ -259,7 +259,8 @@ public final class PreferencesStore {
         let storedPetSpeed = defaults.object(forKey: GravPreferenceKeys.miniPetSpeed) as? Double ?? 1.0
         self.miniPetSpeed = min(2.0, max(0.5, storedPetSpeed))
         self.miniPetInteractiveClick = defaults.object(forKey: GravPreferenceKeys.miniPetInteractiveClick) as? Bool ?? true
-        self.miniPetRoaming = defaults.object(forKey: GravPreferenceKeys.miniPetRoaming) as? Bool ?? true
+        // Default false so the pet strictly mirrors exact Antigravity telemetry state without random idle actions.
+        self.miniPetRoaming = defaults.object(forKey: GravPreferenceKeys.miniPetRoaming) as? Bool ?? false
         self.miniPetShowBubble = defaults.object(forKey: GravPreferenceKeys.miniPetShowBubble) as? Bool ?? true
         self.miniPetAlwaysOnTop = defaults.object(forKey: GravPreferenceKeys.miniPetAlwaysOnTop) as? Bool ?? true
         self.miniPetOriginX = defaults.object(forKey: GravPreferenceKeys.miniPetOriginX) as? Double
