@@ -1269,23 +1269,38 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(dispatchResult, .openedNewChatDeepLink(openedURLs[0]))
         XCTAssertTrue(reloaded.queuedPrompts.isEmpty)
 
-        // Verify .activeSession dispatch activates Antigravity without calling antigravity://open (which wipes cascadeId)
+        // Verify .activeSession without Accessibility preserves draft & prompts user cleanly
         reloaded.draftPrompt = "Continue fixing this file"
         var activatedCount = 0
         var openedDuringActive = 0
-        let activeResult = reloaded.sendCurrentBundleToAntigravity(
+        let untrustedResult = reloaded.sendCurrentBundleToAntigravity(
             target: .activeSession,
             activateApp: { activatedCount += 1 },
             openURL: { _ in
                 openedDuringActive += 1
                 return true
-            }
+            },
+            isAccessibilityTrustedOverride: false,
+            skipLiveKeystrokeDelivery: true
         )
+        XCTAssertEqual(untrustedResult, .copiedToActiveSessionNeedsAccessibility)
+        XCTAssertEqual(reloaded.draftPrompt, "Continue fixing this file")
+        XCTAssertEqual(openedDuringActive, 0)
+
+        // Verify .activeSession WITH Accessibility activates Antigravity without calling antigravity://open
+        let trustedResult = reloaded.sendCurrentBundleToAntigravity(
+            target: .activeSession,
+            activateApp: { activatedCount += 1 },
+            openURL: { _ in
+                openedDuringActive += 1
+                return true
+            },
+            isAccessibilityTrustedOverride: true,
+            skipLiveKeystrokeDelivery: true
+        )
+        XCTAssertEqual(trustedResult, .sentToActiveSession)
         XCTAssertEqual(activatedCount, 1)
         XCTAssertEqual(openedDuringActive, 0)
-        XCTAssertTrue(
-            activeResult == .sentToActiveSession || activeResult == .copiedToActiveSessionNeedsAccessibility
-        )
         XCTAssertTrue(reloaded.draftPrompt.isEmpty)
     }
 }

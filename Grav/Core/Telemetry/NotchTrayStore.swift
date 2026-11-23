@@ -401,22 +401,31 @@ public final class NotchTrayStore {
 
     /// Prompts macOS System Settings → Privacy & Security → Accessibility so Grav can auto-send
     /// prompts & image attachments straight into Antigravity's active conversation.
-    public func requestAccessibilityPermission() {
+    public func requestAccessibilityPermission(openSystemSettings: Bool = true) {
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
+        if openSystemSettings,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// Dispatches the current draft + staged images/files to Antigravity according to `sendTarget`:
     /// - `.activeSession`: keeps the currently open conversation intact (does NOT open a new chat!).
-    ///   With Accessibility permission: activates Antigravity, focuses active chat input (`⌘L`),
+    ///   With Accessibility permission: hands off activation to Antigravity, waits until Antigravity
+    ///   is truly frontmost and physical modifier keys (`⌘`) are released, focuses active chat input (`⌘L`),
     ///   pastes staged images as real native attachments (`⌘V`), pastes text (`⌘V`), and submits (`↵`).
-    ///   Without Accessibility permission: copies to clipboard and activates Antigravity on the active session.
+    ///   Without Accessibility permission: preserves the draft, backs up to clipboard, and triggers
+    ///   the standard macOS Accessibility prompt so the user can approve Grav in one step.
     /// - `.newChat`: opens a fresh conversation via Antigravity's sanctioned `antigravity://open?prompt=...` scheme.
     @discardableResult
     public func sendCurrentBundleToAntigravity(
         target: AntigravitySendTarget? = nil,
         activateApp: () -> Void,
-        openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+        openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) },
+        isAccessibilityTrustedOverride: Bool? = nil,
+        skipLiveKeystrokeDelivery: Bool = false
     ) -> AntigravityPromptDispatchResult? {
         let effectiveTarget = target ?? sendTarget
         let trimmed = draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -426,6 +435,14 @@ public final class NotchTrayStore {
         let imageURLs = items.filter(\.isImage).map(\.url)
         let nonImagePaths = items.filter { !$0.isImage }.map(\.url.path)
         let allPaths = items.map(\.url.path)
+
+        let trusted = isAccessibilityTrustedOverride ?? AXIsProcessTrusted()
+        if effectiveTarget == .activeSession && !trusted {
+            // Preserve draft & staged items so user never loses their prompt while granting Accessibility!
+            let fullFormatted = Self.formatPromptBundle(text: trimmed, filePaths: allPaths)
+            writeFallbackClipboard(text: trimmed, urls: items.map(\.url), formatted: fullFormatted)
+            return .copiedToActiveSessionNeedsAccessibility
+        }
 
         draftPrompt = ""
         clearStagedItems()
@@ -437,7 +454,9 @@ public final class NotchTrayStore {
             allPaths: allPaths,
             target: effectiveTarget,
             activateApp: activateApp,
-            openURL: openURL
+            openURL: openURL,
+            isAccessibilityTrusted: trusted,
+            skipLiveKeystrokeDelivery: skipLiveKeystrokeDelivery
         )
     }
 
@@ -447,13 +466,25 @@ public final class NotchTrayStore {
         id: String,
         target: AntigravitySendTarget? = nil,
         activateApp: () -> Void = {},
-        openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+        openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) },
+        isAccessibilityTrustedOverride: Bool? = nil,
+        skipLiveKeystrokeDelivery: Bool = false
     ) -> AntigravityPromptDispatchResult? {
         guard let idx = queuedPrompts.firstIndex(where: { $0.id == id }) else { return nil }
-        let item = queuedPrompts.remove(at: idx)
-        persistQueue()
+        let item = queuedPrompts[idx]
 
         let effectiveTarget = target ?? sendTarget
+        let trusted = isAccessibilityTrustedOverride ?? AXIsProcessTrusted()
+        if effectiveTarget == .activeSession && !trusted {
+            let fullFormatted = Self.formatPromptBundle(text: item.text, filePaths: item.attachedPaths)
+            let urls = item.attachedPaths.map { URL(fileURLWithPath: $0) }
+            writeFallbackClipboard(text: item.text, urls: urls, formatted: fullFormatted)
+            return .copiedToActiveSessionNeedsAccessibility
+        }
+
+        queuedPrompts.remove(at: idx)
+        persistQueue()
+
         let stagedFromQueue = item.attachedPaths.map { StagedDropItem(url: URL(fileURLWithPath: $0)) }
         let imageURLs = stagedFromQueue.filter(\.isImage).map(\.url)
         let nonImagePaths = stagedFromQueue.filter { !$0.isImage }.map(\.url.path)
@@ -465,7 +496,9 @@ public final class NotchTrayStore {
             allPaths: item.attachedPaths,
             target: effectiveTarget,
             activateApp: activateApp,
-            openURL: openURL
+            openURL: openURL,
+            isAccessibilityTrusted: trusted,
+            skipLiveKeystrokeDelivery: skipLiveKeystrokeDelivery
         )
     }
 
@@ -578,7 +611,9 @@ public final class NotchTrayStore {
         allPaths: [String],
         target: AntigravitySendTarget,
         activateApp: () -> Void,
-        openURL: (URL) -> Bool
+        openURL: (URL) -> Bool,
+        isAccessibilityTrusted: Bool,
+        skipLiveKeystrokeDelivery: Bool
     ) -> AntigravityPromptDispatchResult {
         let fullFormatted = Self.formatPromptBundle(text: text, filePaths: allPaths)
         let urls = allPaths.map { URL(fileURLWithPath: $0) }
@@ -596,14 +631,16 @@ public final class NotchTrayStore {
 
         case .activeSession:
             activateApp()
-            guard AXIsProcessTrusted() else {
+            guard isAccessibilityTrusted else {
                 return .copiedToActiveSessionNeedsAccessibility
             }
-            let textWithNonImageRefs = Self.formatPromptBundle(text: text, filePaths: nonImagePaths)
-            Self.deliverToFocusedAntigravitySession(
-                text: textWithNonImageRefs,
-                imageURLs: imageURLs
-            )
+            if !skipLiveKeystrokeDelivery {
+                let textWithNonImageRefs = Self.formatPromptBundle(text: text, filePaths: nonImagePaths)
+                Self.deliverToFocusedAntigravitySession(
+                    text: textWithNonImageRefs,
+                    imageURLs: imageURLs
+                )
+            }
             return .sentToActiveSession
         }
     }
@@ -628,42 +665,74 @@ public final class NotchTrayStore {
     }
 
     /// Standard macOS Accessibility-authorized delivery into Antigravity's currently open session:
-    /// 1. `⌘L` -> Antigravity's `focusInput` command (verified in `main.js` `@5815362` for darwin)
-    /// 2. Pastes each staged image via `NSPasteboard` PNG bytes + `⌘V` so Antigravity attaches real images
-    /// 3. Pastes the prompt text + any non-image `@path` references via `⌘V`
-    /// 4. Submits via `Return` (`submitPrompt`, verified in `main.js` `@5465280`)
+    /// 1. Waits until `com.google.antigravity` is truly the frontmost application (never blind sleep!).
+    /// 2. Waits until physical `⌘` / modifier keys (from `⌘↵`) are released so modifiers never bleed.
+    /// 3. Sends isolated `.privateState` `⌘L` -> Antigravity's `focusInput` (verified in `main.js` `@5815362`).
+    /// 4. Pastes each staged image via `NSPasteboard` PNG bytes + `⌘V` (`lHb` `onMediaPaste` at `@4818699`),
+    ///    giving `360ms` for async Chromium FileReader media attachment.
+    /// 5. Pastes the prompt text + non-image `@path` references via `⌘V`.
+    /// 6. Submits via clean `Return` (`submitPrompt`, verified in `main.js` `@5465280`).
     private static func deliverToFocusedAntigravitySession(text: String, imageURLs: [URL]) {
         Task { @MainActor in
-            // Allow Antigravity window activation to settle before sending chords
+            // 1. Wait until Antigravity is truly frontmost (up to 1.2s)
+            let activationDeadline = Date().addingTimeInterval(1.2)
+            while Date() < activationDeadline {
+                if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == AntigravityAppDetector.bundleIdentifier {
+                    break
+                }
+                if let app = NSRunningApplication.runningApplications(
+                    withBundleIdentifier: AntigravityAppDetector.bundleIdentifier
+                ).first {
+                    app.unhide()
+                    app.activate(options: [.activateAllWindows])
+                }
+                try? await Task.sleep(for: .milliseconds(30))
+            }
+
+            // 2. Wait for physical modifier keys (e.g. Command held during ⌘↵) to be released (up to 500ms)
+            let modifierDeadline = Date().addingTimeInterval(0.5)
+            let watchedModifiers: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
+            while Date() < modifierDeadline {
+                let currentFlags = CGEventSource.flagsState(.hidSystemState)
+                if currentFlags.intersection(watchedModifiers).isEmpty {
+                    break
+                }
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+
+            // Let Electron BrowserWindow settle `document.hasFocus()`
+            try? await Task.sleep(for: .milliseconds(140))
+
+            // 3. Focus active session's Lexical chat editor via Antigravity's `focusInput` (`⌘L`)
+            await postKeyChord(keyCode: CGKeyCode(kVK_ANSI_L), flags: .maskCommand)
             try? await Task.sleep(for: .milliseconds(160))
 
-            // 1. Focus active session's Lexical chat editor via Antigravity's `focusInput` (`⌘L`)
-            postKeyChord(keyCode: CGKeyCode(kVK_ANSI_L), flags: .maskCommand)
-            try? await Task.sleep(for: .milliseconds(110))
-
-            // 2. Attach each staged image directly via native paste (`⌘V`)
+            // 4. Attach each staged image directly via native paste (`⌘V`)
             for imageURL in imageURLs {
                 if let pngData = loadPNGData(from: imageURL) {
                     let pb = NSPasteboard.general
                     pb.clearContents()
                     pb.setData(pngData, forType: .png)
-                    postKeyChord(keyCode: CGKeyCode(kVK_ANSI_V), flags: .maskCommand)
-                    try? await Task.sleep(for: .milliseconds(160))
+                    try? await Task.sleep(for: .milliseconds(50))
+                    await postKeyChord(keyCode: CGKeyCode(kVK_ANSI_V), flags: .maskCommand)
+                    // Give Antigravity's Lexical `onMediaPaste` FileReader time to mount the image attachment
+                    try? await Task.sleep(for: .milliseconds(360))
                 }
             }
 
-            // 3. Paste prompt text (if any)
+            // 5. Paste prompt text (if any)
             let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedText.isEmpty {
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.setString(trimmedText, forType: .string)
-                postKeyChord(keyCode: CGKeyCode(kVK_ANSI_V), flags: .maskCommand)
-                try? await Task.sleep(for: .milliseconds(110))
+                try? await Task.sleep(for: .milliseconds(50))
+                await postKeyChord(keyCode: CGKeyCode(kVK_ANSI_V), flags: .maskCommand)
+                try? await Task.sleep(for: .milliseconds(200))
             }
 
-            // 4. Submit straight into the active Antigravity session (`Return`)
-            postKeyChord(keyCode: CGKeyCode(kVK_Return), flags: [])
+            // 6. Submit straight into the active Antigravity session (`Return`)
+            await postKeyChord(keyCode: CGKeyCode(kVK_Return), flags: [])
         }
     }
 
@@ -682,15 +751,17 @@ public final class NotchTrayStore {
         return rep.representation(using: .png, properties: [:])
     }
 
-    private static func postKeyChord(keyCode: CGKeyCode, flags: CGEventFlags) {
-        guard let source = CGEventSource(stateID: .hidSystemState),
+    private static func postKeyChord(keyCode: CGKeyCode, flags: CGEventFlags) async {
+        // `.privateState` isolates synthetic flags from physical keyboard modifier state (zero ⌘ bleed!)
+        guard let source = CGEventSource(stateID: .privateState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
         else { return }
         down.flags = flags
         up.flags = flags
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        down.post(tap: .cgSessionEventTap)
+        try? await Task.sleep(for: .milliseconds(24))
+        up.post(tap: .cgSessionEventTap)
     }
 
     private func loadThumbnailAsync(for item: StagedDropItem) {

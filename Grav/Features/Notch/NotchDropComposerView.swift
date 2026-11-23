@@ -167,6 +167,7 @@ public struct NotchDropComposerView: View {
     @State private var sendLaunchImpulse: Bool = false
     @State private var captureShutterFlash: Bool = false
     @State private var pasteKeyMonitor: Any?
+    @State private var accessibilityPollTask: Task<Void, Never>?
 
     public init(
         store: AntigravityTelemetryStore,
@@ -248,12 +249,15 @@ public struct NotchDropComposerView: View {
         }
         .onAppear {
             isAccessibilityTrusted = trayStore.isAccessibilityTrustedForAutoSend
+            startAccessibilityPollingIfNeeded()
             installImagePasteMonitor()
             if !trayStore.isGlobalDragNearNotch {
                 activateNotchPanelForTyping()
             }
         }
         .onDisappear {
+            accessibilityPollTask?.cancel()
+            accessibilityPollTask = nil
             removeImagePasteMonitor()
             isInputFocused = false
             trayStore.isDropTargeted = false
@@ -951,11 +955,32 @@ public struct NotchDropComposerView: View {
             onShowToast("Sent to \(activeSessionShortTitle)")
         case .copiedToActiveSessionNeedsAccessibility:
             isAccessibilityTrusted = false
-            onShowToast("Focused active chat · Press ⌘V (or tap Auto-Send)")
+            trayStore.requestAccessibilityPermission(openSystemSettings: true)
+            startAccessibilityPollingIfNeeded()
+            onShowToast("Bật Grav trong Accessibility để gửi thẳng vào chat")
         case .openedNewChatDeepLink:
             onShowToast("Opened in new Antigravity chat")
         case .copiedToClipboardFallback:
             onShowToast("Copied · Press ⌘V in Antigravity")
+        }
+    }
+
+    private func startAccessibilityPollingIfNeeded() {
+        accessibilityPollTask?.cancel()
+        guard !trayStore.isAccessibilityTrustedForAutoSend else {
+            isAccessibilityTrusted = true
+            return
+        }
+        accessibilityPollTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { break }
+                if trayStore.isAccessibilityTrustedForAutoSend {
+                    isAccessibilityTrusted = true
+                    onShowToast("Active-chat auto-send ready")
+                    break
+                }
+            }
         }
     }
 

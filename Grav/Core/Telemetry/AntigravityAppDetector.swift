@@ -134,10 +134,27 @@ public final class AntigravityAppDetector {
     }
 
     /// Focuses the running Antigravity window, or launches `/Applications/Antigravity.app` if installed.
+    /// Uses macOS 14+ cooperative activation handoff (`NSApp.yieldActivation(to:)`) + LaunchServices fallback
+    /// so focus reliably transfers from Grav's floating Notch panel to Antigravity's main window.
     public func activateAntigravityApp() {
+        for window in NSApp.windows where window is NSPanel && window.isKeyWindow {
+            window.resignKey()
+        }
+
         if let runningApp = NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleIdentifier).first {
+            if NSApp.isActive {
+                NSApp.yieldActivation(to: runningApp)
+            }
             runningApp.unhide()
-            runningApp.activate(options: [.activateAllWindows])
+            if runningApp.activate(options: [.activateAllWindows]) {
+                return
+            }
+            // Fallback via NSWorkspace activates reliably even when called from an LSUIElement accessory app
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            if let appURL = runningApp.bundleURL ?? (isAppInstalled ? resolvedAppURL : nil) {
+                NSWorkspace.shared.openApplication(at: appURL, configuration: configuration)
+            }
             return
         }
         guard isAppInstalled else { return }
