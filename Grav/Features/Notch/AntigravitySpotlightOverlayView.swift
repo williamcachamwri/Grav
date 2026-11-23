@@ -123,20 +123,33 @@ public struct AntigravityProfileDrawerView: View {
                         .foregroundStyle(Color.white.opacity(0.95))
                         .lineLimit(1)
 
-                    Text(snapshot.planName)
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.72))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1.5)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.white.opacity(0.085))
-                                .overlay(
-                                    Capsule(style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
-                                )
-                        )
-                        .fixedSize(horizontal: true, vertical: false)
+                    if let planName = snapshot.planName, !planName.isEmpty {
+                        Text(planName)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.72))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1.5)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.085))
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+                                    )
+                            )
+                            .fixedSize(horizontal: true, vertical: false)
+                    } else {
+                        Text("Active Account")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.56))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1.5)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.06))
+                            )
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
                 }
 
                 if let email = snapshot.email, !email.isEmpty {
@@ -286,6 +299,56 @@ public struct AntigravityProfileDrawerView: View {
                         }
                     }
                 }
+
+                if !snapshot.hasFreshServerQuota {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Color.white.opacity(0.42))
+
+                        Text("Antigravity keeps server quota % in-app only. Showing verified local token & turn volume.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.white.opacity(0.46))
+                            .lineLimit(2)
+
+                        Spacer(minLength: 4)
+
+                        Button {
+                            GravOnboardingWelcomeAudio.shared.playButtonTap()
+                            store.activateAntigravityApp()
+                        } label: {
+                            HStack(spacing: 3.5) {
+                                Text("Live Quota")
+                                    .font(.system(size: 10, weight: .medium))
+                                Image(systemName: "arrow.up.forward")
+                                    .font(.system(size: 8.5, weight: .semibold))
+                            }
+                            .foregroundStyle(Color.white.opacity(0.84))
+                            .padding(.horizontal, 7.5)
+                            .padding(.vertical, 3.5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                                    .fill(Color.white.opacity(0.085))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.032))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
+                            )
+                    )
+                }
             }
             .padding(.horizontal, 13)
             .padding(.vertical, 10)
@@ -294,7 +357,6 @@ public struct AntigravityProfileDrawerView: View {
 
     private func usageWindowRow(_ window: AntigravityUsageWindow) -> some View {
         let resetText = window.resetCountdownLabel()
-        let ringColor = quotaRingColor(for: window.remainingFraction)
 
         return HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 1.5) {
@@ -317,19 +379,40 @@ public struct AntigravityProfileDrawerView: View {
 
             Spacer(minLength: 8)
 
-            HStack(spacing: 8) {
-                Text("\(window.remainingPercent)% left")
-                    .font(.system(size: 11.5, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.white.opacity(0.68))
-                    .contentTransition(reduceMotion ? .identity : .numericText())
+            if let remaining = window.serverRemainingFraction, let pct = window.remainingPercent {
+                HStack(spacing: 8) {
+                    Text("\(pct)% left")
+                        .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(0.68))
+                        .contentTransition(reduceMotion ? .identity : .numericText())
 
-                QuotaCircularRing(
-                    progress: animateRings ? window.remainingFraction : 0,
-                    color: ringColor,
-                    size: 15.5,
-                    lineWidth: 2.2
-                )
+                    QuotaCircularRing(
+                        progress: animateRings ? remaining : 0,
+                        color: quotaRingColor(for: remaining),
+                        size: 15.5,
+                        lineWidth: 2.2
+                    )
+                }
+            } else if window.turnsCount > 0 || window.tokensUsed > 0 {
+                HStack(spacing: 6) {
+                    Text("\(TokenMetrics.formatCompact(window.tokensUsed)) tok")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(0.80))
+
+                    Text("·")
+                        .foregroundStyle(Color.white.opacity(0.28))
+
+                    Text("\(window.turnsCount) turn\(window.turnsCount == 1 ? "" : "s")")
+                        .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(0.46))
+                }
+            } else {
+                Text("Unused")
+                    .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.32))
             }
         }
     }
@@ -380,7 +463,6 @@ public struct AntigravityProfileDrawerView: View {
 
     private func modelRow(_ model: AntigravityAvailableModel) -> some View {
         let isActive = isCurrentActiveModel(model)
-        let ringColor = quotaRingColor(for: model.remainingFraction)
 
         return HStack(spacing: 8) {
             Circle()
@@ -400,18 +482,25 @@ public struct AntigravityProfileDrawerView: View {
 
             Spacer(minLength: 6)
 
-            HStack(spacing: 6) {
-                Text("\(model.remainingPercent)%")
+            if let remaining = model.serverRemainingFraction, let pct = model.remainingPercent {
+                HStack(spacing: 6) {
+                    Text("\(pct)%")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(0.44))
+
+                    QuotaCircularRing(
+                        progress: animateRings ? remaining : 0,
+                        color: quotaRingColor(for: remaining),
+                        size: 12.5,
+                        lineWidth: 1.8
+                    )
+                }
+            } else if model.recentTurns7d > 0 {
+                Text("\(TokenMetrics.formatCompact(model.recentTokens7d)) · \(model.recentTurns7d)t")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .monospacedDigit()
-                    .foregroundStyle(Color.white.opacity(0.44))
-
-                QuotaCircularRing(
-                    progress: animateRings ? model.remainingFraction : 0,
-                    color: ringColor,
-                    size: 12.5,
-                    lineWidth: 1.8
-                )
+                    .foregroundStyle(Color.white.opacity(0.46))
             }
         }
         .padding(.horizontal, 9)

@@ -1,19 +1,22 @@
 import Foundation
 import SQLite3
 
-// MARK: - Antigravity Account, Usage Quota & Available Models Snapshot
+// MARK: - Antigravity Account, Usage & Observed Models Snapshot
 
-/// Single quota window (`Weekly limit` or `5h limit`) displayed with a crisp circular progress ring.
+/// Single quota or local usage window displayed cleanly inside the Profile drawer.
 public struct AntigravityUsageWindow: Sendable, Equatable, Identifiable {
     public let id: String
     public let label: String
-    public let remainingFraction: Double // 0.0 ... 1.0
+    /// Exact server-reported remaining fraction (`0.0...1.0`), or `nil` when only local transcript usage is available.
+    public let serverRemainingFraction: Double?
     public let resetDate: Date?
     public let tokensUsed: Int
+    public let turnsCount: Int
     public let inlineResetCaption: Bool
 
-    public var remainingPercent: Int {
-        Int((min(1.0, max(0.0, remainingFraction)) * 100.0).rounded())
+    public var remainingPercent: Int? {
+        guard let serverRemainingFraction else { return nil }
+        return Int((min(1.0, max(0.0, serverRemainingFraction)) * 100.0).rounded())
     }
 
     public func resetCountdownLabel(now: Date = Date()) -> String? {
@@ -23,28 +26,26 @@ public struct AntigravityUsageWindow: Sendable, Equatable, Identifiable {
         let days = seconds / 86_400
         let hours = (seconds % 86_400) / 3600
         let minutes = (seconds % 3600) / 60
-        if days > 0 {
-            return "\(days)d \(hours)h"
-        }
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
-        }
+        if days > 0 { return "\(days)d \(hours)h" }
+        if hours > 0 { return "\(hours)h \(minutes)m" }
         return "\(max(1, minutes))m"
     }
 
     public init(
         id: String,
         label: String,
-        remainingFraction: Double,
+        serverRemainingFraction: Double? = nil,
         resetDate: Date? = nil,
         tokensUsed: Int = 0,
+        turnsCount: Int = 0,
         inlineResetCaption: Bool = false
     ) {
         self.id = id
         self.label = label
-        self.remainingFraction = min(1.0, max(0.0, remainingFraction))
+        self.serverRemainingFraction = serverRemainingFraction.map { min(1.0, max(0.0, $0)) }
         self.resetDate = resetDate
         self.tokensUsed = tokensUsed
+        self.turnsCount = turnsCount
         self.inlineResetCaption = inlineResetCaption
     }
 }
@@ -62,7 +63,7 @@ public struct AntigravityUsageGroup: Sendable, Equatable, Identifiable {
     }
 }
 
-/// Single available Antigravity model discovered from local Antigravity state & transcripts.
+/// Model discovered from live Antigravity transcripts or matching-account local cache.
 public struct AntigravityAvailableModel: Sendable, Equatable, Identifiable {
     public enum Family: String, Sendable, Equatable, CaseIterable {
         case gemini = "Gemini"
@@ -76,12 +77,15 @@ public struct AntigravityAvailableModel: Sendable, Equatable, Identifiable {
     public let rawIdentifier: String
     public let family: Family
     public let tag: String?
-    public let remainingFraction: Double
-    public let isRecommended: Bool
+    /// Exact server-reported quota fraction when available for this account; `nil` otherwise.
+    public let serverRemainingFraction: Double?
+    public let recentTurns7d: Int
+    public let recentTokens7d: Int
     public let isObservedInTranscripts: Bool
 
-    public var remainingPercent: Int {
-        Int((min(1.0, max(0.0, remainingFraction)) * 100.0).rounded())
+    public var remainingPercent: Int? {
+        guard let serverRemainingFraction else { return nil }
+        return Int((min(1.0, max(0.0, serverRemainingFraction)) * 100.0).rounded())
     }
 
     public init(
@@ -90,8 +94,9 @@ public struct AntigravityAvailableModel: Sendable, Equatable, Identifiable {
         rawIdentifier: String,
         family: Family,
         tag: String? = nil,
-        remainingFraction: Double = 1.0,
-        isRecommended: Bool = false,
+        serverRemainingFraction: Double? = nil,
+        recentTurns7d: Int = 0,
+        recentTokens7d: Int = 0,
         isObservedInTranscripts: Bool = false
     ) {
         self.id = id
@@ -99,23 +104,27 @@ public struct AntigravityAvailableModel: Sendable, Equatable, Identifiable {
         self.rawIdentifier = rawIdentifier
         self.family = family
         self.tag = tag
-        self.remainingFraction = min(1.0, max(0.0, remainingFraction))
-        self.isRecommended = isRecommended
+        self.serverRemainingFraction = serverRemainingFraction.map { min(1.0, max(0.0, $0)) }
+        self.recentTurns7d = recentTurns7d
+        self.recentTokens7d = recentTokens7d
         self.isObservedInTranscripts = isObservedInTranscripts
     }
 }
 
-/// Complete local profile snapshot combining Antigravity account info, quota usage windows, and available models.
+/// Complete local profile snapshot strictly scoped to the currently logged-in Antigravity account.
 public struct AntigravityProfileSnapshot: Sendable, Equatable {
     public let displayName: String
     public let email: String?
     public let avatarURL: URL?
-    public let planName: String
+    public let planName: String?
     public let availableCredits: Int?
+    public let hasFreshServerQuota: Bool
     public let usageGroups: [AntigravityUsageGroup]
     public let availableModels: [AntigravityAvailableModel]
     public let totalTokens5h: Int
     public let totalTokens7d: Int
+    public let totalTurns5h: Int
+    public let totalTurns7d: Int
     public let updatedAt: Date
 
     public var initials: String {
@@ -123,8 +132,11 @@ public struct AntigravityProfileSnapshot: Sendable, Equatable {
             .split(whereSeparator: { $0.isWhitespace })
             .prefix(2)
             .compactMap(\.first)
-        if !parts.isEmpty {
+        if parts.count >= 2 {
             return String(parts).uppercased()
+        }
+        if let first = displayName.first {
+            return String(displayName.prefix(2)).uppercased()
         }
         if let first = email?.first {
             return String(first).uppercased()
@@ -136,12 +148,15 @@ public struct AntigravityProfileSnapshot: Sendable, Equatable {
         displayName: String,
         email: String? = nil,
         avatarURL: URL? = nil,
-        planName: String = "Antigravity",
+        planName: String? = nil,
         availableCredits: Int? = nil,
+        hasFreshServerQuota: Bool = false,
         usageGroups: [AntigravityUsageGroup] = [],
         availableModels: [AntigravityAvailableModel] = [],
         totalTokens5h: Int = 0,
         totalTokens7d: Int = 0,
+        totalTurns5h: Int = 0,
+        totalTurns7d: Int = 0,
         updatedAt: Date = Date()
     ) {
         self.displayName = displayName
@@ -149,19 +164,28 @@ public struct AntigravityProfileSnapshot: Sendable, Equatable {
         self.avatarURL = avatarURL
         self.planName = planName
         self.availableCredits = availableCredits
+        self.hasFreshServerQuota = hasFreshServerQuota
         self.usageGroups = usageGroups
         self.availableModels = availableModels
         self.totalTokens5h = totalTokens5h
         self.totalTokens7d = totalTokens7d
+        self.totalTurns5h = totalTurns5h
+        self.totalTurns7d = totalTurns7d
         self.updatedAt = updatedAt
     }
 }
 
-// MARK: - Local Read-Only Profile, Usage & Models Probe
+// MARK: - Strict Account-Scoped Local Profile, Usage & Models Probe
 
-/// Reads Antigravity's local non-secret state files (`app_storage.json`, `state.vscdb` `userStatus`,
-/// and `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`) to construct a
-/// clean, accurate Account + Usage + Available Models snapshot with zero network traffic or credentials access.
+/// Reads Antigravity's local non-secret state files (`app_storage.json`, matching-account `state.vscdb`,
+/// and `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`).
+///
+/// Strict integrity guarantees:
+/// - **Zero cross-account bleed**: cached `Antigravity IDE` avatar, plan, credits, and model catalog
+///   are ONLY used when their cached email matches the live logged-in account in `app_storage.json`.
+/// - **Zero fabricated quota percentages**: server `% left` rings are rendered ONLY from a fresh,
+///   unexpired matching-account quota cache; otherwise, 100% real local 5h / 7d token & turn metrics
+///   are shown cleanly with a direct shortcut to Antigravity's live Usage view.
 public enum AntigravityProfileProbe: Sendable {
 
     private struct DecodedUserStatus {
@@ -170,7 +194,6 @@ public enum AntigravityProfileProbe: Sendable {
         var avatarURL: URL?
         var planName: String?
         var models: [DecodedCatalogModel] = []
-        var recommendedNames: Set<String> = []
     }
 
     private struct DecodedCatalogModel {
@@ -183,13 +206,16 @@ public enum AntigravityProfileProbe: Sendable {
     private struct TranscriptFamilyAccumulator {
         var tokens5h: Int = 0
         var tokens7d: Int = 0
-        var requests5h: Int = 0
-        var requests7d: Int = 0
-        var earliest5h: Date?
-        var earliest7d: Date?
+        var turns5h: Int = 0
+        var turns7d: Int = 0
     }
 
-    /// Loads the current local Antigravity account, usage quota groups, and available models.
+    private struct ObservedModelStats {
+        var turns7d: Int = 0
+        var tokens7d: Int = 0
+    }
+
+    /// Loads the current account-accurate Antigravity profile, usage summary, and models.
     public static func loadProfile(
         antigravityRootURL: URL,
         appSupportURL: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -202,20 +228,23 @@ public enum AntigravityProfileProbe: Sendable {
             .appendingPathComponent("Antigravity/app_storage.json")
         let liveEmail = readLiveLoginEmail(from: appStorageURL)
 
-        // 2. Cached profile, plan tier, avatar & model catalog from `state.vscdb` (`userStatus`)
+        // 2. Legacy/IDE `state.vscdb` cache — ONLY accepted if its email strictly matches `liveEmail`!
         let ideStateDB = appSupportURL
             .appendingPathComponent("Antigravity IDE/User/globalStorage/state.vscdb")
-        let decodedStatus = readUserStatusFromVSCDB(url: ideStateDB)
-        let availableCredits = readAvailableCreditsFromVSCDB(url: ideStateDB)
+        let rawCachedStatus = readUserStatusFromVSCDB(url: ideStateDB)
+        let isCacheForSameAccount: Bool = {
+            guard let cached = rawCachedStatus else { return false }
+            guard let liveEmail else { return true }
+            guard let cachedEmail = cached.email else { return false }
+            return liveEmail.caseInsensitiveCompare(cachedEmail) == .orderedSame
+        }()
 
-        let resolvedEmail = liveEmail ?? decodedStatus?.email
+        let matchedStatus: DecodedUserStatus? = isCacheForSameAccount ? rawCachedStatus : nil
+        let matchedCredits: Int? = isCacheForSameAccount ? readAvailableCreditsFromVSCDB(url: ideStateDB) : nil
+
+        let resolvedEmail = liveEmail ?? matchedStatus?.email
         let resolvedName: String = {
-            if let name = decodedStatus?.displayName, !name.isEmpty {
-                if let liveEmail, let statusEmail = decodedStatus?.email,
-                   liveEmail.lowercased() != statusEmail.lowercased()
-                {
-                    return displayNameFromEmail(liveEmail)
-                }
+            if let name = matchedStatus?.displayName, !name.isEmpty {
                 return name
             }
             if let resolvedEmail {
@@ -224,40 +253,42 @@ public enum AntigravityProfileProbe: Sendable {
             return NSFullUserName().isEmpty ? "Antigravity User" : NSFullUserName()
         }()
 
-        let resolvedPlan = decodedStatus?.planName ?? "Google AI Pro"
-
-        // 3. Real 5h & 7d rolling usage + observed live models from local `brain/*/logs/transcript.jsonl`
+        // 3. Real 5h & 7d local transcript telemetry across all sessions
         let brainDir = antigravityRootURL.appendingPathComponent("brain", isDirectory: true)
-        let (familyUsage, observedModels, total5h, total7d) = scanTranscriptUsage(
+        let scanned = scanTranscriptUsage(
             brainDirectoryURL: brainDir,
             activeModel: activeModel,
             now: now
         )
 
-        // 4. Build Usage Groups (matching Antigravity Usage layout: Gemini / Claude & GPT / Gemini 4 Argon)
-        let usageGroups = buildUsageGroups(
-            decodedStatus: decodedStatus,
-            familyUsage: familyUsage,
+        // 4. Build honest Usage groups (fresh server quota if available & matching; otherwise real local tokens/turns)
+        let (usageGroups, hasFreshQuota) = buildUsageGroups(
+            matchedStatus: matchedStatus,
+            familyUsage: scanned.familyUsage,
             now: now
         )
 
-        // 5. Merge available models catalog + live observed models cleanly
-        let availableModels = mergeAvailableModels(
-            decodedStatus: decodedStatus,
-            observedModels: observedModels,
-            activeModel: activeModel
+        // 5. Build accurate Models list (live Antigravity 2.0 observed models + matching-account fresh catalog only)
+        let models = buildModelsList(
+            matchedStatus: matchedStatus,
+            observedModels: scanned.observedModels,
+            activeModel: activeModel,
+            now: now
         )
 
         return AntigravityProfileSnapshot(
             displayName: resolvedName,
             email: resolvedEmail,
-            avatarURL: decodedStatus?.avatarURL,
-            planName: resolvedPlan,
-            availableCredits: availableCredits,
+            avatarURL: matchedStatus?.avatarURL,
+            planName: matchedStatus?.planName,
+            availableCredits: matchedCredits,
+            hasFreshServerQuota: hasFreshQuota,
             usageGroups: usageGroups,
-            availableModels: availableModels,
-            totalTokens5h: total5h,
-            totalTokens7d: total7d,
+            availableModels: models,
+            totalTokens5h: scanned.totalTokens5h,
+            totalTokens7d: scanned.totalTokens7d,
+            totalTurns5h: scanned.totalTurns5h,
+            totalTurns7d: scanned.totalTurns7d,
             updatedAt: now
         )
     }
@@ -299,7 +330,6 @@ public enum AntigravityProfileProbe: Sendable {
               let outerData = Data(base64Encoded: base64Value)
         else { return nil }
 
-        // Parse outer repeated field 1 entries looking for `availableCreditsSentinelKey`
         for field in parseProtoFields(outerData) where field.fieldNumber == 1 && field.wireType == 2 {
             var isCreditsEntry = false
             var encodedVal: String?
@@ -351,7 +381,6 @@ public enum AntigravityProfileProbe: Sendable {
     }
 
     private static func decodeUserStatusEnvelope(_ outerData: Data) -> DecodedUserStatus? {
-        // Outer envelope -> field 1 -> field 2 -> field 1 (base64 UserStatus proto)
         var userStatusBytes: Data?
         for field in parseProtoFields(outerData) where field.fieldNumber == 1 && field.wireType == 2 {
             for sub in parseProtoFields(field.bytes) where sub.fieldNumber == 2 && sub.wireType == 2 {
@@ -383,7 +412,6 @@ public enum AntigravityProfileProbe: Sendable {
                     result.avatarURL = url
                 }
             case 36:
-                // Plan Tier message (`sub[2]` or `sub[3]` = "Google AI Pro")
                 for sub in parseProtoFields(field.bytes) where sub.wireType == 2 {
                     if sub.fieldNumber == 2 || sub.fieldNumber == 3,
                        let plan = String(data: sub.bytes, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -394,18 +422,9 @@ public enum AntigravityProfileProbe: Sendable {
                     }
                 }
             case 33:
-                // CascadeModelConfigData: repeated field 1 (models), field 2 (recommended section)
-                for sub in parseProtoFields(field.bytes) where sub.wireType == 2 {
-                    if sub.fieldNumber == 1 {
-                        if let model = decodeCatalogModel(sub.bytes) {
-                            result.models.append(model)
-                        }
-                    } else if sub.fieldNumber == 2 {
-                        for rec in parseProtoFields(sub.bytes) where rec.fieldNumber == 2 && rec.wireType == 2 {
-                            if let name = String(data: rec.bytes, encoding: .utf8), !name.isEmpty {
-                                result.recommendedNames.insert(name)
-                            }
-                        }
+                for sub in parseProtoFields(field.bytes) where sub.fieldNumber == 1 && sub.wireType == 2 {
+                    if let model = decodeCatalogModel(sub.bytes) {
+                        result.models.append(model)
                     }
                 }
             default:
@@ -451,26 +470,32 @@ public enum AntigravityProfileProbe: Sendable {
         )
     }
 
-    // MARK: - 3. Local Transcript 5h & 7d Rolling Usage Aggregator
+    // MARK: - 3. Real Local Transcript 5h & 7d Usage Scanner
+
+    private struct TranscriptScanResult {
+        let familyUsage: [String: TranscriptFamilyAccumulator]
+        let observedModels: [String: ObservedModelStats]
+        let totalTokens5h: Int
+        let totalTokens7d: Int
+        let totalTurns5h: Int
+        let totalTurns7d: Int
+    }
 
     private static func scanTranscriptUsage(
         brainDirectoryURL: URL,
         activeModel: String?,
         now: Date
-    ) -> (
-        familyUsage: [String: TranscriptFamilyAccumulator],
-        observedModels: [String: Int],
-        total5h: Int,
-        total7d: Int
-    ) {
+    ) -> TranscriptScanResult {
         let fm = FileManager.default
         var familyMap: [String: TranscriptFamilyAccumulator] = [:]
-        var observedModels: [String: Int] = [:]
-        var total5h = 0
-        var total7d = 0
+        var observedModels: [String: ObservedModelStats] = [:]
+        var totalTokens5h = 0
+        var totalTokens7d = 0
+        var totalTurns5h = 0
+        var totalTurns7d = 0
 
         if let activeModel, !activeModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            observedModels[activeModel] = max(1, observedModels[activeModel, default: 0])
+            observedModels[activeModel] = observedModels[activeModel] ?? ObservedModelStats()
         }
 
         guard let sessionDirs = try? fm.contentsOfDirectory(
@@ -478,15 +503,21 @@ public enum AntigravityProfileProbe: Sendable {
             includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
-            return (familyMap, observedModels, 0, 0)
+            return TranscriptScanResult(
+                familyUsage: familyMap,
+                observedModels: observedModels,
+                totalTokens5h: 0,
+                totalTokens7d: 0,
+                totalTurns5h: 0,
+                totalTurns7d: 0
+            )
         }
 
         let cutoff7d = now.addingTimeInterval(-7 * 86_400)
         let cutoff5h = now.addingTimeInterval(-5 * 3600)
 
         for dir in sessionDirs {
-            let logURL = dir
-                .appendingPathComponent(".system_generated/logs/transcript.jsonl")
+            let logURL = dir.appendingPathComponent(".system_generated/logs/transcript.jsonl")
             guard fm.fileExists(atPath: logURL.path) else { continue }
             if let mdate = try? logURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
                mdate < cutoff7d
@@ -518,50 +549,48 @@ public enum AntigravityProfileProbe: Sendable {
                 let input = (obj["input_tokens"] as? Int) ?? 0
                 let output = (obj["output_tokens"] as? Int) ?? 0
                 let stepTokens = max(0, input + output)
-                observedModels[model, default: 0] += 1
+
+                var modelStats = observedModels[model] ?? ObservedModelStats()
+                modelStats.turns7d += 1
+                modelStats.tokens7d += stepTokens
+                observedModels[model] = modelStats
 
                 let groupKey = usageGroupKey(forModelName: model)
                 var acc = familyMap[groupKey] ?? TranscriptFamilyAccumulator()
                 acc.tokens7d += stepTokens
-                acc.requests7d += 1
-                total7d += stepTokens
-                if acc.earliest7d == nil || stepDate < acc.earliest7d! {
-                    acc.earliest7d = stepDate
-                }
+                acc.turns7d += 1
+                totalTokens7d += stepTokens
+                totalTurns7d += 1
 
                 if stepDate >= cutoff5h {
                     acc.tokens5h += stepTokens
-                    acc.requests5h += 1
-                    total5h += stepTokens
-                    if acc.earliest5h == nil || stepDate < acc.earliest5h! {
-                        acc.earliest5h = stepDate
-                    }
+                    acc.turns5h += 1
+                    totalTokens5h += stepTokens
+                    totalTurns5h += 1
                 }
                 familyMap[groupKey] = acc
             }
         }
 
-        return (familyMap, observedModels, total5h, total7d)
+        return TranscriptScanResult(
+            familyUsage: familyMap,
+            observedModels: observedModels,
+            totalTokens5h: totalTokens5h,
+            totalTokens7d: totalTokens7d,
+            totalTurns5h: totalTurns5h,
+            totalTurns7d: totalTurns7d
+        )
     }
 
-    // MARK: - 4. Build Clean Usage Groups & Merged Available Models
+    // MARK: - 4. Build Honest Usage Groups & Accurate Models List
 
     private static func buildUsageGroups(
-        decodedStatus: DecodedUserStatus?,
+        matchedStatus: DecodedUserStatus?,
         familyUsage: [String: TranscriptFamilyAccumulator],
         now: Date
-    ) -> [AntigravityUsageGroup] {
-        // Calibrated local rolling window estimates when server-cached reset timestamp has elapsed
-        func estimateRemaining(requests: Int, tokens: Int, reqBudget: Double, tokenBudget: Double) -> Double {
-            guard requests > 0 || tokens > 0 else { return 1.0 }
-            let byReq = Double(requests) / reqBudget
-            let byTok = Double(tokens) / tokenBudget
-            let used = min(0.98, max(byReq, byTok))
-            return max(0.02, 1.0 - used)
-        }
-
-        func freshCatalogQuota(matching predicate: (String) -> Bool) -> (Double, Date)? {
-            guard let models = decodedStatus?.models else { return nil }
+    ) -> ([AntigravityUsageGroup], Bool) {
+        func freshServerQuota(matching predicate: (String) -> Bool) -> (Double, Date)? {
+            guard let models = matchedStatus?.models else { return nil }
             let matching = models.filter { predicate($0.label.lowercased()) }
             guard let first = matching.first,
                   let reset = first.resetDate,
@@ -575,105 +604,58 @@ public enum AntigravityProfileProbe: Sendable {
         let claudeGPTAcc = familyUsage["claude_gpt"] ?? TranscriptFamilyAccumulator()
         let argonAcc = familyUsage["argon"] ?? TranscriptFamilyAccumulator()
 
-        // 1. Gemini Models (Weekly + 5h)
-        let geminiWeeklyFrac: Double
-        let geminiWeeklyReset: Date?
-        if let fresh = freshCatalogQuota(matching: { $0.contains("gemini") && !$0.contains("argon") }) {
-            geminiWeeklyFrac = fresh.0
-            geminiWeeklyReset = fresh.1
-        } else {
-            geminiWeeklyFrac = estimateRemaining(
-                requests: geminiAcc.requests7d,
-                tokens: geminiAcc.tokens7d,
-                reqBudget: 3200,
-                tokenBudget: 85_000_000
-            )
-            geminiWeeklyReset = geminiAcc.earliest7d?.addingTimeInterval(7 * 86_400)
-        }
-        let gemini5hFrac = estimateRemaining(
-            requests: geminiAcc.requests5h,
-            tokens: geminiAcc.tokens5h,
-            reqBudget: 850,
-            tokenBudget: 24_000_000
-        )
-        let gemini5hReset = geminiAcc.earliest5h?.addingTimeInterval(5 * 3600)
+        let geminiQuota = freshServerQuota(matching: { $0.contains("gemini") && !$0.contains("argon") })
+        let claudeQuota = freshServerQuota(matching: { $0.contains("claude") || $0.contains("gpt") })
+        let hasFreshQuota = geminiQuota != nil || claudeQuota != nil
 
-        let geminiGroup = AntigravityUsageGroup(
-            id: "gemini",
-            title: "Gemini Models",
-            windows: [
-                AntigravityUsageWindow(
-                    id: "gemini-weekly",
-                    label: "Weekly limit",
-                    remainingFraction: geminiWeeklyFrac,
-                    resetDate: geminiWeeklyReset,
-                    tokensUsed: geminiAcc.tokens7d
-                ),
-                AntigravityUsageWindow(
-                    id: "gemini-5h",
-                    label: "5h limit",
-                    remainingFraction: gemini5hFrac,
-                    resetDate: gemini5hReset,
-                    tokensUsed: geminiAcc.tokens5h
-                ),
-            ]
-        )
+        var groups: [AntigravityUsageGroup] = [
+            AntigravityUsageGroup(
+                id: "gemini",
+                title: "Gemini Models",
+                windows: [
+                    AntigravityUsageWindow(
+                        id: "gemini-weekly",
+                        label: "7-day activity",
+                        serverRemainingFraction: geminiQuota?.0,
+                        resetDate: geminiQuota?.1,
+                        tokensUsed: geminiAcc.tokens7d,
+                        turnsCount: geminiAcc.turns7d
+                    ),
+                    AntigravityUsageWindow(
+                        id: "gemini-5h",
+                        label: "5h window",
+                        serverRemainingFraction: nil,
+                        resetDate: nil,
+                        tokensUsed: geminiAcc.tokens5h,
+                        turnsCount: geminiAcc.turns5h
+                    ),
+                ]
+            ),
+            AntigravityUsageGroup(
+                id: "claude-gpt",
+                title: "Claude and GPT models",
+                windows: [
+                    AntigravityUsageWindow(
+                        id: "claude-weekly",
+                        label: "7-day activity",
+                        serverRemainingFraction: claudeQuota?.0,
+                        resetDate: claudeQuota?.1,
+                        tokensUsed: claudeGPTAcc.tokens7d,
+                        turnsCount: claudeGPTAcc.turns7d
+                    ),
+                    AntigravityUsageWindow(
+                        id: "claude-5h",
+                        label: "5h window",
+                        serverRemainingFraction: nil,
+                        resetDate: nil,
+                        tokensUsed: claudeGPTAcc.tokens5h,
+                        turnsCount: claudeGPTAcc.turns5h
+                    ),
+                ]
+            ),
+        ]
 
-        // 2. Claude and GPT models (Weekly + 5h)
-        let claudeWeeklyFrac: Double
-        let claudeWeeklyReset: Date?
-        if let fresh = freshCatalogQuota(matching: { $0.contains("claude") || $0.contains("gpt") }) {
-            claudeWeeklyFrac = fresh.0
-            claudeWeeklyReset = fresh.1
-        } else {
-            claudeWeeklyFrac = estimateRemaining(
-                requests: claudeGPTAcc.requests7d,
-                tokens: claudeGPTAcc.tokens7d,
-                reqBudget: 1200,
-                tokenBudget: 35_000_000
-            )
-            claudeWeeklyReset = claudeGPTAcc.earliest7d?.addingTimeInterval(7 * 86_400)
-        }
-        let claude5hFrac = estimateRemaining(
-            requests: claudeGPTAcc.requests5h,
-            tokens: claudeGPTAcc.tokens5h,
-            reqBudget: 320,
-            tokenBudget: 10_000_000
-        )
-        let claude5hReset = claudeGPTAcc.earliest5h?.addingTimeInterval(5 * 3600)
-
-        let claudeGPTGroup = AntigravityUsageGroup(
-            id: "claude-gpt",
-            title: "Claude and GPT models",
-            windows: [
-                AntigravityUsageWindow(
-                    id: "claude-weekly",
-                    label: "Weekly limit",
-                    remainingFraction: claudeWeeklyFrac,
-                    resetDate: claudeWeeklyReset,
-                    tokensUsed: claudeGPTAcc.tokens7d
-                ),
-                AntigravityUsageWindow(
-                    id: "claude-5h",
-                    label: "5h limit",
-                    remainingFraction: claude5hFrac,
-                    resetDate: claude5hReset,
-                    tokensUsed: claudeGPTAcc.tokens5h
-                ),
-            ]
-        )
-
-        var groups = [geminiGroup, claudeGPTGroup]
-
-        // 3. Gemini 4 Argon (dedicated weekly window when observed or available)
-        if argonAcc.requests7d > 0 || decodedStatus != nil {
-            let argonFrac = estimateRemaining(
-                requests: argonAcc.requests7d,
-                tokens: argonAcc.tokens7d,
-                reqBudget: 180,
-                tokenBudget: 6_000_000
-            )
-            let argonReset = argonAcc.earliest7d?.addingTimeInterval(7 * 86_400)
+        if argonAcc.turns7d > 0 {
             groups.append(
                 AntigravityUsageGroup(
                     id: "gemini-argon",
@@ -681,10 +663,11 @@ public enum AntigravityProfileProbe: Sendable {
                     windows: [
                         AntigravityUsageWindow(
                             id: "argon-weekly",
-                            label: "Weekly limit",
-                            remainingFraction: argonFrac,
-                            resetDate: argonReset,
+                            label: "7-day activity",
+                            serverRemainingFraction: nil,
+                            resetDate: nil,
                             tokensUsed: argonAcc.tokens7d,
+                            turnsCount: argonAcc.turns7d,
                             inlineResetCaption: true
                         ),
                     ]
@@ -692,25 +675,26 @@ public enum AntigravityProfileProbe: Sendable {
             )
         }
 
-        return groups
+        return (groups, hasFreshQuota)
     }
 
-    private static func mergeAvailableModels(
-        decodedStatus: DecodedUserStatus?,
-        observedModels: [String: Int],
-        activeModel: String?
+    private static func buildModelsList(
+        matchedStatus: DecodedUserStatus?,
+        observedModels: [String: ObservedModelStats],
+        activeModel: String?,
+        now: Date
     ) -> [AntigravityAvailableModel] {
         var models: [AntigravityAvailableModel] = []
         var seenDisplayLower: Set<String> = []
 
-        // 1. Live models actively used in Antigravity 2.0 transcripts (shown first!)
+        // 1. Real models observed in live Antigravity transcripts (active model first, then by usage)
         let sortedObserved = observedModels.sorted { a, b in
             if a.key == activeModel { return true }
             if b.key == activeModel { return false }
-            return a.value > b.value
+            return a.value.turns7d > b.value.turns7d
         }
 
-        for (raw, _) in sortedObserved {
+        for (raw, stats) in sortedObserved {
             let pretty = prettifyModelIdentifier(raw)
             let key = pretty.lowercased()
             guard !seenDisplayLower.contains(key) else { continue }
@@ -721,32 +705,35 @@ public enum AntigravityProfileProbe: Sendable {
                     displayName: pretty,
                     rawIdentifier: raw,
                     family: classifyFamily(raw),
-                    tag: raw == activeModel ? "Active" : "Recent",
-                    remainingFraction: 1.0,
-                    isRecommended: true,
+                    tag: raw == activeModel ? "Active" : "Observed",
+                    serverRemainingFraction: nil,
+                    recentTurns7d: stats.turns7d,
+                    recentTokens7d: stats.tokens7d,
                     isObservedInTranscripts: true
                 )
             )
         }
 
-        // 2. Full available catalog decoded from Antigravity's `userStatus`
-        if let catalog = decodedStatus?.models {
-            for item in catalog {
-                let key = item.label.lowercased()
-                guard !seenDisplayLower.contains(key) else { continue }
-                seenDisplayLower.insert(key)
-                models.append(
-                    AntigravityAvailableModel(
-                        id: "cat-\(item.label)",
-                        displayName: item.label,
-                        rawIdentifier: item.label,
-                        family: classifyFamily(item.label),
-                        tag: item.tag,
-                        remainingFraction: item.remainingFraction,
-                        isRecommended: decodedStatus?.recommendedNames.contains(item.label) ?? false,
-                        isObservedInTranscripts: false
+        // 2. Matching-account cached catalog ONLY when its reset timestamps are still fresh (not stale from months ago!)
+        if let catalog = matchedStatus?.models {
+            let hasFreshCatalog = catalog.contains { ($0.resetDate ?? .distantPast) > now }
+            if hasFreshCatalog {
+                for item in catalog {
+                    let key = item.label.lowercased()
+                    guard !seenDisplayLower.contains(key) else { continue }
+                    seenDisplayLower.insert(key)
+                    models.append(
+                        AntigravityAvailableModel(
+                            id: "cat-\(item.label)",
+                            displayName: item.label,
+                            rawIdentifier: item.label,
+                            family: classifyFamily(item.label),
+                            tag: item.tag,
+                            serverRemainingFraction: item.remainingFraction,
+                            isObservedInTranscripts: false
+                        )
                     )
-                )
+                }
             }
         }
 
