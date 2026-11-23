@@ -739,4 +739,71 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertTrue(out4.clearFocus)
         XCTAssertEqual(Int((out4.lastTurnDuration ?? 0).rounded()), 540)
     }
+
+    func testMCPToolArgumentsFormattingErrorCorrelationAndArtifacts() {
+        var classifier = EventClassifier()
+
+        let mcpCall = TranscriptStep(
+            stepIndex: 10,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T05:10:00Z",
+            toolCalls: [
+                ToolCall(
+                    name: "call_mcp_tool",
+                    args: [
+                        "ServerName": .string("\"rea\""),
+                        "ToolName": .string("\"analyze_javascript_application\""),
+                        "Arguments": .string("{\"detail\":\"summary\",\"input_path\":\"/Applications/Antigravity.app/Contents/Resources/app.asar\"}"),
+                    ]
+                ),
+            ]
+        )
+        let outStart = classifier.process(step: mcpCall)
+        guard let mcpEvent = outStart.toolActivities.first else {
+            XCTFail("Expected MCP tool activity")
+            return
+        }
+        XCTAssertEqual(mcpEvent.kind, .mcpTool)
+        XCTAssertEqual(mcpEvent.toolName, "analyze_javascript_application")
+        XCTAssertEqual(mcpEvent.serverName, "rea")
+        XCTAssertEqual(mcpEvent.title, "analyze_javascript_application · rea")
+        XCTAssertEqual(mcpEvent.status, .running)
+        XCTAssertTrue(mcpEvent.argumentsJSON?.contains("\"input_path\"") == true)
+        XCTAssertTrue(mcpEvent.argumentsJSON?.contains("app.asar") == true)
+
+        let mcpErr = TranscriptStep(
+            stepIndex: 11,
+            source: "SYSTEM",
+            type: "GENERIC",
+            status: "ERROR",
+            createdAt: "2026-11-23T05:10:04Z",
+            content: "Created At: 2026-11-23T05:10:00Z\nCompleted At: 2026-11-23T05:10:04Z\nEncountered error in tool execution: Analysis input is invalid."
+        )
+        let outErr = classifier.process(step: mcpErr)
+        XCTAssertEqual(outErr.updatedToolActivities.first?.status, .failed)
+        XCTAssertTrue(outErr.updatedToolActivities.first?.outputPreview?.contains("Analysis input is invalid") == true)
+
+        let artifactWrite = TranscriptStep(
+            stepIndex: 12,
+            source: "MODEL",
+            type: "PLANNER_RESPONSE",
+            status: "DONE",
+            createdAt: "2026-11-23T05:10:10Z",
+            toolCalls: [
+                ToolCall(
+                    name: "write_file",
+                    args: [
+                        "Path": .string("\"/Users/wica/.gemini/antigravity/brain/conv/plan.md\""),
+                        "Content": .string("\"# Plan\\n- Step 1\""),
+                        "ArtifactMetadata": .string("{\"Summary\":\"Implementation plan\",\"UserFacing\":true,\"RequestFeedback\":true}"),
+                    ]
+                ),
+            ]
+        )
+        let outArt = classifier.process(step: artifactWrite)
+        XCTAssertEqual(outArt.toolActivities.first?.kind, .artifact)
+        XCTAssertEqual(outArt.toolActivities.first?.title, "Artifact · plan.md")
+    }
 }

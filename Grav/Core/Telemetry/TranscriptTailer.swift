@@ -378,9 +378,11 @@ public struct WALActivityPulse: Sendable, Equatable {
 /// (`~/.gemini/antigravity/conversations/<session-id>.db-wal`).
 public actor ConversationWALWatcher {
     public let walURL: URL
+    public let summariesWALURL: URL
 
     private let watcherQueue: DispatchQueue
     private var fileSource: DispatchSourceFileSystemObject?
+    private var summariesSource: DispatchSourceFileSystemObject?
     private var dirSource: DispatchSourceFileSystemObject?
     private var onPulse: (@Sendable (WALActivityPulse) -> Void)?
     private var lastWALSize: UInt64 = 0
@@ -394,6 +396,8 @@ public actor ConversationWALWatcher {
         self.walURL = antigravityRoot
             .appendingPathComponent("conversations", isDirectory: true)
             .appendingPathComponent("\(session.id).db-wal")
+        self.summariesWALURL = antigravityRoot
+            .appendingPathComponent("conversation_summaries.db-wal")
         self.watcherQueue = DispatchQueue(
             label: "com.grav.telemetry.wal-pulse.\(UUID().uuidString)",
             qos: .utility
@@ -407,6 +411,7 @@ public actor ConversationWALWatcher {
         self.lastWALSize = currentWALFileSize()
         self.recentGrowthTimes.removeAll()
         attachFileSource()
+        attachSummariesSource()
         attachDirectorySource()
     }
 
@@ -417,6 +422,8 @@ public actor ConversationWALWatcher {
         recentGrowthTimes.removeAll()
         fileSource?.cancel()
         fileSource = nil
+        summariesSource?.cancel()
+        summariesSource = nil
         dirSource?.cancel()
         dirSource = nil
     }
@@ -455,6 +462,43 @@ public actor ConversationWALWatcher {
         }
         fileSource = source
         source.resume()
+    }
+
+    private func attachSummariesSource() {
+        summariesSource?.cancel()
+        summariesSource = nil
+        guard isWatching else { return }
+
+        let fd = open(summariesWALURL.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend, .rename, .delete],
+            queue: watcherQueue
+        )
+        source.setEventHandler { [weak self] in
+            let flags = source.data
+            let replaced = flags.contains(.rename) || flags.contains(.delete)
+            Task { [weak self] in
+                await self?.handleSummariesWALEvent(replaced: replaced)
+            }
+        }
+        source.setCancelHandler {
+            close(fd)
+        }
+        summariesSource = source
+        source.resume()
+    }
+
+    private func handleSummariesWALEvent(replaced: Bool) {
+        guard isWatching else { return }
+        if replaced {
+            attachSummariesSource()
+        }
+        // Emit a zero-delta probe pulse so `AntigravityTelemetryStore` immediately reads
+        // `conversation_summaries.db` + `conversations/<id>.db` on any run-state transition.
+        onPulse?(WALActivityPulse(deltaBytes: 0, isRapidStreamingBurst: false))
     }
 
     private func attachDirectorySource() {
@@ -501,20 +545,16 @@ public actor ConversationWALWatcher {
 
     private func emitGrowthIfNeeded() {
         let newSize = currentWALFileSize()
-        if newSize > lastWALSize {
-            let delta = Int64(newSize - lastWALSize)
-            lastWALSize = newSize
-            // Only signal meaningful streaming payload writes (ignore tiny SQLite checkpoint/metadata touches)
-            if delta >= 4096 {
-                let now = Date()
-                recentGrowthTimes.append(now)
-                recentGrowthTimes.removeAll { now.timeIntervalSince($0) > 2.4 }
-                let isBurst = recentGrowthTimes.count >= 3
-                onPulse?(WALActivityPulse(deltaBytes: delta, isRapidStreamingBurst: isBurst))
-            }
-        } else {
-            lastWALSize = newSize
+        let delta: Int64 = newSize > lastWALSize ? Int64(newSize - lastWALSize) : 0
+        lastWALSize = newSize
+        let now = Date()
+        if delta >= 4096 {
+            recentGrowthTimes.append(now)
+            recentGrowthTimes.removeAll { now.timeIntervalSince($0) > 2.4 }
         }
+        let isBurst = recentGrowthTimes.count >= 3
+        // Always emit on WAL mutations so `ConversationSQLiteProbe` reads authoritative live `steps` state at 0ms
+        onPulse?(WALActivityPulse(deltaBytes: delta, isRapidStreamingBurst: isBurst))
     }
 }
 

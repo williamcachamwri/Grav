@@ -15,6 +15,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
     public var startedCommands: [CommandExecutionEvent]
     public var updatedCommands: [CommandExecutionEvent]
     public var toolActivities: [AgentToolActivityEvent]
+    public var updatedToolActivities: [AgentToolActivityEvent]
     public var focusUpdate: String?
     public var clearFocus: Bool
     public var stepsProgress: AgentStepsProgress?
@@ -37,6 +38,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
         startedCommands: [CommandExecutionEvent] = [],
         updatedCommands: [CommandExecutionEvent] = [],
         toolActivities: [AgentToolActivityEvent] = [],
+        updatedToolActivities: [AgentToolActivityEvent] = [],
         focusUpdate: String? = nil,
         clearFocus: Bool = false,
         stepsProgress: AgentStepsProgress? = nil,
@@ -58,6 +60,7 @@ public struct EventClassificationOutput: Sendable, Equatable {
         self.startedCommands = startedCommands
         self.updatedCommands = updatedCommands
         self.toolActivities = toolActivities
+        self.updatedToolActivities = updatedToolActivities
         self.focusUpdate = focusUpdate
         self.clearFocus = clearFocus
         self.stepsProgress = stepsProgress
@@ -78,6 +81,7 @@ public struct EventClassifier: Sendable {
     public private(set) var activeThinkingStepIndex: Int?
     public private(set) var pendingCommands: [CommandExecutionEvent] = []
     internal var pendingFileChanges: [FileChangeEvent] = []
+    internal var pendingToolActivities: [AgentToolActivityEvent] = []
 
     internal var processedTokenStepIndices: Set<Int> = []
     internal var burstEditedPaths: Set<String> = []
@@ -101,6 +105,7 @@ public struct EventClassifier: Sendable {
         activeThinkingStepIndex = nil
         pendingCommands.removeAll()
         pendingFileChanges.removeAll()
+        pendingToolActivities.removeAll()
         processedTokenStepIndices.removeAll()
         burstEditedPaths.removeAll()
         hasPeekedMultiFileBurst = false
@@ -332,11 +337,26 @@ public struct EventClassifier: Sendable {
                     output.truncatedFileChangeStepIndices.append(step.stepIndex)
                 }
             }
+            if !output.toolActivities.isEmpty {
+                pendingToolActivities = output.toolActivities
+            }
         }
 
-        // 4. Correlate subsequent tool-result steps (`GENERIC` / `SYSTEM_MESSAGE`) with pending file edits & commands
+        // 4. Correlate subsequent tool-result steps (`GENERIC` / `SYSTEM_MESSAGE`) with pending file edits, tools & commands
         if !pendingFileChanges.isEmpty, toolCalls.isEmpty, step.type == "GENERIC" {
             correlateFileEditResult(step: step, into: &output)
+        }
+
+        if !pendingToolActivities.isEmpty, toolCalls.isEmpty, step.type == "GENERIC" {
+            var resolved = pendingToolActivities.removeFirst()
+            let isErr = (step.status == "ERROR")
+                || (step.content?.localizedCaseInsensitiveContains("Encountered error in tool execution") == true)
+            resolved.status = isErr ? .failed : .succeeded
+            resolved.completedAt = stepDate
+            if isErr, let raw = step.content {
+                resolved.outputPreview = Self.extractCleanToolError(from: raw)
+            }
+            output.updatedToolActivities.append(resolved)
         }
 
         var commandJustFinished = false
@@ -482,6 +502,26 @@ public struct EventClassifier: Sendable {
                     output.fileChanges.append(event)
                     stepEditedPaths.insert(event.path)
                     burstEditedPaths.insert(event.path)
+
+                    // Surface Antigravity Artifact creations explicitly as rich Artifact cards too
+                    if let meta = call.args?["ArtifactMetadata"]?.unwrappedObject {
+                        let summary = meta["Summary"]?.unwrappedString
+                        output.toolActivities.append(
+                            AgentToolActivityEvent(
+                                id: "\(step.stepIndex)-\(index)-artifact",
+                                stepIndex: step.stepIndex,
+                                kind: .artifact,
+                                toolName: call.name,
+                                title: "Artifact · \(event.basename)",
+                                detail: summary,
+                                argumentsJSON: Self.prettyArgsJSON(for: call),
+                                status: .succeeded,
+                                startedAt: stepDate,
+                                completedAt: stepDate,
+                                timestamp: stepDate
+                            )
+                        )
+                    }
                 }
 
             case "delete_file":
@@ -573,6 +613,9 @@ public struct EventClassifier: Sendable {
                         toolName: call.name,
                         title: "Needs your answer",
                         detail: label,
+                        argumentsJSON: Self.prettyArgsJSON(for: call),
+                        status: .waiting,
+                        startedAt: stepDate,
                         timestamp: stepDate
                     )
                 )
@@ -588,21 +631,29 @@ public struct EventClassifier: Sendable {
                         toolName: call.name,
                         title: query.isEmpty ? "Searching web" : "Searching \"\(query)\"",
                         detail: call.stringArg("domain"),
+                        argumentsJSON: Self.prettyArgsJSON(for: call),
+                        status: .running,
+                        startedAt: stepDate,
                         timestamp: stepDate
                     )
                 )
 
             case "call_mcp_tool", "list_resources", "read_resource":
-                let server = call.stringArg("ServerName") ?? "MCP"
+                let server = call.stringArg("ServerName") ?? "mcp"
                 let tool = call.stringArg("ToolName") ?? call.name
+                let innerArgsJSON = Self.prettyMCPArgumentsJSON(for: call) ?? Self.prettyArgsJSON(for: call)
                 output.toolActivities.append(
                     AgentToolActivityEvent(
                         id: "\(step.stepIndex)-\(index)-mcp",
                         stepIndex: step.stepIndex,
                         kind: .mcpTool,
-                        toolName: call.name,
-                        title: "MCP \(server) · \(tool)",
+                        toolName: tool,
+                        serverName: server,
+                        title: "\(tool) · \(server)",
                         detail: call.stringArg("Uri"),
+                        argumentsJSON: innerArgsJSON,
+                        status: .running,
+                        startedAt: stepDate,
                         timestamp: stepDate
                     )
                 )
@@ -630,6 +681,9 @@ public struct EventClassifier: Sendable {
                         toolName: call.name,
                         title: title,
                         detail: call.stringArg("Prompt"),
+                        argumentsJSON: Self.prettyArgsJSON(for: call),
+                        status: .running,
+                        startedAt: stepDate,
                         timestamp: stepDate
                     )
                 )
@@ -644,6 +698,9 @@ public struct EventClassifier: Sendable {
                         toolName: call.name,
                         title: "Workflow · \(desc)",
                         detail: call.stringArg("ScriptPath"),
+                        argumentsJSON: Self.prettyArgsJSON(for: call),
+                        status: .running,
+                        startedAt: stepDate,
                         timestamp: stepDate
                     )
                 )
@@ -660,6 +717,10 @@ public struct EventClassifier: Sendable {
                         toolName: call.name,
                         title: "Scheduled · \(cron ?? dur ?? "task")",
                         detail: prompt,
+                        argumentsJSON: Self.prettyArgsJSON(for: call),
+                        status: .succeeded,
+                        startedAt: stepDate,
+                        completedAt: stepDate,
                         timestamp: stepDate
                     )
                 )
@@ -674,6 +735,25 @@ public struct EventClassifier: Sendable {
                         toolName: call.name,
                         title: queries.map { "Marketplace · \($0)" } ?? "Searching Marketplace",
                         detail: nil,
+                        argumentsJSON: Self.prettyArgsJSON(for: call),
+                        status: .running,
+                        startedAt: stepDate,
+                        timestamp: stepDate
+                    )
+                )
+
+            case "define_subagent", "manage_subagents", "send_message", "list_plugin_accounts", "manage_task":
+                output.toolActivities.append(
+                    AgentToolActivityEvent(
+                        id: "\(step.stepIndex)-\(index)-\(call.name)",
+                        stepIndex: step.stepIndex,
+                        kind: .genericTool,
+                        toolName: call.name,
+                        title: call.name,
+                        detail: call.stringArg("Action", "Name", "TaskId"),
+                        argumentsJSON: Self.prettyArgsJSON(for: call),
+                        status: .running,
+                        startedAt: stepDate,
                         timestamp: stepDate
                     )
                 )
@@ -1245,5 +1325,63 @@ public struct EventClassifier: Sendable {
             || lowered.contains("running in the background")
             || lowered.contains("background task")
             || lowered.contains("command is running")
+    }
+
+    /// Extracts and pretty-prints the inner `Arguments` JSON object of `call_mcp_tool`.
+    public static func prettyMCPArgumentsJSON(for call: ToolCall) -> String? {
+        guard let rawArg = call.args?["Arguments"] else { return nil }
+        if let rawStr = rawArg.unwrappedString, let formatted = ConversationSQLiteProbe.prettyFormatJSON(rawStr) {
+            return formatted
+        }
+        let foundation = toFoundationJSON(rawArg)
+        return ConversationSQLiteProbe.prettyFormatJSONObject(foundation)
+    }
+
+    /// Pretty-prints all tool call arguments into clean 2-space indented JSON for the Notch `Tool arguments` inspector.
+    public static func prettyArgsJSON(for call: ToolCall) -> String? {
+        guard let args = call.args, !args.isEmpty else { return nil }
+        var dict: [String: Any] = [:]
+        for (key, value) in args {
+            if key == "Content" || key == "Replacement" || key == "Target" { continue }
+            dict[key] = toFoundationJSON(value)
+        }
+        guard !dict.isEmpty else { return nil }
+        return ConversationSQLiteProbe.prettyFormatJSONObject(dict)
+    }
+
+    private static func toFoundationJSON(_ value: JSONValue) -> Any {
+        switch value {
+        case let .string(raw):
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if (trimmed.hasPrefix("{") && trimmed.hasSuffix("}")) || (trimmed.hasPrefix("[") && trimmed.hasSuffix("]")),
+               let data = trimmed.data(using: .utf8),
+               let parsed = try? JSONSerialization.jsonObject(with: data)
+            {
+                return parsed
+            }
+            return value.unwrappedString ?? raw
+        case let .number(n):
+            return n.rounded() == n ? Int(n) : n
+        case let .bool(b):
+            return b
+        case let .array(arr):
+            return arr.map { toFoundationJSON($0) }
+        case let .object(obj):
+            return obj.mapValues { toFoundationJSON($0) }
+        case .null:
+            return NSNull()
+        }
+    }
+
+    public static func extractCleanToolError(from raw: String) -> String {
+        let stripped = ANSIStripper.strip(raw)
+        if let marker = stripped.range(of: "Encountered error in tool execution:") {
+            let tail = String(stripped[marker.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !tail.isEmpty {
+                return String(tail.prefix(260))
+            }
+        }
+        let cleaned = extractCleanCommandOutput(from: stripped)
+        return String(cleaned.prefix(260))
     }
 }

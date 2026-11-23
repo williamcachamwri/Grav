@@ -251,6 +251,12 @@ public struct ExpandedNotchHeaderView: View {
                         .monospacedDigit()
                         .foregroundStyle((isTurbo ? turboTheme.primaryColor : GravPalette.glacialCyan).opacity(0.90))
                         .fixedSize(horizontal: true, vertical: false)
+                } else if store.activeRunningChatsCount >= 2 {
+                    Text("· \(store.activeRunningChatsCount) chats")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle((isTurbo ? turboTheme.innerColor : GravPalette.glacialCyan).opacity(0.84))
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             } else {
                 Text(stateLabel)

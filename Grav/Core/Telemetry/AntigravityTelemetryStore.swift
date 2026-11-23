@@ -36,6 +36,8 @@ public final class AntigravityTelemetryStore {
     public internal(set) var stepsProgress: AgentStepsProgress?
     public internal(set) var turnStartedAt: Date?
     public internal(set) var lastTurnDuration: TimeInterval?
+    public internal(set) var activeWorkspaceName: String?
+    public internal(set) var activeRunningChatsCount: Int = 0
     public internal(set) var currentPhaseStartedAt: Date = Date()
     public internal(set) var executionMode: AntigravityExecutionMode = .defaultMode
 
@@ -569,6 +571,9 @@ public final class AntigravityTelemetryStore {
                 guard let self, self.sessionGeneration == generation else { return }
                 self.ingestSteps(initialSteps, isInitialHydration: true)
                 self.isHydratingActiveSession = false
+                // Immediately synchronize live state from SQLite + conversation_summaries.db
+                self.lastSQLiteProbeAt = .distantPast
+                self.handleLiveConversationWALActivity(pulse: WALActivityPulse(deltaBytes: 0, isRapidStreamingBurst: false))
             }
 
             // Attach live WAL pulse watcher so `Working` -> `Thinking for Ns` / `Replying` activates at 0ms
@@ -728,16 +733,22 @@ public final class AntigravityTelemetryStore {
         lastSQLiteProbeAt = now
 
         let generation = sessionGeneration
-        let dbURL = session.directoryURL
+        let antigravityRoot = session.directoryURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+        let dbURL = antigravityRoot
             .appendingPathComponent("conversations", isDirectory: true)
             .appendingPathComponent("\(session.id).db")
+        let sessionID = session.id
 
         sqliteProbeTask?.cancel()
         sqliteProbeTask = Task { [weak self] in
             let snapshot = await Task.detached(priority: .userInitiated) {
-                ConversationSQLiteProbe.readLiveSnapshot(dbURL: dbURL)
+                ConversationSQLiteProbe.readLiveSnapshot(
+                    dbURL: dbURL,
+                    antigravityRootURL: antigravityRoot,
+                    conversationID: sessionID
+                )
             }.value
             guard !Task.isCancelled, let self, self.sessionGeneration == generation, !self.isPaused else { return }
             if let snapshot {
@@ -751,6 +762,17 @@ public final class AntigravityTelemetryStore {
 
     private func applySQLiteLiveSnapshot(_ snapshot: ConversationSQLiteLiveSnapshot) {
         let now = Date()
+        if let summary = snapshot.globalSummary {
+            activeRunningChatsCount = summary.activeRunningCountAcrossAllChats
+            if let ws = summary.workspaceName, !ws.isEmpty {
+                activeWorkspaceName = ws
+            }
+            if let userInputAt = summary.lastUserInputTime {
+                if turnStartedAt == nil || userInputAt > (turnStartedAt ?? .distantPast) {
+                    turnStartedAt = userInputAt
+                }
+            }
+        }
         if let focus = snapshot.latestFocus, !focus.isEmpty {
             currentFocus = focus
         }
@@ -758,6 +780,21 @@ public final class AntigravityTelemetryStore {
            stepsProgress == nil || steps.stepIndex >= (stepsProgress?.stepIndex ?? -1)
         {
             stepsProgress = steps
+        }
+
+        // Surface any recent SQLite tool errors onto matching activity rows immediately
+        for errTool in snapshot.recentToolErrors {
+            if let idx = recentActivity.firstIndex(where: {
+                if case let .toolActivity(ev) = $0 { return ev.stepIndex == errTool.stepIndex || ev.id == "live-tool-\(errTool.stepIndex)" }
+                return false
+            }), case var .toolActivity(existing) = recentActivity[idx] {
+                existing.status = .failed
+                existing.completedAt = existing.completedAt ?? now
+                if let msg = errTool.errorMessage, !msg.isEmpty {
+                    existing.outputPreview = msg
+                }
+                recentActivity[idx] = .toolActivity(existing)
+            }
         }
 
         let setState: (TelemetryState) -> Void = { newState in
@@ -869,10 +906,16 @@ public final class AntigravityTelemetryStore {
             }
             cancelIdleDecayTimer()
 
-        case let .runningTool(name, argsJSON):
+        case let .runningTool(liveTool):
             isSpeculativeWALWorking = false
             if turnStartedAt == nil { turnStartedAt = now }
-            applyLiveSQLiteTool(name: name, argsJSON: argsJSON, stepIndex: snapshot.latestStepIndex, now: now, setState: setState)
+            applyLiveSQLiteTool(
+                name: liveTool.name,
+                argsJSON: liveTool.argsJSON,
+                stepIndex: liveTool.stepIndex,
+                now: now,
+                setState: setState
+            )
             scheduleIdleDecayIfNeeded()
         }
     }
@@ -936,29 +979,44 @@ public final class AntigravityTelemetryStore {
         case "search_web":
             let q = (dict?["query"] as? String) ?? ""
             let ev = AgentToolActivityEvent(
-                id: "live-web-\(stepIndex)",
+                id: "live-tool-\(stepIndex)",
                 stepIndex: stepIndex,
                 kind: .searchWeb,
                 toolName: name,
                 title: q.isEmpty ? "Searching web" : "Searching \"\(q)\"",
                 detail: dict?["domain"] as? String,
+                argumentsJSON: ConversationSQLiteProbe.prettyFormatJSON(argsJSON),
+                status: .running,
+                startedAt: now,
                 timestamp: now
             )
+            upsertActivity(.toolActivity(ev))
             currentPhaseStartedAt = now
             setState(.toolActivity(ev))
 
         case "call_mcp_tool", "list_resources", "read_resource":
-            let server = (dict?["ServerName"] as? String) ?? "MCP"
+            let server = (dict?["ServerName"] as? String) ?? "mcp"
             let tool = (dict?["ToolName"] as? String) ?? name
+            let innerArgs: String? = {
+                if let argObj = dict?["Arguments"] {
+                    return ConversationSQLiteProbe.prettyFormatJSONObject(argObj)
+                }
+                return ConversationSQLiteProbe.prettyFormatJSON(argsJSON)
+            }()
             let ev = AgentToolActivityEvent(
-                id: "live-mcp-\(stepIndex)",
+                id: "live-tool-\(stepIndex)",
                 stepIndex: stepIndex,
                 kind: .mcpTool,
-                toolName: name,
-                title: "MCP \(server) · \(tool)",
-                detail: nil,
+                toolName: tool,
+                serverName: server,
+                title: "\(tool) · \(server)",
+                detail: dict?["Uri"] as? String,
+                argumentsJSON: innerArgs,
+                status: .running,
+                startedAt: now,
                 timestamp: now
             )
+            upsertActivity(.toolActivity(ev))
             currentPhaseStartedAt = now
             setState(.toolActivity(ev))
 
@@ -970,41 +1028,53 @@ public final class AntigravityTelemetryStore {
                 : (typeName.contains("image") ? .imageGeneration : .subagent)
             let prefix = kind == .browser ? "Browsing" : (kind == .imageGeneration ? "Generating image" : "Subagent")
             let ev = AgentToolActivityEvent(
-                id: "live-sub-\(stepIndex)",
+                id: "live-tool-\(stepIndex)",
                 stepIndex: stepIndex,
                 kind: kind,
                 toolName: name,
                 title: "\(prefix) · \(role)",
                 detail: dict?["Prompt"] as? String,
+                argumentsJSON: ConversationSQLiteProbe.prettyFormatJSON(argsJSON),
+                status: .running,
+                startedAt: now,
                 timestamp: now
             )
+            upsertActivity(.toolActivity(ev))
             currentPhaseStartedAt = now
             setState(.toolActivity(ev))
 
         case "run_workflow":
             let desc = (dict?["Description"] as? String) ?? "Workflow"
             let ev = AgentToolActivityEvent(
-                id: "live-wf-\(stepIndex)",
+                id: "live-tool-\(stepIndex)",
                 stepIndex: stepIndex,
                 kind: .workflow,
                 toolName: name,
                 title: "Workflow · \(desc)",
-                detail: nil,
+                detail: dict?["ScriptPath"] as? String,
+                argumentsJSON: ConversationSQLiteProbe.prettyFormatJSON(argsJSON),
+                status: .running,
+                startedAt: now,
                 timestamp: now
             )
+            upsertActivity(.toolActivity(ev))
             currentPhaseStartedAt = now
             setState(.toolActivity(ev))
 
         case "schedule":
             let ev = AgentToolActivityEvent(
-                id: "live-sched-\(stepIndex)",
+                id: "live-tool-\(stepIndex)",
                 stepIndex: stepIndex,
                 kind: .schedule,
                 toolName: name,
                 title: "Scheduling task",
                 detail: dict?["Prompt"] as? String,
+                argumentsJSON: ConversationSQLiteProbe.prettyFormatJSON(argsJSON),
+                status: .running,
+                startedAt: now,
                 timestamp: now
             )
+            upsertActivity(.toolActivity(ev))
             currentPhaseStartedAt = now
             setState(.toolActivity(ev))
 
@@ -1123,7 +1193,20 @@ public final class AntigravityTelemetryStore {
 
         if !output.toolActivities.isEmpty {
             for activity in output.toolActivities {
+                // Remove any speculative live-tool row for the same tool so the transcript row replaces it cleanly
+                recentActivity.removeAll {
+                    if case let .toolActivity(existing) = $0 {
+                        return existing.id.hasPrefix("live-tool-") && existing.toolName == activity.toolName
+                    }
+                    return false
+                }
                 upsertActivity(.toolActivity(activity))
+            }
+        }
+
+        if !output.updatedToolActivities.isEmpty {
+            for updated in output.updatedToolActivities {
+                upsertActivity(.toolActivity(updated))
             }
         }
 

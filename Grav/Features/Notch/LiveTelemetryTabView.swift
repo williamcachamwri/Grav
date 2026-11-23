@@ -12,6 +12,8 @@ public struct LiveTelemetryTabView: View {
 
     @State private var isThinkingExpanded: Bool = true
     @State private var isStepsExpanded: Bool = false
+    @State private var expandedToolActivityIDs: Set<String> = []
+    @State private var copiedToolJSONID: String?
     @State private var selectedThoughtIndex: Int = 0
     @State private var hoveredActivityID: String?
     @State private var isHoveringThinkingHeader: Bool = false
@@ -538,6 +540,8 @@ public struct LiveTelemetryTabView: View {
                             label: "Compacting",
                             startedAt: event.startedAt
                         )
+                    case let .waitingForInput(prompt):
+                        liveWaitingForInputRow(prompt: prompt)
                     case .idle where store.runningTaskCount > 0:
                         liveRunningTasksStatusRow(count: store.runningTaskCount)
                     default:
@@ -573,7 +577,16 @@ public struct LiveTelemetryTabView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    @ViewBuilder
     private func activityRow(for item: TelemetryActivityItem) -> some View {
+        if case let .toolActivity(event) = item {
+            expandableToolActivityCard(for: event, item: item)
+        } else {
+            standardActivityRow(for: item)
+        }
+    }
+
+    private func standardActivityRow(for item: TelemetryActivityItem) -> some View {
         let isHovered = hoveredActivityID == item.id
 
         return Button {
@@ -616,6 +629,266 @@ public struct LiveTelemetryTabView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 1:1 Antigravity Expandable MCP / Tool Arguments Card + Live Progress Bar
+
+    private func expandableToolActivityCard(
+        for event: AgentToolActivityEvent,
+        item: TelemetryActivityItem
+    ) -> some View {
+        let hasInspectorBody = (event.argumentsJSON?.isEmpty == false)
+            || (event.detail?.isEmpty == false)
+            || (event.outputPreview?.isEmpty == false)
+        let isRunning = event.status == .running && !store.isPaused
+        let isExpanded = expandedToolActivityIDs.contains(event.id) || (isRunning && hasInspectorBody)
+        let isHovered = hoveredActivityID == item.id
+        let isFailed = event.status == .failed
+
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                guard hasInspectorBody else {
+                    store.activateAntigravityApp()
+                    return
+                }
+                GravOnboardingWelcomeAudio.shared.playTabSwitch()
+                withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.06)) {
+                    if expandedToolActivityIDs.contains(event.id) {
+                        expandedToolActivityIDs.remove(event.id)
+                    } else {
+                        expandedToolActivityIDs.insert(event.id)
+                    }
+                }
+            } label: {
+                VStack(spacing: 0) {
+                    HStack(spacing: 7) {
+                        Image(systemName: isFailed ? "exclamationmark.triangle.fill" : event.kind.symbolName)
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(
+                                isFailed
+                                    ? GravPalette.coral
+                                    : (event.kind == .waitingForInput ? GravPalette.fileEdit : GravPalette.glacialCyan)
+                            )
+                            .frame(width: 14.5, alignment: .center)
+
+                        if let server = event.serverName, !server.isEmpty {
+                            HStack(spacing: 4) {
+                                Text(event.toolName)
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .tracking(-0.15)
+                                    .foregroundStyle(Color.white.opacity(0.90))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                Text("· \(server)")
+                                    .font(.system(size: 11, weight: .regular))
+                                    .foregroundStyle(Color.white.opacity(0.46))
+                                    .fixedSize(horizontal: true, vertical: false)
+                            }
+                        } else {
+                            Text(event.title)
+                                .font(.system(size: 11.5, weight: .medium))
+                                .tracking(-0.15)
+                                .foregroundStyle(event.kind == .waitingForInput ? GravPalette.fileEdit : Color.white.opacity(0.88))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+
+                        Spacer(minLength: 6)
+
+                        if isRunning {
+                            ActiveElapsedTimerText(
+                                startDate: event.startedAt,
+                                endDate: nil,
+                                isActive: true,
+                                font: .system(size: 10, weight: .medium, design: .monospaced),
+                                color: Color(red: 0.30, green: 0.58, blue: 1.0)
+                            )
+                        } else if isFailed {
+                            Text("error")
+                                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(GravPalette.coral)
+                        } else {
+                            Text(event.kind.shortLabel)
+                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Color.white.opacity(0.34))
+                        }
+
+                        if hasInspectorBody {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8.5, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(0.38))
+                                .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5.5)
+
+                    if isRunning {
+                        AntigravityToolProgressBar(reduceMotion: reduceMotion)
+                            .padding(.horizontal, 4)
+                    } else if isFailed {
+                        Capsule(style: .continuous)
+                            .fill(GravPalette.coral.opacity(0.70))
+                            .frame(height: 1.5)
+                            .padding(.horizontal, 4)
+                    }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                        .fill(isExpanded || isRunning ? Color.white.opacity(0.048) : (isHovered ? Color.white.opacity(0.06) : Color.clear))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                                .strokeBorder(
+                                    isRunning
+                                        ? Color(red: 0.24, green: 0.52, blue: 1.0).opacity(0.55)
+                                        : (isFailed ? GravPalette.coral.opacity(0.40) : (isExpanded ? Color.white.opacity(0.10) : Color.clear)),
+                                    lineWidth: 0.75
+                                )
+                        )
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 7.5, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                activityContextMenu(for: item)
+            }
+            .onHover { hovering in
+                hoveredActivityID = hovering ? item.id : (hoveredActivityID == item.id ? nil : hoveredActivityID)
+            }
+
+            if isExpanded && hasInspectorBody {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let argsJSON = event.argumentsJSON, !argsJSON.isEmpty {
+                        Text("Tool arguments")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.62))
+                            .padding(.leading, 2)
+
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack {
+                                Text("json")
+                                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(Color.white.opacity(0.42))
+
+                                Spacer()
+
+                                Button {
+                                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                                    NotchTelemetryHelpers.copyToPasteboard(argsJSON)
+                                    copiedToolJSONID = event.id
+                                    Task { @MainActor in
+                                        try? await Task.sleep(for: .seconds(1.2))
+                                        if copiedToolJSONID == event.id {
+                                            copiedToolJSONID = nil
+                                        }
+                                    }
+                                } label: {
+                                    Image(systemName: copiedToolJSONID == event.id ? "checkmark" : "doc.on.doc")
+                                        .font(.system(size: 9.5, weight: .medium))
+                                        .foregroundStyle(copiedToolJSONID == event.id ? GravPalette.emerald : Color.white.opacity(0.46))
+                                        .frame(width: 18, height: 16)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Copy Tool arguments JSON")
+                            }
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color.white.opacity(0.03))
+
+                            Divider()
+                                .overlay(Color.white.opacity(0.06))
+
+                            ScrollView(.vertical, showsIndicators: false) {
+                                SyntaxHighlightedJSONText(json: argsJSON)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 7)
+                                    .textSelection(.enabled)
+                            }
+                            .frame(maxHeight: 118)
+                        }
+                        .background(
+                            RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                                .fill(Color(red: 0.045, green: 0.050, blue: 0.062))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7.5, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                                )
+                        )
+                    } else if let detail = event.detail, !detail.isEmpty {
+                        Text(detail)
+                            .font(.system(size: 10.5, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.68))
+                            .lineLimit(3)
+                            .padding(.horizontal, 6)
+                    }
+
+                    if isFailed, let errText = event.outputPreview, !errText.isEmpty {
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "xmark.octagon.fill")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(GravPalette.coral)
+                                .padding(.top, 1)
+                            Text(errText)
+                                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                                .foregroundStyle(GravPalette.coral.opacity(0.92))
+                                .lineLimit(4)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                                .fill(GravPalette.coral.opacity(0.09))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                                        .strokeBorder(GravPalette.coral.opacity(0.28), lineWidth: 0.5)
+                                )
+                        )
+                    }
+                }
+                .padding(.top, 6)
+                .padding(.horizontal, 6)
+                .padding(.bottom, 6)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private func liveWaitingForInputRow(prompt: String) -> some View {
+        Button {
+            store.activateAntigravityApp()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "questionmark.bubble.fill")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(GravPalette.fileEdit)
+                    .frame(width: 14.5, alignment: .center)
+
+                Text(prompt)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(GravPalette.fileEdit)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer(minLength: 6)
+
+                Text("Respond →")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.76))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(GravPalette.fileEdit.opacity(0.10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(GravPalette.fileEdit.opacity(0.32), lineWidth: 0.6)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -1005,5 +1278,151 @@ public struct LiveTelemetryTabView: View {
             .frame(maxWidth: 300)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - 1:1 Antigravity Live Tool Progress Bar & Syntax-Highlighted JSON Inspector
+
+private struct AntigravityToolProgressBar: View {
+    var reduceMotion: Bool
+
+    var body: some View {
+        let accent = Color(red: 0.24, green: 0.54, blue: 1.0)
+        if reduceMotion {
+            Capsule(style: .continuous)
+                .fill(accent.opacity(0.85))
+                .frame(height: 1.8)
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                let period = 1.45
+                let phase = (t.truncatingRemainder(dividingBy: period)) / period
+                let norm = phase < 0 ? phase + 1.0 : phase
+                let head = min(1.0, norm * 1.35)
+                let tail = max(0.0, head - 0.42)
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule(style: .continuous)
+                            .fill(accent.opacity(0.18))
+                        Capsule(style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [accent.opacity(0.25), accent, Color(red: 0.54, green: 0.80, blue: 1.0)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(8, geo.size.width * CGFloat(head - tail)))
+                            .offset(x: geo.size.width * CGFloat(tail))
+                    }
+                }
+                .frame(height: 1.8)
+                .clipped()
+            }
+        }
+    }
+}
+
+/// Zero-dependency syntax-highlighted JSON renderer matching Antigravity's dark Tool Arguments palette
+/// (keys in rose-crimson `#F45D89`, string values in lime-green `#A7E864`, numbers/booleans in cyan `#64D2FF`).
+private struct SyntaxHighlightedJSONText: View {
+    let json: String
+
+    private static let keyColor = Color(red: 0.96, green: 0.36, blue: 0.54)
+    private static let stringColor = Color(red: 0.65, green: 0.91, blue: 0.39)
+    private static let literalColor = Color(red: 0.39, green: 0.82, blue: 1.00)
+    private static let punctColor = Color.white.opacity(0.68)
+
+    var body: some View {
+        Text(attributedJSON)
+            .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+            .lineSpacing(2.5)
+    }
+
+    private var attributedJSON: AttributedString {
+        var result = AttributedString()
+        let lines = json.split(separator: "\n", omittingEmptySubsequences: false)
+        for (idx, rawLine) in lines.enumerated() {
+            result.append(highlightLine(String(rawLine)))
+            if idx < lines.count - 1 {
+                result.append(AttributedString("\n"))
+            }
+        }
+        return result
+    }
+
+    private func highlightLine(_ line: String) -> AttributedString {
+        // Match `"key": value`
+        if let colonRange = findTopLevelKeyColon(in: line) {
+            let keyPart = String(line[..<colonRange.lowerBound])
+            let restPart = String(line[colonRange.upperBound...])
+            var attr = styled(keyPart, color: Self.keyColor)
+            attr.append(styled(":", color: Self.punctColor))
+            attr.append(styleValue(restPart))
+            return attr
+        }
+        return styleValue(line)
+    }
+
+    private func findTopLevelKeyColon(in line: String) -> Range<String.Index>? {
+        var inQuotes = false
+        var escaped = false
+        var sawClosingQuote = false
+        var idx = line.startIndex
+        while idx < line.endIndex {
+            let ch = line[idx]
+            if escaped {
+                escaped = false
+            } else if ch == "\\" {
+                escaped = true
+            } else if ch == "\"" {
+                if !inQuotes {
+                    inQuotes = true
+                } else {
+                    inQuotes = false
+                    sawClosingQuote = true
+                }
+            } else if ch == ":" && sawClosingQuote && !inQuotes {
+                return idx..<line.index(after: idx)
+            } else if !inQuotes && !sawClosingQuote && ch != " " && ch != "\t" {
+                return nil
+            }
+            idx = line.index(after: idx)
+        }
+        return nil
+    }
+
+    private func styleValue(_ value: String) -> AttributedString {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        let leadingSpaces = String(value.prefix { $0 == " " || $0 == "\t" })
+        var trailingComma = ""
+        var core = trimmed
+        if core.hasSuffix(",") {
+            trailingComma = ","
+            core = String(core.dropLast())
+        }
+
+        let color: Color
+        if core.hasPrefix("\"") && core.hasSuffix("\"") {
+            color = Self.stringColor
+        } else if core == "true" || core == "false" || core == "null" || Double(core) != nil {
+            color = Self.literalColor
+        } else {
+            color = Self.punctColor
+        }
+
+        var out = styled(leadingSpaces, color: Self.punctColor)
+        out.append(styled(core, color: color))
+        if !trailingComma.isEmpty {
+            out.append(styled(trailingComma, color: Self.punctColor))
+        }
+        return out
+    }
+
+    private func styled(_ text: String, color: Color) -> AttributedString {
+        var a = AttributedString(text)
+        a.foregroundColor = color
+        return a
     }
 }

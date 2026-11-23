@@ -647,6 +647,7 @@ public enum AgentToolActivityKind: String, Sendable, Equatable {
     case workflow
     case schedule
     case marketplace
+    case artifact
     case waitingForInput
     case genericTool
 
@@ -660,6 +661,7 @@ public enum AgentToolActivityKind: String, Sendable, Equatable {
         case .workflow: return "flowchart"
         case .schedule: return "clock.badge.checkmark"
         case .marketplace: return "bag"
+        case .artifact: return "doc.richtext"
         case .waitingForInput: return "questionmark.bubble"
         case .genericTool: return "wrench.and.screwdriver"
         }
@@ -668,17 +670,25 @@ public enum AgentToolActivityKind: String, Sendable, Equatable {
     public var shortLabel: String {
         switch self {
         case .searchWeb: return "Searching"
-        case .mcpTool: return "MCP Tool"
+        case .mcpTool: return "MCP"
         case .browser: return "Browsing"
         case .imageGeneration: return "Generating"
         case .subagent: return "Subagent"
         case .workflow: return "Workflow"
         case .schedule: return "Schedule"
         case .marketplace: return "Marketplace"
+        case .artifact: return "Artifact"
         case .waitingForInput: return "Waiting"
         case .genericTool: return "Tool"
         }
     }
+}
+
+public enum ToolExecutionStatus: String, Sendable, Equatable {
+    case running
+    case succeeded
+    case failed
+    case waiting
 }
 
 public struct AgentToolActivityEvent: Sendable, Equatable, Identifiable {
@@ -686,8 +696,14 @@ public struct AgentToolActivityEvent: Sendable, Equatable, Identifiable {
     public let stepIndex: Int
     public let kind: AgentToolActivityKind
     public let toolName: String
+    public let serverName: String?
     public let title: String
     public let detail: String?
+    public let argumentsJSON: String?
+    public var outputPreview: String?
+    public var status: ToolExecutionStatus
+    public let startedAt: Date
+    public var completedAt: Date?
     public let timestamp: Date
 
     public init(
@@ -695,16 +711,28 @@ public struct AgentToolActivityEvent: Sendable, Equatable, Identifiable {
         stepIndex: Int,
         kind: AgentToolActivityKind,
         toolName: String,
+        serverName: String? = nil,
         title: String,
         detail: String? = nil,
+        argumentsJSON: String? = nil,
+        outputPreview: String? = nil,
+        status: ToolExecutionStatus = .succeeded,
+        startedAt: Date? = nil,
+        completedAt: Date? = nil,
         timestamp: Date = Date()
     ) {
         self.id = id
         self.stepIndex = stepIndex
         self.kind = kind
         self.toolName = toolName
+        self.serverName = serverName
         self.title = title
         self.detail = detail
+        self.argumentsJSON = argumentsJSON
+        self.outputPreview = outputPreview
+        self.status = status
+        self.startedAt = startedAt ?? timestamp
+        self.completedAt = completedAt
         self.timestamp = timestamp
     }
 }
