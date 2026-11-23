@@ -262,26 +262,30 @@ public struct AntigravitySpotlightHit: Sendable, Equatable, Identifiable {
     public let title: String
     public let workspaceName: String?
     public let snippet: String
+    public let chunkStepLabel: String?
     public let lastModified: Date?
     public let stepCount: Int
     public let isRunning: Bool
     public let isUnread: Bool
 
     public init(
+        id: String? = nil,
         conversationID: String,
         title: String,
         workspaceName: String? = nil,
         snippet: String = "",
+        chunkStepLabel: String? = nil,
         lastModified: Date? = nil,
         stepCount: Int = 0,
         isRunning: Bool = false,
         isUnread: Bool = false
     ) {
-        self.id = conversationID
+        self.id = id ?? conversationID
         self.conversationID = conversationID
         self.title = title
         self.workspaceName = workspaceName
         self.snippet = snippet
+        self.chunkStepLabel = chunkStepLabel
         self.lastModified = lastModified
         self.stepCount = stepCount
         self.isRunning = isRunning

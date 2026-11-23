@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import XCTest
 @testable import Grav
 
@@ -1065,5 +1066,84 @@ final class TelemetryStateMachineTests: XCTestCase {
             spriteVersion: 2
         )
         XCTAssertNotEqual(petStateAfterFallback, .failed)
+    }
+
+    func testSpotlightSQLiteFTS5SearchReturnsRealMatchesForEnglishAndVietnamese() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("grav-fts-test-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+
+        let dbURL = root.appendingPathComponent("conversation_summaries.db")
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(dbURL.path, &db), SQLITE_OK)
+        defer { sqlite3_close(db) }
+
+        let schemaSQL = """
+        CREATE TABLE conversation_summaries (
+            conversation_id text PRIMARY KEY,
+            title text NOT NULL DEFAULT '',
+            preview text NOT NULL DEFAULT '',
+            step_count integer NOT NULL DEFAULT 0,
+            last_modified_time datetime NOT NULL,
+            workspace_uris text NOT NULL,
+            status text NOT NULL DEFAULT '',
+            parent_conversation_id text NOT NULL DEFAULT '',
+            not_fully_idle numeric NOT NULL DEFAULT 0,
+            killed numeric NOT NULL DEFAULT 0
+        );
+        CREATE VIRTUAL TABLE conversations_fts USING fts5(
+            conversation_id UNINDEXED,
+            chunk_index UNINDEXED,
+            chunk_first_step UNINDEXED,
+            chunk_last_step UNINDEXED,
+            last_modified_time UNINDEXED,
+            step_count UNINDEXED,
+            last_step_created_at UNINDEXED,
+            archived UNINDEXED,
+            user_step_byte_offsets UNINDEXED,
+            agent_step_byte_offsets UNINDEXED,
+            title,
+            workspace,
+            project,
+            user_body,
+            agent_body,
+            tokenize = 'unicode61 remove_diacritics 2',
+            prefix = '1 2 3'
+        );
+        INSERT INTO conversation_summaries VALUES (
+            'convo-1', 'Grav Telemetry Companion App', 'Overhaul settings panel', 120,
+            '2026-11-23 07:00:00+00:00', '["file:///Users/wica/Grav"]', 'CASCADE_RUN_STATUS_IDLE', '', 0, 0
+        );
+        INSERT INTO conversations_fts VALUES (
+            'convo-1', 0, 42, 60, '2026-11-23 07:00:00+00:00', 120, '2026-11-23 07:00:00+00:00', 0, '', '',
+            'Grav Telemetry Companion App', 'Grav', 'Grav',
+            'thêm mini pet goku và nâng cấp giao diện settings mượt hơn',
+            'Đã thêm Super Saiyan Goku và sửa lỗi 429 quota.'
+        );
+        """
+        XCTAssertEqual(sqlite3_exec(db, schemaSQL, nil, nil, nil), SQLITE_OK)
+
+        // 1. Empty query returns recent sessions
+        let recent = ConversationSQLiteProbe.searchConversations(antigravityRootURL: root, query: "")
+        XCTAssertEqual(recent.count, 1)
+        XCTAssertEqual(recent.first?.conversationID, "convo-1")
+
+        // 2. English FTS5 query finds chunk with exact step label
+        let gokuHits = ConversationSQLiteProbe.searchConversations(antigravityRootURL: root, query: "goku")
+        XCTAssertEqual(gokuHits.count, 1)
+        XCTAssertEqual(gokuHits.first?.chunkStepLabel, "Step 42")
+        XCTAssertTrue(gokuHits.first?.snippet.lowercased().contains("goku") == true)
+
+        // 3. Vietnamese query (including decomposed NFD input) finds exact match
+        let decomposedVN = "giao diện".decomposedStringWithCanonicalMapping
+        let vnHits = ConversationSQLiteProbe.searchConversations(antigravityRootURL: root, query: decomposedVN)
+        XCTAssertEqual(vnHits.count, 1)
+        XCTAssertEqual(vnHits.first?.conversationID, "convo-1")
+
+        // 4. Agent-body-only match picks agent snippet cleanly
+        let agentHits = ConversationSQLiteProbe.searchConversations(antigravityRootURL: root, query: "quota")
+        XCTAssertEqual(agentHits.count, 1)
+        XCTAssertTrue(agentHits.first?.snippet.lowercased().contains("quota") == true)
     }
 }

@@ -754,21 +754,26 @@ public enum ConversationSQLiteProbe {
         limit: Int,
         unreadIDs: Set<String>
     ) -> [AntigravitySpotlightHit] {
+        // NOTE: SQLite FTS5 strictly forbids table aliases or `GROUP BY` when calling `bm25()` / `snippet()`.
+        // Always reference `conversations_fts` directly and deduplicate cleanly in Swift.
         let sql = """
         SELECT
-            f.conversation_id,
-            COALESCE(NULLIF(s.title, ''), f.title),
+            conversations_fts.conversation_id,
+            COALESCE(NULLIF(s.title, ''), conversations_fts.title),
             s.workspace_uris,
-            COALESCE(NULLIF(snippet(conversations_fts, 13, '', '', '…', 18), ''), NULLIF(snippet(conversations_fts, 14, '', '', '…', 18), ''), s.preview),
-            COALESCE(s.last_modified_time, f.last_modified_time),
-            COALESCE(s.step_count, f.step_count),
+            snippet(conversations_fts, 13, '«', '»', '…', 18),
+            snippet(conversations_fts, 14, '«', '»', '…', 18),
+            COALESCE(s.preview, ''),
+            COALESCE(s.last_modified_time, conversations_fts.last_modified_time),
+            COALESCE(s.step_count, conversations_fts.step_count),
             COALESCE(s.status, ''),
-            COALESCE(s.not_fully_idle, 0)
-        FROM conversations_fts f
-        LEFT JOIN conversation_summaries s ON s.conversation_id = f.conversation_id
+            COALESCE(s.not_fully_idle, 0),
+            conversations_fts.chunk_index,
+            conversations_fts.chunk_first_step
+        FROM conversations_fts
+        LEFT JOIN conversation_summaries s ON s.conversation_id = conversations_fts.conversation_id
         WHERE conversations_fts MATCH ?
-        GROUP BY f.conversation_id
-        ORDER BY bm25(conversations_fts), COALESCE(s.last_modified_time, f.last_modified_time) DESC
+        ORDER BY bm25(conversations_fts)
         LIMIT ?;
         """
         var stmt: OpaquePointer?
@@ -779,34 +784,67 @@ public enum ConversationSQLiteProbe {
         matchExpression.withCString { cStr in
             _ = sqlite3_bind_text(stmt, 1, cStr, -1, SQLITE_TRANSIENT)
         }
-        sqlite3_bind_int(stmt, 2, Int32(limit))
+        sqlite3_bind_int(stmt, 2, Int32(max(limit * 3, 40)))
 
         var results: [AntigravitySpotlightHit] = []
+        var perConversationCount: [String: Int] = [:]
+        var seenSnippets: Set<String> = []
+
         while sqlite3_step(stmt) == SQLITE_ROW {
             guard let cid = columnString(stmt, 0), !cid.isEmpty else { continue }
+            let countForConvo = perConversationCount[cid, default: 0]
+            guard countForConvo < 6 else { continue }
+
             let rawTitle = (columnString(stmt, 1) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let workspace = columnString(stmt, 2).flatMap { parseWorkspaceName(from: $0) }
-            let snippet = cleanSnippetText(columnString(stmt, 3) ?? "")
-            let modified = columnString(stmt, 4).flatMap { parseSummaryTimestamp($0) }
-            let stepCount = Int(sqlite3_column_int(stmt, 5))
-            let status = columnString(stmt, 6) ?? ""
-            let notFullyIdle = sqlite3_column_int(stmt, 7) != 0
+            let userSnippet = columnString(stmt, 3) ?? ""
+            let agentSnippet = columnString(stmt, 4) ?? ""
+            let fallbackPreview = columnString(stmt, 5) ?? ""
+            let modified = columnString(stmt, 6).flatMap { parseSummaryTimestamp($0) }
+            let stepCount = Int(sqlite3_column_int(stmt, 7))
+            let status = columnString(stmt, 8) ?? ""
+            let notFullyIdle = sqlite3_column_int(stmt, 9) != 0
+            let chunkIdx = Int(sqlite3_column_int(stmt, 10))
+            let firstStep = Int(sqlite3_column_int(stmt, 11))
+
+            let chosenRawSnippet: String = {
+                if userSnippet.contains("«") { return userSnippet }
+                if agentSnippet.contains("«") { return agentSnippet }
+                if !userSnippet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return userSnippet }
+                if !agentSnippet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return agentSnippet }
+                return fallbackPreview
+            }()
+            let snippet = cleanSnippetText(
+                chosenRawSnippet
+                    .replacingOccurrences(of: "«", with: "")
+                    .replacingOccurrences(of: "»", with: "")
+            )
+            let dedupeKey = "\(cid)|\(snippet.prefix(80))"
+            guard !seenSnippets.contains(dedupeKey) else { continue }
+            seenSnippets.insert(dedupeKey)
+
             let isRunning = notFullyIdle
                 || status == "CASCADE_RUN_STATUS_RUNNING"
                 || status == "CASCADE_RUN_STATUS_BUSY"
 
+            let stepLabel = firstStep > 0 ? "Step \(firstStep)" : nil
+
             results.append(
                 AntigravitySpotlightHit(
+                    id: "\(cid)-chunk-\(chunkIdx)",
                     conversationID: cid,
                     title: rawTitle.isEmpty ? String(cid.prefix(8)) : rawTitle,
                     workspaceName: workspace,
                     snippet: snippet,
+                    chunkStepLabel: stepLabel,
                     lastModified: modified,
                     stepCount: stepCount,
                     isRunning: isRunning,
                     isUnread: unreadIDs.contains(cid)
                 )
             )
+            perConversationCount[cid] = countForConvo + 1
+            if results.count >= limit { break }
         }
         return results
     }
@@ -817,11 +855,27 @@ public enum ConversationSQLiteProbe {
         limit: Int,
         unreadIDs: Set<String>
     ) -> [AntigravitySpotlightHit] {
+        // Fallback substring scan across both summaries AND FTS body columns for punctuation/partial matches
         let sql = """
-        SELECT conversation_id, title, preview, workspace_uris, last_modified_time, step_count, status, not_fully_idle
-        FROM conversation_summaries
-        WHERE killed = 0 AND (title LIKE ? OR preview LIKE ? OR workspace_uris LIKE ?)
-        ORDER BY last_modified_time DESC
+        SELECT
+            conversations_fts.conversation_id,
+            COALESCE(NULLIF(s.title, ''), conversations_fts.title),
+            s.workspace_uris,
+            COALESCE(NULLIF(s.preview, ''), substr(conversations_fts.user_body, 1, 180), substr(conversations_fts.agent_body, 1, 180)),
+            COALESCE(s.last_modified_time, conversations_fts.last_modified_time),
+            COALESCE(s.step_count, conversations_fts.step_count),
+            COALESCE(s.status, ''),
+            COALESCE(s.not_fully_idle, 0),
+            conversations_fts.chunk_index,
+            conversations_fts.chunk_first_step
+        FROM conversations_fts
+        LEFT JOIN conversation_summaries s ON s.conversation_id = conversations_fts.conversation_id
+        WHERE conversations_fts.title LIKE ?
+           OR conversations_fts.user_body LIKE ?
+           OR conversations_fts.agent_body LIKE ?
+           OR COALESCE(s.title, '') LIKE ?
+           OR COALESCE(s.workspace_uris, '') LIKE ?
+        ORDER BY COALESCE(s.last_modified_time, conversations_fts.last_modified_time) DESC
         LIMIT ?;
         """
         var stmt: OpaquePointer?
@@ -831,32 +885,36 @@ public enum ConversationSQLiteProbe {
         let pattern = "%\(query)%"
         let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         pattern.withCString { cStr in
-            _ = sqlite3_bind_text(stmt, 1, cStr, -1, SQLITE_TRANSIENT)
-            _ = sqlite3_bind_text(stmt, 2, cStr, -1, SQLITE_TRANSIENT)
-            _ = sqlite3_bind_text(stmt, 3, cStr, -1, SQLITE_TRANSIENT)
+            for idx: Int32 in 1...5 {
+                _ = sqlite3_bind_text(stmt, idx, cStr, -1, SQLITE_TRANSIENT)
+            }
         }
-        sqlite3_bind_int(stmt, 4, Int32(limit))
+        sqlite3_bind_int(stmt, 6, Int32(limit))
 
         var results: [AntigravitySpotlightHit] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
             guard let cid = columnString(stmt, 0), !cid.isEmpty else { continue }
             let rawTitle = (columnString(stmt, 1) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let preview = cleanSnippetText(columnString(stmt, 2) ?? "")
-            let workspace = columnString(stmt, 3).flatMap { parseWorkspaceName(from: $0) }
+            let workspace = columnString(stmt, 2).flatMap { parseWorkspaceName(from: $0) }
+            let preview = cleanSnippetText(columnString(stmt, 3) ?? "")
             let modified = columnString(stmt, 4).flatMap { parseSummaryTimestamp($0) }
             let stepCount = Int(sqlite3_column_int(stmt, 5))
             let status = columnString(stmt, 6) ?? ""
             let notFullyIdle = sqlite3_column_int(stmt, 7) != 0
+            let chunkIdx = Int(sqlite3_column_int(stmt, 8))
+            let firstStep = Int(sqlite3_column_int(stmt, 9))
             let isRunning = notFullyIdle
                 || status == "CASCADE_RUN_STATUS_RUNNING"
                 || status == "CASCADE_RUN_STATUS_BUSY"
 
             results.append(
                 AntigravitySpotlightHit(
+                    id: "\(cid)-like-\(chunkIdx)",
                     conversationID: cid,
                     title: rawTitle.isEmpty ? String(cid.prefix(8)) : rawTitle,
                     workspaceName: workspace,
                     snippet: preview,
+                    chunkStepLabel: firstStep > 0 ? "Step \(firstStep)" : nil,
                     lastModified: modified,
                     stepCount: stepCount,
                     isRunning: isRunning,
@@ -868,10 +926,13 @@ public enum ConversationSQLiteProbe {
     }
 
     static func buildFTS5MatchExpression(from query: String) -> String? {
-        let tokens = query
+        let normalized = query.precomposedStringWithCanonicalMapping
+        let tokens = normalized
             .split(whereSeparator: { $0.isWhitespace })
             .map { raw -> String in
-                let stripped = raw.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-" }
+                let stripped = raw.unicodeScalars.filter {
+                    CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-"
+                }
                 return String(String.UnicodeScalarView(stripped))
             }
             .filter { !$0.isEmpty }

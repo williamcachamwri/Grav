@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Feature #1: Inline FTS5 Spotlight Search Overlay (`⌘K`)
@@ -54,7 +55,16 @@ public struct AntigravitySpotlightOverlayView: View {
         )
         .shadow(color: Color.black.opacity(0.55), radius: 18, y: 8)
         .onAppear {
+            // Ensure the floating Notch NSPanel becomes key immediately so typing works without extra clicks
+            NSApp.activate(ignoringOtherApps: true)
+            if let notchPanel = NSApp.windows.first(where: { $0 is NSPanel && $0.isVisible }) {
+                notchPanel.makeKeyAndOrderFront(nil)
+            }
             isSearchFocused = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(40))
+                isSearchFocused = true
+            }
             runSearch(query: "")
         }
         .onDisappear {
@@ -204,6 +214,19 @@ public struct AntigravitySpotlightOverlayView: View {
                     }
 
                     Spacer(minLength: 4)
+
+                    if let stepLabel = hit.chunkStepLabel {
+                        Text(stepLabel)
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.white.opacity(0.42))
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.06))
+                            )
+                    }
 
                     if let ws = hit.workspaceName, !ws.isEmpty {
                         Text(ws)
