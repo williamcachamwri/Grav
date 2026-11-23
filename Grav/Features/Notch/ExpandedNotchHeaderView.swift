@@ -145,12 +145,13 @@ public struct ExpandedNotchHeaderView: View {
     }
 
     private var inlineStatusReadout: some View {
-        let isTurbo = store.isTurboMode && !store.isPaused
+        let isTurbo = store.isTurboMode && !store.isPaused && preferences.turboAuraEnabled
+        let turboTheme = preferences.turboAuraTheme
         let runningTasks = store.isPaused ? 0 : store.runningTaskCount
         let effectivePulsing = isActivelyStreaming || runningTasks > 0
         let effectiveDotColor: Color = {
             if isTurbo && (isActivelyStreaming || runningTasks > 0) {
-                return GravPalette.turboEmber
+                return turboTheme.primaryColor
             }
             if runningTasks > 0 && !isActivelyStreaming {
                 return GravPalette.glacialCyan
@@ -162,6 +163,7 @@ public struct ExpandedNotchHeaderView: View {
             if isTurbo {
                 TurboSolarEmblem(
                     isSurging: isActivelyStreaming || runningTasks > 0,
+                    theme: turboTheme,
                     reduceMotion: reduceMotion
                 )
                 .padding(.trailing, 3)
@@ -180,6 +182,7 @@ public struct ExpandedNotchHeaderView: View {
                         compact: true,
                         font: .system(size: 11, weight: .medium),
                         turboMode: isTurbo,
+                        turboTheme: turboTheme,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -192,6 +195,7 @@ public struct ExpandedNotchHeaderView: View {
                         peakOpacity: 0.96,
                         period: 1.55,
                         turboMode: isTurbo,
+                        turboTheme: turboTheme,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -201,6 +205,7 @@ public struct ExpandedNotchHeaderView: View {
                         compact: true,
                         font: .system(size: 11, weight: .medium),
                         turboMode: isTurbo,
+                        turboTheme: turboTheme,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -213,6 +218,7 @@ public struct ExpandedNotchHeaderView: View {
                         peakOpacity: 0.94,
                         period: 1.8,
                         turboMode: isTurbo,
+                        turboTheme: turboTheme,
                         reduceMotion: reduceMotion
                     )
                     .fixedSize(horizontal: true, vertical: false)
@@ -225,6 +231,7 @@ public struct ExpandedNotchHeaderView: View {
                         peakOpacity: 0.96,
                         period: 1.75,
                         turboMode: isTurbo,
+                        turboTheme: turboTheme,
                         reduceMotion: reduceMotion
                     )
                     .monospacedDigit()
@@ -242,7 +249,7 @@ public struct ExpandedNotchHeaderView: View {
                     Text("· \(runningTasks) task\(runningTasks == 1 ? "" : "s")")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .monospacedDigit()
-                        .foregroundStyle((isTurbo ? GravPalette.turboEmber : GravPalette.glacialCyan).opacity(0.88))
+                        .foregroundStyle((isTurbo ? turboTheme.primaryColor : GravPalette.glacialCyan).opacity(0.90))
                         .fixedSize(horizontal: true, vertical: false)
                 }
             } else {
@@ -321,6 +328,7 @@ public struct ExpandedNotchHeaderView: View {
         .popover(isPresented: $isShowingMetricsPopover, arrowEdge: .bottom) {
             SessionTelemetryInspectorPopover(
                 store: store,
+                turboTheme: preferences.turboAuraTheme,
                 reduceMotion: reduceMotion
             )
         }
@@ -388,6 +396,7 @@ public struct ExpandedNotchHeaderView: View {
 /// 3-segment proportional bar.
 private struct SessionTelemetryInspectorPopover: View {
     var store: AntigravityTelemetryStore
+    var turboTheme: SuperSaiyanAuraTheme
     var reduceMotion: Bool
 
     @State private var revealProgress: CGFloat = 0
@@ -467,7 +476,7 @@ private struct SessionTelemetryInspectorPopover: View {
                     value: metrics.inputTokens.formatted()
                 )
                 ledgerRow(
-                    dotColor: store.isTurboMode ? GravPalette.turboEmber : GravPalette.glacialCyan,
+                    dotColor: store.isTurboMode ? turboTheme.primaryColor : GravPalette.glacialCyan,
                     label: "Output",
                     detail: nil,
                     value: metrics.outputTokens.formatted()
@@ -485,7 +494,7 @@ private struct SessionTelemetryInspectorPopover: View {
                         let ctxPct = Int((metrics.contextFillRatio * 100.0).rounded())
                         let barColor: Color = {
                             if metrics.isContextNearCompaction { return GravPalette.fileEdit }
-                            return store.isTurboMode ? GravPalette.turboEmber : GravPalette.glacialCyan
+                            return store.isTurboMode ? turboTheme.primaryColor : GravPalette.glacialCyan
                         }()
 
                         HStack(spacing: 6) {
@@ -540,11 +549,11 @@ private struct SessionTelemetryInspectorPopover: View {
                             if store.isTurboMode {
                                 Image(systemName: "bolt.fill")
                                     .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(GravPalette.turboEmber)
+                                    .foregroundStyle(turboTheme.primaryColor)
                             }
                             Text(store.executionMode.rawValue)
                                 .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                                .foregroundStyle(store.isTurboMode ? GravPalette.turboEmber : Color.white.opacity(0.44))
+                                .foregroundStyle(store.isTurboMode ? turboTheme.primaryColor : Color.white.opacity(0.44))
                         }
                     }
                 }

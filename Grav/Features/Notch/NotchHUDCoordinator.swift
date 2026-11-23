@@ -27,8 +27,12 @@ public final class NotchHUDCoordinator {
     public private(set) var isInstalled: Bool = false
 
     @ObservationIgnored private var isObservingPreferences: Bool = false
+    @ObservationIgnored private var isObservingTurboAudio: Bool = false
     @ObservationIgnored private var lastTrackedPinnedState: Bool = false
     @ObservationIgnored private var lastTelemetryPeekAt: Date = .distantPast
+    @ObservationIgnored private var lastObservedTurboMode: Bool = false
+    @ObservationIgnored private var lastObservedTurboBusy: Bool = false
+    @ObservationIgnored private var lastObservedTurboPhaseKind: Int = 0
     @ObservationIgnored private var accessibilityObserver: NSObjectProtocol?
 
     // MARK: - Init
@@ -72,6 +76,7 @@ public final class NotchHUDCoordinator {
         syncPreferences()
         startAccessibilityObserver()
         startPreferenceObservation()
+        startTurboAudioObservation()
         wireTelemetryPeeks()
 
         let storeRef = store
@@ -79,7 +84,11 @@ public final class NotchHUDCoordinator {
         let preferencesRef = preferences
 
         presenter.install {
-            CollapsedNotchView(store: storeRef, presenter: presenterRef)
+            CollapsedNotchView(
+                store: storeRef,
+                presenter: presenterRef,
+                preferences: preferencesRef
+            )
         } expanded: { [weak self] in
             ExpandedNotchView(
                 store: storeRef,
@@ -106,6 +115,8 @@ public final class NotchHUDCoordinator {
         guard isInstalled else { return }
 
         isObservingPreferences = false
+        isObservingTurboAudio = false
+        SuperSaiyanAudioEngine.shared.stopAllLoops()
         store.onPeekRequested = nil
 
         if let accessibilityObserver {
@@ -265,6 +276,97 @@ public final class NotchHUDCoordinator {
                 self.syncPreferences()
                 self.observePreferencesAndGeometry()
             }
+        }
+    }
+
+    // MARK: - Super Saiyan Turbo Audio Telemetry Reactor
+
+    private func startTurboAudioObservation() {
+        guard !isObservingTurboAudio else { return }
+        isObservingTurboAudio = true
+        lastObservedTurboMode = store.isTurboMode
+        lastObservedTurboBusy = isTurboBusyNow()
+        lastObservedTurboPhaseKind = turboPhaseKind(for: store.state)
+        observeTurboAudioState()
+    }
+
+    private func observeTurboAudioState() {
+        guard isObservingTurboAudio else { return }
+        withObservationTracking {
+            _ = store.state
+            _ = store.isTurboMode
+            _ = store.isPaused
+            _ = store.runningTaskCount
+            _ = store.activeSwarmSnapshot
+            _ = preferences.playSounds
+            _ = preferences.turboAudioEnabled
+            _ = preferences.turboAuraLoopEnabled
+            _ = preferences.turboAuraTheme
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.isObservingTurboAudio else { return }
+                self.reconcileTurboAudio()
+                self.observeTurboAudioState()
+            }
+        }
+    }
+
+    private func isTurboBusyNow() -> Bool {
+        store.state.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil
+    }
+
+    private func turboPhaseKind(for state: TelemetryState) -> Int {
+        switch state {
+        case .idle: return 0
+        case .working: return 1
+        case .thinking: return 2
+        case .replying: return 3
+        case .inspecting: return 4
+        case .editing: return 5
+        case .runningCommand: return 6
+        case .compacting: return 7
+        }
+    }
+
+    private func reconcileTurboAudio() {
+        let turboAudioAllowed = store.isTurboMode
+            && !store.isPaused
+            && preferences.playSounds
+            && preferences.turboAudioEnabled
+        let busyNow = isTurboBusyNow()
+        let phaseKind = turboPhaseKind(for: store.state)
+        let theme = preferences.turboAuraTheme
+
+        let wasTurbo = lastObservedTurboMode
+        let wasBusy = lastObservedTurboBusy
+        let prevPhase = lastObservedTurboPhaseKind
+
+        lastObservedTurboMode = store.isTurboMode
+        lastObservedTurboBusy = busyNow
+        lastObservedTurboPhaseKind = phaseKind
+
+        guard turboAudioAllowed else {
+            SuperSaiyanAudioEngine.shared.setAuraLoopActive(false, theme: theme)
+            return
+        }
+
+        // 1. Seismic Power-Up Eruption when a new chat turn begins in Turbo OR Turbo activates mid-turn
+        let justIgnitedTurn = !wasBusy && busyNow
+        let justActivatedTurbo = !wasTurbo && store.isTurboMode
+        if justIgnitedTurn || justActivatedTurbo {
+            SuperSaiyanAudioEngine.shared.playPowerUpEruption(theme: theme)
+        } else if phaseKind != prevPhase && (phaseKind == 3 || phaseKind == 6) {
+            // 2. Crisp SSJ2 Bio-Electric Lightning Surge when entering live Reply streaming or shell execution
+            SuperSaiyanAudioEngine.shared.playLightningSurge(theme: theme)
+        }
+
+        // 3. Seamless living Super Saiyan Ki Aura Hum while actively thinking/working/streaming
+        let shouldLoop = busyNow && preferences.turboAuraLoopEnabled
+        SuperSaiyanAudioEngine.shared.setAuraLoopActive(shouldLoop, theme: theme)
+
+        // 4. Satisfying descending Ki dispersion whoosh when a Turbo turn finishes
+        if wasBusy && !busyNow {
+            SuperSaiyanAudioEngine.shared.playPowerDownSettle(theme: theme)
         }
     }
 

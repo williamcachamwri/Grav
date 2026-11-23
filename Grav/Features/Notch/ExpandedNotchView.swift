@@ -32,13 +32,15 @@ public struct ExpandedNotchView: View {
     }
 
     public var body: some View {
-        let isTurbo = store.isTurboMode && !store.isPaused
+        let isTurbo = store.isTurboMode && !store.isPaused && preferences.turboAuraEnabled
+        let turboTheme = preferences.turboAuraTheme
 
         ZStack(alignment: .bottom) {
             if isTurbo {
                 TurboKineticAuraCanvas(
                     style: .expanded,
                     isPowerSurging: store.state.isActive || store.runningTaskCount > 0 || store.activeSwarmSnapshot != nil,
+                    theme: turboTheme,
                     cornerRadius: 22,
                     reduceMotion: reduceMotion
                 )
@@ -63,7 +65,8 @@ public struct ExpandedNotchView: View {
                     hasStreamingReply: store.latestResponse?.isStreaming == true && !store.isPaused,
                     hasRunningCommand: store.activeCommand != nil && !store.isPaused,
                     hasActiveSwarm: (store.activeSwarmSnapshot != nil || store.runningSubagentCount > 0) && !store.isPaused,
-                    isTurboMode: isTurbo
+                    isTurboMode: isTurbo,
+                    turboTheme: turboTheme
                 )
 
                 tabViewport

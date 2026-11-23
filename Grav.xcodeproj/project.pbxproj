@@ -50,6 +50,7 @@
 		5AA98595AC4EF3BC7DC89CE1 /* RadiusTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F1A494C81801D1F154CC3A9 /* RadiusTokens.swift */; };
 		5F8E626E4CCD2C8E5B3437BE /* GravOnboardingEntrance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00DFF1005545C70EBE436FDC /* GravOnboardingEntrance.swift */; };
 		5FC3FB7825E8579DF386D360 /* SwarmModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A88509B96DB07EB20A5B641 /* SwarmModels.swift */; };
+		66D8F79069EEC2E194C904A4 /* TurboSuperSaiyanAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8EF7F61BB229CDB9054ABE7 /* TurboSuperSaiyanAudio.swift */; };
 		686921E4B89B40C7B351A501 /* SemanticDot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FC148A4927C7357583D93F4 /* SemanticDot.swift */; };
 		6930D1FA15DB4B5EF2ACB3C5 /* LiquidGlassVibrancy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492EBDF0A1F66AF48FA59A0E /* LiquidGlassVibrancy.swift */; };
 		6CB7AF53459E2FE6B2D26BEC /* LiquidGlassButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD22835A8776EB9C33858DB5 /* LiquidGlassButton.swift */; };
@@ -182,6 +183,7 @@
 		C2E730098AEB351C1ED95E3C /* AntigravityTelemetryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityTelemetryStore.swift; sourceTree = "<group>"; };
 		C3978D7EEA69E801935E810D /* SettingsNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationState.swift; sourceTree = "<group>"; };
 		C5FEA16D62BA28D6673FF57A /* DestructiveCommandParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructiveCommandParserTests.swift; sourceTree = "<group>"; };
+		C8EF7F61BB229CDB9054ABE7 /* TurboSuperSaiyanAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurboSuperSaiyanAudio.swift; sourceTree = "<group>"; };
 		CAE3AC855B91A25DE4BFBA52 /* GravKeycapBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravKeycapBadge.swift; sourceTree = "<group>"; };
 		CCF7798C42F0CFD0241053D9 /* DestructiveCommandParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructiveCommandParser.swift; sourceTree = "<group>"; };
 		D80414C1DE01980C28A80A7E /* ExpandedNotchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpandedNotchView.swift; sourceTree = "<group>"; };
@@ -328,6 +330,7 @@
 				963418B974EA472DFDB529F9 /* SwarmTelemetryTabView.swift */,
 				B0C0F3062C170F4F485AC076 /* TerminalTelemetryTabView.swift */,
 				F4BF614D1FA96706C3300391 /* TurboPowerEngine.swift */,
+				C8EF7F61BB229CDB9054ABE7 /* TurboSuperSaiyanAudio.swift */,
 			);
 			path = Notch;
 			sourceTree = "<group>";
@@ -618,6 +621,7 @@
 				FE47946778FACBC1BA49362C /* TerminalTelemetryTabView.swift in Sources */,
 				4029F5B35986A8AACD88BD51 /* TranscriptTailer.swift in Sources */,
 				148FD29BDE54BBB71A548BC2 /* TurboPowerEngine.swift in Sources */,
+				66D8F79069EEC2E194C904A4 /* TurboSuperSaiyanAudio.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

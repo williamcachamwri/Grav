@@ -252,11 +252,12 @@ struct NotchShimmerText: View {
     var peakOpacity: Double = 0.96
     var period: Double = 1.75
     var turboMode: Bool = false
+    var turboTheme: SuperSaiyanAuraTheme = .superSaiyan
     var reduceMotion: Bool = false
 
     var body: some View {
         let baseColor = turboMode
-            ? Color(red: 1.0, green: 0.86, blue: 0.36).opacity(max(baseOpacity, 0.58))
+            ? turboTheme.innerColor.opacity(max(baseOpacity, 0.60))
             : Color.white.opacity(baseOpacity)
         let effectivePeriod = turboMode ? max(1.05, period * 0.66) : period
 
@@ -264,7 +265,7 @@ struct NotchShimmerText: View {
             Text(text)
                 .font(font)
                 .tracking(tracking)
-                .foregroundStyle(turboMode ? Color(red: 1.0, green: 0.90, blue: 0.45) : Color.white.opacity(0.78))
+                .foregroundStyle(turboMode ? turboTheme.innerColor : Color.white.opacity(0.78))
                 .lineLimit(1)
         } else {
             TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
@@ -285,9 +286,9 @@ struct NotchShimmerText: View {
                             stops: turboMode
                                 ? [
                                     .init(color: .clear, location: max(0, min(1, center - bandHalfWidth))),
-                                    .init(color: Color(red: 1.0, green: 0.62, blue: 0.06).opacity(0.95), location: max(0, min(1, center - bandHalfWidth * 0.48))),
-                                    .init(color: Color(red: 1.0, green: 0.99, blue: 0.90), location: max(0, min(1, center))),
-                                    .init(color: Color(red: 1.0, green: 0.84, blue: 0.14).opacity(0.96), location: max(0, min(1, center + bandHalfWidth * 0.48))),
+                                    .init(color: turboTheme.outerColor.opacity(0.95), location: max(0, min(1, center - bandHalfWidth * 0.48))),
+                                    .init(color: turboTheme.coreColor, location: max(0, min(1, center))),
+                                    .init(color: turboTheme.primaryColor.opacity(0.96), location: max(0, min(1, center + bandHalfWidth * 0.48))),
                                     .init(color: .clear, location: max(0, min(1, center + bandHalfWidth))),
                                 ]
                                 : [
@@ -316,6 +317,7 @@ struct NotchThinkingShimmerLabel: View {
     var compact: Bool = false
     var font: Font = .system(size: 11.5, weight: .medium)
     var turboMode: Bool = false
+    var turboTheme: SuperSaiyanAuraTheme = .superSaiyan
     var reduceMotion: Bool = false
 
     var body: some View {
@@ -338,6 +340,7 @@ struct NotchThinkingShimmerLabel: View {
                 peakOpacity: 0.96,
                 period: 1.85,
                 turboMode: turboMode,
+                turboTheme: turboTheme,
                 reduceMotion: reduceMotion
             )
             .monospacedDigit()
@@ -352,6 +355,7 @@ struct NotchWorkingThinkingShimmerLabel: View {
     var compact: Bool = false
     var font: Font = .system(size: 11.5, weight: .medium)
     var turboMode: Bool = false
+    var turboTheme: SuperSaiyanAuraTheme = .superSaiyan
     var reduceMotion: Bool = false
 
     var body: some View {
@@ -379,6 +383,7 @@ struct NotchWorkingThinkingShimmerLabel: View {
                 peakOpacity: 0.96,
                 period: 1.80,
                 turboMode: turboMode,
+                turboTheme: turboTheme,
                 reduceMotion: reduceMotion
             )
             .monospacedDigit()

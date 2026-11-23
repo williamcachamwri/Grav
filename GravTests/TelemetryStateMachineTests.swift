@@ -636,4 +636,32 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(finalOut.state, .idle)
         XCTAssertTrue(finalOut.peekEvents.contains(.turnCompleted))
     }
+
+    @MainActor
+    func testSuperSaiyanTurboPreferencesPersistenceAndForms() {
+        let suiteName = "com.grav.tests.turbo.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Failed to allocate isolated UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = PreferencesStore(defaults: defaults)
+        XCTAssertTrue(store.turboAuraEnabled)
+        XCTAssertTrue(store.turboAudioEnabled)
+        XCTAssertTrue(store.turboAuraLoopEnabled)
+        XCTAssertEqual(store.turboAuraTheme, .superSaiyan)
+        XCTAssertEqual(SuperSaiyanAuraTheme.allCases.count, 6)
+
+        store.turboAuraEnabled = false
+        store.turboAudioEnabled = false
+        store.turboAuraLoopEnabled = false
+        store.turboAuraTheme = .ultraInstinct
+
+        let reloaded = PreferencesStore(defaults: defaults)
+        XCTAssertFalse(reloaded.turboAuraEnabled)
+        XCTAssertFalse(reloaded.turboAudioEnabled)
+        XCTAssertFalse(reloaded.turboAuraLoopEnabled)
+        XCTAssertEqual(reloaded.turboAuraTheme, .ultraInstinct)
+    }
 }

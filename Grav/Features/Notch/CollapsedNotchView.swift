@@ -12,12 +12,18 @@ import SwiftUI
 public struct CollapsedNotchView: View {
     public var store: AntigravityTelemetryStore
     public var presenter: NotchPresenter
+    public var preferences: PreferencesStore
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(store: AntigravityTelemetryStore, presenter: NotchPresenter) {
+    public init(
+        store: AntigravityTelemetryStore,
+        presenter: NotchPresenter,
+        preferences: PreferencesStore
+    ) {
         self.store = store
         self.presenter = presenter
+        self.preferences = preferences
     }
 
     private var effectiveState: TelemetryState {
@@ -25,7 +31,11 @@ public struct CollapsedNotchView: View {
     }
 
     private var isTurbo: Bool {
-        store.isTurboMode && !store.isPaused
+        store.isTurboMode && !store.isPaused && preferences.turboAuraEnabled
+    }
+
+    private var turboTheme: SuperSaiyanAuraTheme {
+        preferences.turboAuraTheme
     }
 
     public var body: some View {
@@ -39,6 +49,7 @@ public struct CollapsedNotchView: View {
                 TurboKineticAuraCanvas(
                     style: .collapsed,
                     isPowerSurging: isPowerSurging,
+                    theme: turboTheme,
                     cornerRadius: pillHeight * 0.5,
                     reduceMotion: reduceMotion
                 )
@@ -98,7 +109,7 @@ public struct CollapsedNotchView: View {
                             .fill(
                                 RadialGradient(
                                     colors: [
-                                        Color(red: 1.0, green: 0.84, blue: 0.14).opacity(effectiveState.isActive ? 0.45 : 0.22),
+                                        turboTheme.primaryColor.opacity(effectiveState.isActive ? 0.52 : 0.25),
                                         Color.clear,
                                     ],
                                     center: .center,
@@ -186,7 +197,7 @@ public struct CollapsedNotchView: View {
                     Text("Grav")
                         .font(.system(size: 11.5, weight: .medium))
                         .tracking(-0.2)
-                        .foregroundStyle(isTurbo ? Color(red: 1.0, green: 0.96, blue: 0.78) : Color.white.opacity(0.78))
+                        .foregroundStyle(isTurbo ? turboTheme.coreColor : Color.white.opacity(0.78))
                         .transition(.opacity)
                 }
             }
@@ -302,6 +313,7 @@ public struct CollapsedNotchView: View {
             peakOpacity: 0.96,
             period: 1.75,
             turboMode: isTurbo,
+            turboTheme: turboTheme,
             reduceMotion: reduceMotion
         )
         .monospacedDigit()
@@ -314,6 +326,7 @@ public struct CollapsedNotchView: View {
                 compact: compact,
                 font: .system(size: compact ? 11 : 11.5, weight: .medium),
                 turboMode: isTurbo,
+                turboTheme: turboTheme,
                 reduceMotion: reduceMotion
             )
 
@@ -321,7 +334,7 @@ public struct CollapsedNotchView: View {
                 Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .monospacedDigit()
-                    .foregroundStyle((isTurbo ? GravPalette.turboEmber : GravPalette.glacialCyan).opacity(0.88))
+                    .foregroundStyle((isTurbo ? turboTheme.primaryColor : GravPalette.glacialCyan).opacity(0.90))
                     .fixedSize(horizontal: true, vertical: false)
             }
         }
@@ -336,6 +349,7 @@ public struct CollapsedNotchView: View {
             peakOpacity: 0.96,
             period: 1.85,
             turboMode: isTurbo,
+            turboTheme: turboTheme,
             reduceMotion: reduceMotion
         )
     }
@@ -347,6 +361,7 @@ public struct CollapsedNotchView: View {
                 compact: compact,
                 font: .system(size: compact ? 11 : 11.5, weight: .medium),
                 turboMode: isTurbo,
+                turboTheme: turboTheme,
                 reduceMotion: reduceMotion
             )
 
@@ -354,7 +369,7 @@ public struct CollapsedNotchView: View {
                 Text("· \(store.runningTaskCount) task\(store.runningTaskCount == 1 ? "" : "s")")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .monospacedDigit()
-                    .foregroundStyle((isTurbo ? GravPalette.turboEmber : GravPalette.glacialCyan).opacity(0.88))
+                    .foregroundStyle((isTurbo ? turboTheme.primaryColor : GravPalette.glacialCyan).opacity(0.90))
                     .fixedSize(horizontal: true, vertical: false)
             }
         }
@@ -369,6 +384,7 @@ public struct CollapsedNotchView: View {
             peakOpacity: 0.98,
             period: 1.55,
             turboMode: isTurbo,
+            turboTheme: turboTheme,
             reduceMotion: reduceMotion
         )
     }
@@ -508,7 +524,7 @@ public struct CollapsedNotchView: View {
     }
 
     private var workingWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? Color(red: 1.0, green: 0.84, blue: 0.14) : Color.white.opacity(0.72)
+        let tint = isTurbo ? turboTheme.primaryColor : Color.white.opacity(0.72)
         if reduceMotion {
             return .steady([0.38, 0.78, 0.50], barWidth: 1.5, spacing: 1.7, height: 9, tint: tint)
         }
@@ -526,7 +542,7 @@ public struct CollapsedNotchView: View {
     }
 
     private var thinkingWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? Color(red: 1.0, green: 0.86, blue: 0.20) : GravPalette.thinking
+        let tint = isTurbo ? turboTheme.innerColor : GravPalette.thinking
         if reduceMotion {
             return .steady([0.38, 0.85, 0.55, 0.92], barWidth: 1.6, spacing: 1.7, height: 10, tint: tint)
         }
@@ -544,7 +560,7 @@ public struct CollapsedNotchView: View {
     }
 
     private var replyingWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? Color(red: 1.0, green: 0.98, blue: 0.82) : GravPalette.emerald
+        let tint = isTurbo ? turboTheme.coreColor : GravPalette.emerald
         if reduceMotion {
             return .steady([0.52, 0.88, 0.64], barWidth: 1.6, spacing: 1.7, height: 9.5, tint: tint)
         }
@@ -562,7 +578,7 @@ public struct CollapsedNotchView: View {
     }
 
     private var commandWaveStyle: NotchBarsStyle {
-        let tint = isTurbo ? Color(red: 1.0, green: 0.68, blue: 0.10) : Color.white.opacity(0.85)
+        let tint = isTurbo ? turboTheme.outerColor : Color.white.opacity(0.85)
         if reduceMotion {
             return .steady([0.45, 0.9, 0.55], barWidth: 1.6, spacing: 1.7, height: 9.5, tint: tint)
         }
