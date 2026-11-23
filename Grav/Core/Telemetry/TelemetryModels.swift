@@ -192,10 +192,16 @@ public enum AntigravityExecutionMode: String, Sendable, Equatable {
 public struct ConversationAnnotation: Sendable, Equatable {
     public var title: String?
     public var executionMode: AntigravityExecutionMode
+    public var lastUserViewTime: Date?
 
-    public init(title: String? = nil, executionMode: AntigravityExecutionMode = .defaultMode) {
+    public init(
+        title: String? = nil,
+        executionMode: AntigravityExecutionMode = .defaultMode,
+        lastUserViewTime: Date? = nil
+    ) {
         self.title = title
         self.executionMode = executionMode
+        self.lastUserViewTime = lastUserViewTime
     }
 
     /// Parses `~/.gemini/antigravity/annotations/<session-id>.pbtxt` cleanly.
@@ -217,7 +223,216 @@ public struct ConversationAnnotation: Sendable, Equatable {
                 }
             }
         }
-        return ConversationAnnotation(title: parsedTitle, executionMode: mode)
+
+        var parsedViewTime: Date?
+        if let range = pbtxt.range(
+            of: #"last_user_view_time:\s*\{\s*seconds:\s*(\d+)(?:\s+nanos:\s*(\d+))?"#,
+            options: .regularExpression
+        ) {
+            let slice = String(pbtxt[range])
+            if let secRange = slice.range(of: #"seconds:\s*(\d+)"#, options: .regularExpression) {
+                let secDigits = slice[secRange].filter(\.isNumber)
+                if let seconds = TimeInterval(secDigits), seconds > 0 {
+                    var nanos: TimeInterval = 0
+                    if let nanoRange = slice.range(of: #"nanos:\s*(\d+)"#, options: .regularExpression) {
+                        let nanoDigits = slice[nanoRange].filter(\.isNumber)
+                        if let n = TimeInterval(nanoDigits) {
+                            nanos = n / 1_000_000_000.0
+                        }
+                    }
+                    parsedViewTime = Date(timeIntervalSince1970: seconds + nanos)
+                }
+            }
+        }
+
+        return ConversationAnnotation(
+            title: parsedTitle,
+            executionMode: mode,
+            lastUserViewTime: parsedViewTime
+        )
+    }
+}
+
+// MARK: - Antigravity Spotlight Search, Radar, Artifacts & Runtime Inspection Models
+
+/// Single search result returned from Antigravity's local SQLite FTS5 index (`conversations_fts`).
+public struct AntigravitySpotlightHit: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let conversationID: String
+    public let title: String
+    public let workspaceName: String?
+    public let snippet: String
+    public let lastModified: Date?
+    public let stepCount: Int
+    public let isRunning: Bool
+    public let isUnread: Bool
+
+    public init(
+        conversationID: String,
+        title: String,
+        workspaceName: String? = nil,
+        snippet: String = "",
+        lastModified: Date? = nil,
+        stepCount: Int = 0,
+        isRunning: Bool = false,
+        isUnread: Bool = false
+    ) {
+        self.id = conversationID
+        self.conversationID = conversationID
+        self.title = title
+        self.workspaceName = workspaceName
+        self.snippet = snippet
+        self.lastModified = lastModified
+        self.stepCount = stepCount
+        self.isRunning = isRunning
+        self.isUnread = isUnread
+    }
+}
+
+/// High-signal real-time Antigravity attention alert (Approval / Question / Destructive Command).
+public struct AntigravityRadarAlert: Sendable, Equatable, Identifiable {
+    public enum Severity: String, Sendable, Equatable {
+        case approval
+        case destructive
+        case turboCaution
+    }
+
+    public let id: String
+    public let severity: Severity
+    public let title: String
+    public let detail: String
+    public let badge: String
+    public let timestamp: Date
+
+    public init(
+        id: String,
+        severity: Severity,
+        title: String,
+        detail: String,
+        badge: String,
+        timestamp: Date = Date()
+    ) {
+        self.id = id
+        self.severity = severity
+        self.title = title
+        self.detail = detail
+        self.badge = badge
+        self.timestamp = timestamp
+    }
+}
+
+/// Artifact, plan document, scratch script, or image discovered inside `~/.gemini/antigravity/brain/<id>/`.
+public struct SessionArtifactItem: Sendable, Equatable, Identifiable {
+    public enum Kind: String, Sendable, Equatable, CaseIterable {
+        case planDocument = "Docs"
+        case image = "Images"
+        case scratchScript = "Scratch"
+        case file = "Other"
+
+        public var symbolName: String {
+            switch self {
+            case .planDocument: return "doc.richtext"
+            case .image: return "photo"
+            case .scratchScript: return "curlybraces"
+            case .file: return "doc"
+            }
+        }
+    }
+
+    public let id: String
+    public let url: URL
+    public let name: String
+    public let relativePath: String
+    public let kind: Kind
+    public let fileSize: Int64
+    public let modifiedAt: Date
+
+    public init(
+        url: URL,
+        name: String,
+        relativePath: String,
+        kind: Kind,
+        fileSize: Int64,
+        modifiedAt: Date
+    ) {
+        self.id = url.path
+        self.url = url
+        self.name = name
+        self.relativePath = relativePath
+        self.kind = kind
+        self.fileSize = fileSize
+        self.modifiedAt = modifiedAt
+    }
+
+    public var formattedSize: String {
+        ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)
+    }
+}
+
+/// Installed MCP server discovered from `~/.gemini/antigravity/mcp/`.
+public struct MCPServerSummary: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let name: String
+    public let toolCount: Int
+    public let sampleTools: [String]
+    public let directoryURL: URL
+
+    public init(
+        name: String,
+        toolCount: Int,
+        sampleTools: [String],
+        directoryURL: URL
+    ) {
+        self.id = name
+        self.name = name
+        self.toolCount = toolCount
+        self.sampleTools = sampleTools
+        self.directoryURL = directoryURL
+    }
+}
+
+/// Unified background task, daemon, or `/schedule` timer/cron record for the active Antigravity session.
+public struct ScheduledTaskRecord: Sendable, Equatable, Identifiable {
+    public enum Kind: String, Sendable, Equatable {
+        case backgroundTask = "Task"
+        case daemon = "Daemon"
+        case timer = "Timer"
+        case cron = "Cron"
+
+        public var symbolName: String {
+            switch self {
+            case .backgroundTask: return "bolt.horizontal.circle"
+            case .daemon: return "infinity.circle"
+            case .timer: return "timer"
+            case .cron: return "clock.arrow.2.circlepath"
+            }
+        }
+    }
+
+    public let id: String
+    public let title: String
+    public let kind: Kind
+    public let status: ToolExecutionStatus
+    public let detail: String
+    public let logURL: URL?
+    public let updatedAt: Date
+
+    public init(
+        id: String,
+        title: String,
+        kind: Kind,
+        status: ToolExecutionStatus,
+        detail: String,
+        logURL: URL? = nil,
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.kind = kind
+        self.status = status
+        self.detail = detail
+        self.logURL = logURL
+        self.updatedAt = updatedAt
     }
 }
 

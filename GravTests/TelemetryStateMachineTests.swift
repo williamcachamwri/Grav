@@ -925,4 +925,65 @@ final class TelemetryStateMachineTests: XCTestCase {
         XCTAssertEqual(imported?.displayName, "My Custom Goku")
         XCTAssertEqual(imported?.spriteVersionNumber, 2)
     }
+
+    func testAntigravitySpotlightAnnotationAndRuntimeInspection() throws {
+        // 1. Annotation pbtxt parsing (`permission_preset` + `last_user_view_time`)
+        let samplePbtxt = #"title:"Grav Telemetry Companion App" last_user_view_time:{seconds:1795418702 nanos:191000000} permission_preset:AGENT_PERMISSION_PRESET_TURBO"#
+        let parsed = ConversationAnnotation.parse(pbtxt: samplePbtxt)
+        XCTAssertEqual(parsed.title, "Grav Telemetry Companion App")
+        XCTAssertEqual(parsed.executionMode, .turbo)
+        let viewedAt = try XCTUnwrap(parsed.lastUserViewTime)
+        XCTAssertEqual(viewedAt.timeIntervalSince1970, 1795418702.191, accuracy: 0.01)
+
+        // 2. FTS5 match expression builder
+        XCTAssertEqual(
+            ConversationSQLiteProbe.buildFTS5MatchExpression(from: "notch token flow!"),
+            #""notch"* AND "token"* AND "flow"*"#
+        )
+        XCTAssertNil(ConversationSQLiteProbe.buildFTS5MatchExpression(from: "   "))
+
+        // 3. Destructive shell command risk classifier
+        XCTAssertNotNil(AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: "rm -rf /tmp/foo"))
+        XCTAssertNotNil(AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: "git reset --hard HEAD~1"))
+        XCTAssertNotNil(AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: "git push --force origin main"))
+        XCTAssertNotNil(AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: "sudo launchctl unload foo"))
+        XCTAssertNil(AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: "xcodebuild -scheme Grav test"))
+
+        // 4. Artifacts, MCP servers & background tasks scanners on isolated temp fixture
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("grav-anti-fixture-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+
+        let sessionDir = root.appendingPathComponent("brain/session-1", isDirectory: true)
+        let scratchDir = sessionDir.appendingPathComponent("scratch", isDirectory: true)
+        let tasksDir = sessionDir.appendingPathComponent(".system_generated/tasks", isDirectory: true)
+        let mcpReaDir = root.appendingPathComponent("mcp/rea", isDirectory: true)
+        try fm.createDirectory(at: scratchDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: tasksDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: mcpReaDir, withIntermediateDirectories: true)
+
+        try "# Plan".write(to: sessionDir.appendingPathComponent("plan.md"), atomically: true, encoding: .utf8)
+        try "print('hi')".write(to: scratchDir.appendingPathComponent("helper.py"), atomically: true, encoding: .utf8)
+        try "{}".write(to: mcpReaDir.appendingPathComponent("inspect_macho.json"), atomically: true, encoding: .utf8)
+        try "{}".write(to: mcpReaDir.appendingPathComponent("analyze_function.json"), atomically: true, encoding: .utf8)
+        try "build ok\n".write(to: tasksDir.appendingPathComponent("task-99.log"), atomically: true, encoding: .utf8)
+
+        let artifacts = AntigravityRuntimeInspector.scanSessionArtifacts(sessionDirectoryURL: sessionDir)
+        XCTAssertEqual(artifacts.count, 2)
+        XCTAssertTrue(artifacts.contains { $0.name == "plan.md" && $0.kind == .planDocument })
+        XCTAssertTrue(artifacts.contains { $0.name == "helper.py" && $0.kind == .scratchScript })
+
+        let servers = AntigravityRuntimeInspector.scanInstalledMCPServers(antigravityRootURL: root)
+        XCTAssertEqual(servers.count, 1)
+        XCTAssertEqual(servers.first?.name, "rea")
+        XCTAssertEqual(servers.first?.toolCount, 2)
+
+        let tasks = AntigravityRuntimeInspector.buildScheduledTaskRecords(
+            tasksDirectoryURL: tasksDir,
+            commands: [],
+            recentActivity: []
+        )
+        XCTAssertEqual(tasks.count, 1)
+        XCTAssertEqual(tasks.first?.title, "task-99")
+    }
 }

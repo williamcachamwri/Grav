@@ -48,6 +48,76 @@ public final class AntigravityTelemetryStore {
     public internal(set) var isPaused: Bool = false
     public internal(set) var isMonitoring: Bool = false
 
+    // MARK: - Antigravity-Native Power Modules (#1-#4, #6)
+
+    /// Sessions whose latest reply/modification in `conversation_summaries.db` is newer than
+    /// `last_user_view_time` in `~/.gemini/antigravity/annotations/<id>.pbtxt` (Feature #3).
+    public internal(set) var unreadSessionIDs: Set<String> = []
+    /// Artifacts, plans, scratch scripts, and screenshots inside active `brain/<id>/` (Feature #4).
+    public internal(set) var sessionArtifacts: [SessionArtifactItem] = []
+    /// Installed MCP servers discovered in `~/.gemini/antigravity/mcp/` (Feature #6).
+    public internal(set) var mcpServers: [MCPServerSummary] = []
+    /// Active & recent background tasks, daemons, and `/schedule` timers/crons (Feature #6).
+    public internal(set) var scheduledTasks: [ScheduledTaskRecord] = []
+    /// Last radar alert ID explicitly dismissed by the user (Feature #2).
+    public internal(set) var dismissedRadarAlertID: String?
+
+    public var unreadSessionCount: Int {
+        unreadSessionIDs.count
+    }
+
+    public func isSessionUnread(_ sessionID: String) -> Bool {
+        unreadSessionIDs.contains(sessionID)
+    }
+
+    /// Recent MCP tool invocations captured in the active session's telemetry stream (Feature #6).
+    public var mcpToolActivities: [AgentToolActivityEvent] {
+        recentActivity.compactMap { item in
+            guard case let .toolActivity(ev) = item, ev.kind == .mcpTool else { return nil }
+            return ev
+        }
+    }
+
+    /// High-signal real-time Attention / Safety Radar alert for the active session (Feature #2).
+    public var activeRadarAlert: AntigravityRadarAlert? {
+        guard !isPaused else { return nil }
+
+        // 1. Waiting for user input / ask_question / approval
+        if case let .waitingForInput(prompt) = state {
+            let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            let detail = trimmed.isEmpty ? "Antigravity paused for your response or approval." : trimmed
+            let alert = AntigravityRadarAlert(
+                id: "waiting-\(detail.hashValue)",
+                severity: .approval,
+                title: "Approval or Reply Needed",
+                detail: detail,
+                badge: isTurboMode ? "TURBO · WAITING" : "WAITING"
+            )
+            return dismissedRadarAlertID == alert.id ? nil : alert
+        }
+
+        // 2. Destructive shell command currently running or executed within the last 15 seconds
+        let now = Date()
+        for cmd in commands.prefix(4) {
+            let isFresh = cmd.status == .running
+                || now.timeIntervalSince(cmd.completedAt ?? cmd.startedAt) < 15.0
+            guard isFresh else { continue }
+            if let risk = AntigravityRuntimeInspector.assessDestructiveRisk(commandLine: cmd.commandLine) {
+                let alert = AntigravityRadarAlert(
+                    id: "destructive-\(cmd.id)",
+                    severity: .destructive,
+                    title: risk,
+                    detail: cmd.commandLine,
+                    badge: isTurboMode ? "TURBO · RISK" : "HIGH RISK",
+                    timestamp: cmd.startedAt
+                )
+                return dismissedRadarAlertID == alert.id ? nil : alert
+            }
+        }
+
+        return nil
+    }
+
     /// Emitted when a significant telemetry transition warrants a subtle NotchKit `peek()`.
     public var onPeekRequested: ((NotchPeekEvent) -> Void)?
 
@@ -76,6 +146,9 @@ public final class AntigravityTelemetryStore {
     private var lastFinalIdleAt: Date = .distantPast
     private var isSpeculativeWALWorking: Bool = false
     private var idleDecayTask: Task<Void, Never>?
+    private var unreadRefreshTask: Task<Void, Never>?
+    private var artifactsRefreshTask: Task<Void, Never>?
+    private var runtimeInspectionTask: Task<Void, Never>?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var sessionGeneration: UInt64 = 0
 
@@ -113,11 +186,19 @@ public final class AntigravityTelemetryStore {
         refreshConnectionStatus()
         installWorkspaceObservers()
         startConversationDiscovery()
+        refreshUnreadSessions()
+        refreshRuntimeInspection()
     }
 
     public func stop() {
         isMonitoring = false
         cancelIdleDecayTimer()
+        unreadRefreshTask?.cancel()
+        unreadRefreshTask = nil
+        artifactsRefreshTask?.cancel()
+        artifactsRefreshTask = nil
+        runtimeInspectionTask?.cancel()
+        runtimeInspectionTask = nil
         removeWorkspaceObservers()
 
         let currentDiscovery = discovery
@@ -199,6 +280,98 @@ public final class AntigravityTelemetryStore {
 
     public func activateAntigravityApp() {
         appDetector.activateAntigravityApp()
+    }
+
+    public func dismissRadarAlert(_ alertID: String) {
+        dismissedRadarAlertID = alertID
+    }
+
+    /// Root `~/.gemini/antigravity/` directory derived from the active brain folder.
+    public var antigravityRootURL: URL {
+        appDetector.brainDirectoryURL.deletingLastPathComponent()
+    }
+
+    /// Executes an off-main-actor SQLite FTS5 Spotlight search across all local Antigravity conversations (Feature #1).
+    public func searchConversations(query: String, limit: Int = 24) async -> [AntigravitySpotlightHit] {
+        let rootURL = antigravityRootURL
+        let unreadSnapshot = unreadSessionIDs
+        return await Task.detached(priority: .userInitiated) {
+            ConversationSQLiteProbe.searchConversations(
+                antigravityRootURL: rootURL,
+                query: query,
+                limit: limit,
+                unreadIDs: unreadSnapshot
+            )
+        }.value
+    }
+
+    /// Recomputes unread/unseen finished Antigravity sessions by comparing `last_modified_time`
+    /// against `annotations/<id>.pbtxt`'s `last_user_view_time` (Feature #3).
+    public func refreshUnreadSessions() {
+        let rootURL = antigravityRootURL
+        unreadRefreshTask?.cancel()
+        unreadRefreshTask = Task { [weak self] in
+            let unread = await Task.detached(priority: .utility) {
+                ConversationSQLiteProbe.computeUnreadSessionIDs(antigravityRootURL: rootURL)
+            }.value
+            guard !Task.isCancelled, let self else { return }
+            if self.unreadSessionIDs != unread {
+                self.unreadSessionIDs = unread
+            }
+        }
+    }
+
+    /// Scans the active session's `brain/<id>/` directory for plans, markdown docs, scratch scripts, and images (Feature #4).
+    public func refreshSessionArtifacts() {
+        guard let sessionDir = activeSession?.directoryURL else {
+            sessionArtifacts = []
+            return
+        }
+        let generation = sessionGeneration
+        artifactsRefreshTask?.cancel()
+        artifactsRefreshTask = Task { [weak self] in
+            let items = await Task.detached(priority: .utility) {
+                AntigravityRuntimeInspector.scanSessionArtifacts(sessionDirectoryURL: sessionDir)
+            }.value
+            guard !Task.isCancelled, let self, self.sessionGeneration == generation else { return }
+            if self.sessionArtifacts != items {
+                self.sessionArtifacts = items
+            }
+        }
+    }
+
+    /// Refreshes installed MCP servers and active/recent background tasks & `/schedule` records (Feature #6).
+    public func refreshRuntimeInspection() {
+        let rootURL = antigravityRootURL
+        let tasksDir = activeSession?.tasksDirectoryURL
+        let commandsSnapshot = commands
+        let activitySnapshot = recentActivity
+        let generation = sessionGeneration
+
+        runtimeInspectionTask?.cancel()
+        runtimeInspectionTask = Task { [weak self] in
+            let (servers, tasks) = await Task.detached(priority: .utility) {
+                let foundServers = AntigravityRuntimeInspector.scanInstalledMCPServers(antigravityRootURL: rootURL)
+                let foundTasks: [ScheduledTaskRecord]
+                if let tasksDir {
+                    foundTasks = AntigravityRuntimeInspector.buildScheduledTaskRecords(
+                        tasksDirectoryURL: tasksDir,
+                        commands: commandsSnapshot,
+                        recentActivity: activitySnapshot
+                    )
+                } else {
+                    foundTasks = []
+                }
+                return (foundServers, foundTasks)
+            }.value
+            guard !Task.isCancelled, let self, self.sessionGeneration == generation else { return }
+            if self.mcpServers != servers {
+                self.mcpServers = servers
+            }
+            if self.scheduledTasks != tasks {
+                self.scheduledTasks = tasks
+            }
+        }
     }
 
     public func requestBrainFolderAccess() {
@@ -473,6 +646,7 @@ public final class AntigravityTelemetryStore {
         } else {
             activateSession(discovered[0])
         }
+        refreshUnreadSessions()
     }
 
     private func activateSession(_ session: ConversationSession) {
@@ -574,6 +748,9 @@ public final class AntigravityTelemetryStore {
                 // Immediately synchronize live state from SQLite + conversation_summaries.db
                 self.lastSQLiteProbeAt = .distantPast
                 self.handleLiveConversationWALActivity(pulse: WALActivityPulse(deltaBytes: 0, isRapidStreamingBurst: false))
+                self.refreshSessionArtifacts()
+                self.refreshRuntimeInspection()
+                self.refreshUnreadSessions()
             }
 
             // Attach live WAL pulse watcher so `Working` -> `Thinking for Ns` / `Replying` activates at 0ms
@@ -722,6 +899,7 @@ public final class AntigravityTelemetryStore {
                 sessions[idx].title = officialTitle
             }
         }
+        refreshUnreadSessions()
     }
 
     private func handleLiveConversationWALActivity(pulse: WALActivityPulse) {
@@ -1563,6 +1741,9 @@ public final class AntigravityTelemetryStore {
         if state == .idle {
             finalizeActiveThinking()
             finalizeActiveCompactions()
+            refreshUnreadSessions()
+            refreshSessionArtifacts()
+            refreshRuntimeInspection()
         }
     }
 

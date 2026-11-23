@@ -11,6 +11,13 @@ public struct TerminalTelemetryTabView: View {
     @Namespace private var commandHoverNamespace
     @FocusState private var filterFocus: Bool
 
+    private enum SubMode: String, CaseIterable, Identifiable {
+        case commands = "Commands"
+        case tasksAndMCP = "Tasks & MCP"
+        var id: String { rawValue }
+    }
+
+    @State private var subMode: SubMode = .commands
     @State private var hoveredCommandID: String?
     @State private var logFilter: String = ""
     @State private var isAutoScrollEnabled: Bool = true
@@ -38,8 +45,12 @@ public struct TerminalTelemetryTabView: View {
     }
 
     public var body: some View {
-        Group {
-            if store.commands.isEmpty {
+        VStack(spacing: 5) {
+            terminalSubModeBar
+
+            if subMode == .tasksAndMCP {
+                TasksAndMCPMonitorView(store: store)
+            } else if store.commands.isEmpty {
                 emptyState
             } else {
                 HStack(spacing: 8) {
@@ -72,6 +83,43 @@ public struct TerminalTelemetryTabView: View {
             isSearchFieldFocused = false
             copyFeedbackTask?.cancel()
         }
+    }
+
+    private var terminalSubModeBar: some View {
+        HStack(spacing: 6) {
+            ForEach(SubMode.allCases) { mode in
+                let isSelected = subMode == mode
+                let count = mode == .commands
+                    ? store.commands.count
+                    : (store.scheduledTasks.count + store.mcpServers.count)
+                Button {
+                    withAnimation(reduceMotion ? nil : GravMotion.subtleFade) {
+                        subMode = mode
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(mode.rawValue)
+                            .font(.system(size: 10.5, weight: isSelected ? .semibold : .regular))
+                            .foregroundStyle(isSelected ? Color.white.opacity(0.92) : Color.white.opacity(0.42))
+                        if count > 0 {
+                            Text("\(count)")
+                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                .monospacedDigit()
+                                .foregroundStyle(isSelected ? Color.white.opacity(0.58) : Color.white.opacity(0.26))
+                        }
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2.5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                            .fill(isSelected ? Color.white.opacity(0.09) : Color.clear)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 2)
     }
 
     // MARK: - Command Executions List

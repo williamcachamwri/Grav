@@ -7,6 +7,7 @@ public struct ExpandedNotchHeaderView: View {
     public var store: AntigravityTelemetryStore
     public var preferences: PreferencesStore
     public var onOpenSettings: () -> Void
+    public var onOpenSpotlight: (() -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHoveringLogo = false
@@ -16,11 +17,13 @@ public struct ExpandedNotchHeaderView: View {
     public init(
         store: AntigravityTelemetryStore,
         preferences: PreferencesStore,
-        onOpenSettings: @escaping () -> Void
+        onOpenSettings: @escaping () -> Void,
+        onOpenSpotlight: (() -> Void)? = nil
     ) {
         self.store = store
         self.preferences = preferences
         self.onOpenSettings = onOpenSettings
+        self.onOpenSpotlight = onOpenSpotlight
     }
 
     private var stateLabel: String {
@@ -63,8 +66,64 @@ public struct ExpandedNotchHeaderView: View {
 
             sessionSwitcherMenu
 
+            if store.unreadSessionCount > 0 {
+                unreadJumpPill
+            }
+
+            if store.isTurboMode && !store.isPaused {
+                Text("TURBO")
+                    .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.96, green: 0.72, blue: 0.30).opacity(0.92))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1.5)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color(red: 0.96, green: 0.72, blue: 0.30).opacity(0.13))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color(red: 0.96, green: 0.72, blue: 0.30).opacity(0.28), lineWidth: 0.5)
+                            )
+                    )
+                    .fixedSize(horizontal: true, vertical: false)
+                    .help("Antigravity is running in Turbo auto-approval mode")
+            }
+
             inlineStatusReadout
         }
+    }
+
+    private var unreadJumpPill: some View {
+        Button {
+            if let unreadID = store.unreadSessionIDs.first(where: { $0 != store.activeSession?.id })
+                ?? store.unreadSessionIDs.first
+            {
+                GravOnboardingWelcomeAudio.shared.playButtonTap()
+                store.selectSessionByID(unreadID)
+            }
+        } label: {
+            HStack(spacing: 3.5) {
+                Circle()
+                    .fill(GravPalette.glacialCyan)
+                    .frame(width: 4.5, height: 4.5)
+                Text("\(store.unreadSessionCount)")
+                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(GravPalette.glacialCyan.opacity(0.95))
+            }
+            .padding(.horizontal, 5.5)
+            .padding(.vertical, 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(GravPalette.glacialCyan.opacity(0.14))
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .strokeBorder(GravPalette.glacialCyan.opacity(0.30), lineWidth: 0.5)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .help("\(store.unreadSessionCount) Antigravity session(s) finished with unread replies — click to jump")
     }
 
     private var cleanActiveSessionTitle: String {
@@ -87,7 +146,7 @@ public struct ExpandedNotchHeaderView: View {
                         store.selectSession(session)
                     } label: {
                         HStack {
-                            Text(session.title)
+                            Text(store.isSessionUnread(session.id) ? "● \(session.title)" : session.title)
                             if session.id == store.activeSession?.id {
                                 Image(systemName: "checkmark")
                             }
@@ -294,6 +353,21 @@ public struct ExpandedNotchHeaderView: View {
                 .fill(Color.white.opacity(0.10))
                 .frame(width: 0.5, height: 11)
                 .padding(.horizontal, 3)
+
+            if let onOpenSpotlight {
+                Button {
+                    GravOnboardingWelcomeAudio.shared.playButtonTap()
+                    onOpenSpotlight()
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.54))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(NotchChromeButtonStyle(isActive: false, cornerRadius: 6))
+                .help("Search Antigravity History (⌘K)")
+                .accessibilityLabel("Search Antigravity History")
+            }
 
             pauseTelemetryButton
             pinNotchButton

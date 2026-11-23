@@ -697,4 +697,302 @@ public enum ConversationSQLiteProbe {
         }
         return "Waiting for your input"
     }
+
+    // MARK: - Feature #1: Instant FTS5 Spotlight Search across All Antigravity Conversations
+
+    /// Queries Antigravity's native SQLite FTS5 index (`conversations_fts`) joined with `conversation_summaries`.
+    /// When `query` is empty, returns the most recently modified conversations ready for instant jump.
+    public static func searchConversations(
+        antigravityRootURL: URL,
+        query: String,
+        limit: Int = 24,
+        unreadIDs: Set<String> = []
+    ) -> [AntigravitySpotlightHit] {
+        let summariesURL = antigravityRootURL.appendingPathComponent("conversation_summaries.db")
+        guard FileManager.default.fileExists(atPath: summariesURL.path) else { return [] }
+
+        var db: OpaquePointer?
+        let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX
+        guard sqlite3_open_v2(summariesURL.path, &db, flags, nil) == SQLITE_OK, let db else {
+            if let db { sqlite3_close(db) }
+            return []
+        }
+        defer { sqlite3_close(db) }
+        sqlite3_busy_timeout(db, 40)
+
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let boundedLimit = max(1, min(limit, 50))
+
+        if trimmed.isEmpty {
+            return fetchRecentSummaries(db: db, limit: boundedLimit, unreadIDs: unreadIDs)
+        }
+
+        // Primary path: native FTS5 full-text search across title, workspace, user_body, agent_body
+        if let ftsQuery = buildFTS5MatchExpression(from: trimmed) {
+            let ftsHits = queryFTS5(
+                db: db,
+                matchExpression: ftsQuery,
+                limit: boundedLimit,
+                unreadIDs: unreadIDs
+            )
+            if !ftsHits.isEmpty {
+                return ftsHits
+            }
+        }
+
+        // Graceful fallback: LIKE scan over title, preview, and workspace_uris
+        return querySummariesLike(db: db, query: trimmed, limit: boundedLimit, unreadIDs: unreadIDs)
+    }
+
+    private static func fetchRecentSummaries(
+        db: OpaquePointer,
+        limit: Int,
+        unreadIDs: Set<String>
+    ) -> [AntigravitySpotlightHit] {
+        let sql = """
+        SELECT conversation_id, title, preview, workspace_uris, last_modified_time, step_count, status, not_fully_idle
+        FROM conversation_summaries
+        WHERE parent_conversation_id = '' AND killed = 0
+        ORDER BY last_modified_time DESC
+        LIMIT ?;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int(stmt, 1, Int32(limit))
+
+        var results: [AntigravitySpotlightHit] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let cid = columnString(stmt, 0), !cid.isEmpty else { continue }
+            let rawTitle = (columnString(stmt, 1) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let preview = cleanSnippetText(columnString(stmt, 2) ?? "")
+            let workspace = columnString(stmt, 3).flatMap { parseWorkspaceName(from: $0) }
+            let modified = columnString(stmt, 4).flatMap { parseSummaryTimestamp($0) }
+            let stepCount = Int(sqlite3_column_int(stmt, 5))
+            let status = columnString(stmt, 6) ?? ""
+            let notFullyIdle = sqlite3_column_int(stmt, 7) != 0
+            let isRunning = notFullyIdle
+                || status == "CASCADE_RUN_STATUS_RUNNING"
+                || status == "CASCADE_RUN_STATUS_BUSY"
+
+            results.append(
+                AntigravitySpotlightHit(
+                    conversationID: cid,
+                    title: rawTitle.isEmpty ? String(cid.prefix(8)) : rawTitle,
+                    workspaceName: workspace,
+                    snippet: preview,
+                    lastModified: modified,
+                    stepCount: stepCount,
+                    isRunning: isRunning,
+                    isUnread: unreadIDs.contains(cid)
+                )
+            )
+        }
+        return results
+    }
+
+    private static func queryFTS5(
+        db: OpaquePointer,
+        matchExpression: String,
+        limit: Int,
+        unreadIDs: Set<String>
+    ) -> [AntigravitySpotlightHit] {
+        let sql = """
+        SELECT
+            f.conversation_id,
+            COALESCE(NULLIF(s.title, ''), f.title),
+            s.workspace_uris,
+            COALESCE(NULLIF(snippet(conversations_fts, 13, '', '', '…', 18), ''), NULLIF(snippet(conversations_fts, 14, '', '', '…', 18), ''), s.preview),
+            COALESCE(s.last_modified_time, f.last_modified_time),
+            COALESCE(s.step_count, f.step_count),
+            COALESCE(s.status, ''),
+            COALESCE(s.not_fully_idle, 0)
+        FROM conversations_fts f
+        LEFT JOIN conversation_summaries s ON s.conversation_id = f.conversation_id
+        WHERE conversations_fts MATCH ?
+        GROUP BY f.conversation_id
+        ORDER BY bm25(conversations_fts), COALESCE(s.last_modified_time, f.last_modified_time) DESC
+        LIMIT ?;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        matchExpression.withCString { cStr in
+            _ = sqlite3_bind_text(stmt, 1, cStr, -1, SQLITE_TRANSIENT)
+        }
+        sqlite3_bind_int(stmt, 2, Int32(limit))
+
+        var results: [AntigravitySpotlightHit] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let cid = columnString(stmt, 0), !cid.isEmpty else { continue }
+            let rawTitle = (columnString(stmt, 1) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let workspace = columnString(stmt, 2).flatMap { parseWorkspaceName(from: $0) }
+            let snippet = cleanSnippetText(columnString(stmt, 3) ?? "")
+            let modified = columnString(stmt, 4).flatMap { parseSummaryTimestamp($0) }
+            let stepCount = Int(sqlite3_column_int(stmt, 5))
+            let status = columnString(stmt, 6) ?? ""
+            let notFullyIdle = sqlite3_column_int(stmt, 7) != 0
+            let isRunning = notFullyIdle
+                || status == "CASCADE_RUN_STATUS_RUNNING"
+                || status == "CASCADE_RUN_STATUS_BUSY"
+
+            results.append(
+                AntigravitySpotlightHit(
+                    conversationID: cid,
+                    title: rawTitle.isEmpty ? String(cid.prefix(8)) : rawTitle,
+                    workspaceName: workspace,
+                    snippet: snippet,
+                    lastModified: modified,
+                    stepCount: stepCount,
+                    isRunning: isRunning,
+                    isUnread: unreadIDs.contains(cid)
+                )
+            )
+        }
+        return results
+    }
+
+    private static func querySummariesLike(
+        db: OpaquePointer,
+        query: String,
+        limit: Int,
+        unreadIDs: Set<String>
+    ) -> [AntigravitySpotlightHit] {
+        let sql = """
+        SELECT conversation_id, title, preview, workspace_uris, last_modified_time, step_count, status, not_fully_idle
+        FROM conversation_summaries
+        WHERE killed = 0 AND (title LIKE ? OR preview LIKE ? OR workspace_uris LIKE ?)
+        ORDER BY last_modified_time DESC
+        LIMIT ?;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        let pattern = "%\(query)%"
+        let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        pattern.withCString { cStr in
+            _ = sqlite3_bind_text(stmt, 1, cStr, -1, SQLITE_TRANSIENT)
+            _ = sqlite3_bind_text(stmt, 2, cStr, -1, SQLITE_TRANSIENT)
+            _ = sqlite3_bind_text(stmt, 3, cStr, -1, SQLITE_TRANSIENT)
+        }
+        sqlite3_bind_int(stmt, 4, Int32(limit))
+
+        var results: [AntigravitySpotlightHit] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let cid = columnString(stmt, 0), !cid.isEmpty else { continue }
+            let rawTitle = (columnString(stmt, 1) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let preview = cleanSnippetText(columnString(stmt, 2) ?? "")
+            let workspace = columnString(stmt, 3).flatMap { parseWorkspaceName(from: $0) }
+            let modified = columnString(stmt, 4).flatMap { parseSummaryTimestamp($0) }
+            let stepCount = Int(sqlite3_column_int(stmt, 5))
+            let status = columnString(stmt, 6) ?? ""
+            let notFullyIdle = sqlite3_column_int(stmt, 7) != 0
+            let isRunning = notFullyIdle
+                || status == "CASCADE_RUN_STATUS_RUNNING"
+                || status == "CASCADE_RUN_STATUS_BUSY"
+
+            results.append(
+                AntigravitySpotlightHit(
+                    conversationID: cid,
+                    title: rawTitle.isEmpty ? String(cid.prefix(8)) : rawTitle,
+                    workspaceName: workspace,
+                    snippet: preview,
+                    lastModified: modified,
+                    stepCount: stepCount,
+                    isRunning: isRunning,
+                    isUnread: unreadIDs.contains(cid)
+                )
+            )
+        }
+        return results
+    }
+
+    static func buildFTS5MatchExpression(from query: String) -> String? {
+        let tokens = query
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { raw -> String in
+                let stripped = raw.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-" }
+                return String(String.UnicodeScalarView(stripped))
+            }
+            .filter { !$0.isEmpty }
+        guard !tokens.isEmpty else { return nil }
+        return tokens.map { "\"\($0)\"*" }.joined(separator: " AND ")
+    }
+
+    private static func cleanSnippetText(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "<USER_REQUEST>", with: "")
+            .replacingOccurrences(of: "</USER_REQUEST>", with: "")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Feature #3: Unread / Unseen Reply Radar across Parallel Antigravity Sessions
+
+    /// Compares `conversation_summaries.last_modified_time` against each session's
+    /// `~/.gemini/antigravity/annotations/<id>.pbtxt` `last_user_view_time` to detect
+    /// sessions where Antigravity finished replying after the user last viewed them.
+    public static func computeUnreadSessionIDs(
+        antigravityRootURL: URL,
+        candidateSessionIDs: [String]? = nil
+    ) -> Set<String> {
+        let summariesURL = antigravityRootURL.appendingPathComponent("conversation_summaries.db")
+        let annotationsDir = antigravityRootURL.appendingPathComponent("annotations", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: summariesURL.path) else { return [] }
+
+        var db: OpaquePointer?
+        let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX
+        guard sqlite3_open_v2(summariesURL.path, &db, flags, nil) == SQLITE_OK, let db else {
+            if let db { sqlite3_close(db) }
+            return []
+        }
+        defer { sqlite3_close(db) }
+        sqlite3_busy_timeout(db, 30)
+
+        let sql = """
+        SELECT conversation_id, last_modified_time, status, not_fully_idle
+        FROM conversation_summaries
+        WHERE parent_conversation_id = '' AND killed = 0
+        ORDER BY last_modified_time DESC
+        LIMIT 40;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        let allowedSet = candidateSessionIDs.map(Set.init)
+        var unread: Set<String> = []
+        let now = Date()
+
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let cid = columnString(stmt, 0), !cid.isEmpty else { continue }
+            if let allowedSet, !allowedSet.contains(cid) { continue }
+
+            let status = columnString(stmt, 2) ?? ""
+            let notFullyIdle = sqlite3_column_int(stmt, 3) != 0
+            let isRunning = notFullyIdle
+                || status == "CASCADE_RUN_STATUS_RUNNING"
+                || status == "CASCADE_RUN_STATUS_BUSY"
+            // Only flag sessions that actually finished / settled with an unseen update
+            guard !isRunning else { continue }
+
+            guard let modifiedAt = columnString(stmt, 1).flatMap({ parseSummaryTimestamp($0) }) else { continue }
+            // Ignore ancient sessions older than 7 days to keep radar signal crisp
+            guard now.timeIntervalSince(modifiedAt) < 7 * 86_400 else { continue }
+
+            let annotationURL = annotationsDir.appendingPathComponent("\(cid).pbtxt")
+            guard let pbtxt = try? String(contentsOf: annotationURL, encoding: .utf8) else { continue }
+            let annotation = ConversationAnnotation.parse(pbtxt: pbtxt)
+            if let viewedAt = annotation.lastUserViewTime,
+               modifiedAt.timeIntervalSince(viewedAt) > 3.0
+            {
+                unread.insert(cid)
+            }
+        }
+        return unread
+    }
 }

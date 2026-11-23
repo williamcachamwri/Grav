@@ -22,12 +22,14 @@
 		17D285D9AD739CE7637C0C32 /* SettingsSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01EAA770A714E8C5A40AB4A2 /* SettingsSidebarView.swift */; };
 		1940B0E8A7F2C61E35B37300 /* GravOnboardingWelcomeAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AF84ABC6939425A99D95535 /* GravOnboardingWelcomeAudio.swift */; };
 		1F673C8D3324B4B762E3A517 /* GravKeycapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F03068745124FF09F8AAFC /* GravKeycapView.swift */; };
+		1F8ED10D4158BDFD6B886EEB /* ArtifactsQuickLookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 880AE25C7807B0D37644B9B7 /* ArtifactsQuickLookView.swift */; };
 		220A388048F22F57D801797A /* GravUnevenRoundedRectangle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D9D0878C3CE388D1D66853 /* GravUnevenRoundedRectangle.swift */; };
 		2296303BDAE924F5CE36F00D /* DiffComputer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EAA8B09A6284B1B6BE9DC71 /* DiffComputer.swift */; };
 		22A3279FBBE55A4BEA886A3C /* NotchKit in Frameworks */ = {isa = PBXBuildFile; productRef = A2A348B0E7334E8657975F89 /* NotchKit */; };
 		22C3452CF62769FA6E6B3790 /* LiquidGlassSegmentedControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4288E0F5116729219BEF8C7F /* LiquidGlassSegmentedControl.swift */; };
 		26182CD68B70E55949AEBF7E /* ExpandedNotchHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C6FC432DEB452FF3AABBC2 /* ExpandedNotchHeaderView.swift */; };
 		26FD7FC6AE8A7B5490B65371 /* TelemetryStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0358A05600CF6B26370D0C1 /* TelemetryStateMachineTests.swift */; };
+		2B9CBE57E453705D10A957B1 /* AntigravitySpotlightOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28ABDBC0D2B57662A3445A0B /* AntigravitySpotlightOverlayView.swift */; };
 		2D31239101E9F9DC9B4BD2F7 /* GravBrandMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F8A085700195064961A25A /* GravBrandMark.swift */; };
 		2E27405B0CD5047B0E97F6FE /* MiniPetSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91C5365F5C81059CA33138E1 /* MiniPetSettingsPane.swift */; };
 		317F03128A8F1809196E1B17 /* AboutSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89DB957442A77B4D96BE4F37 /* AboutSettingsPane.swift */; };
@@ -47,6 +49,7 @@
 		4F58DD65B1AA05667BA4155A /* GravOnboardingStepRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C6E389E281027F8D41C3CEE /* GravOnboardingStepRail.swift */; };
 		4F79D28498B57147E9EEDE98 /* GravOnboardingMockScenes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 822AB1974605B1FF90493F9A /* GravOnboardingMockScenes.swift */; };
 		4FC91CA7AAF32386126A315B /* GravGlassTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55D9BA2AF11A6EC06321550 /* GravGlassTokens.swift */; };
+		550E5A5FCB1B9D9A5C691FB4 /* AntigravityRuntimeInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AE67EBB45BCAEE88C65CAC5 /* AntigravityRuntimeInspector.swift */; };
 		55C7E80C28E3AFA41C629D95 /* LiquidGlassActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888E4277FA52AC0BCA011AC2 /* LiquidGlassActionBar.swift */; };
 		5AA98595AC4EF3BC7DC89CE1 /* RadiusTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F1A494C81801D1F154CC3A9 /* RadiusTokens.swift */; };
 		5F8E626E4CCD2C8E5B3437BE /* GravOnboardingEntrance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00DFF1005545C70EBE436FDC /* GravOnboardingEntrance.swift */; };
@@ -102,6 +105,7 @@
 		E622AF6644EA2504BCBD04B3 /* LiquidGlassSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 027AFD6E734A2F3F62FDB9E9 /* LiquidGlassSurface.swift */; };
 		E6D2F905233F3F58A3B4E4A0 /* SettingsSidebarProfileHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E1EEF8C1F84D3C98FEC473 /* SettingsSidebarProfileHeader.swift */; };
 		E8C3EA95A5423B1AD66652C3 /* CodexPetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35EC5A3DD76907E4720CA688 /* CodexPetModels.swift */; };
+		E8FBD0070C5D23817BFD42C6 /* TasksAndMCPMonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB734C69268C333299408932 /* TasksAndMCPMonitorView.swift */; };
 		F050502B2AE697B0E8640A73 /* CollapsedNotchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505B023BBFB8599A956A2BD2 /* CollapsedNotchView.swift */; };
 		F0CA558E222110D05A0873EB /* ConversationDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3415985EECA17346AAFB0089 /* ConversationDiscovery.swift */; };
 		F500474F3FB13A751605CEF5 /* NotchSurfacePrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 943F323D0FFF409F539D13E7 /* NotchSurfacePrimitives.swift */; };
@@ -138,6 +142,7 @@
 		14E1EEF8C1F84D3C98FEC473 /* SettingsSidebarProfileHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSidebarProfileHeader.swift; sourceTree = "<group>"; };
 		25A9D7374949A50509394FF1 /* GravMotionSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravMotionSpec.swift; sourceTree = "<group>"; };
 		27BA097A7AA63BB6924CA2C9 /* TaskLogTailerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskLogTailerTests.swift; sourceTree = "<group>"; };
+		28ABDBC0D2B57662A3445A0B /* AntigravitySpotlightOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravitySpotlightOverlayView.swift; sourceTree = "<group>"; };
 		2D7F28CD41D5B618C0539446 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		33E3A022801BA5E9D7B462BA /* GravTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GravTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3415985EECA17346AAFB0089 /* ConversationDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationDiscovery.swift; sourceTree = "<group>"; };
@@ -152,6 +157,7 @@
 		492EBDF0A1F66AF48FA59A0E /* LiquidGlassVibrancy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassVibrancy.swift; sourceTree = "<group>"; };
 		49D9D0878C3CE388D1D66853 /* GravUnevenRoundedRectangle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravUnevenRoundedRectangle.swift; sourceTree = "<group>"; };
 		505B023BBFB8599A956A2BD2 /* CollapsedNotchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollapsedNotchView.swift; sourceTree = "<group>"; };
+		5AE67EBB45BCAEE88C65CAC5 /* AntigravityRuntimeInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityRuntimeInspector.swift; sourceTree = "<group>"; };
 		5D5D7A3171BFD3583CB88FEB /* EventClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventClassifier.swift; sourceTree = "<group>"; };
 		5E5F5B9A0520058DBE81E4F2 /* GravApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravApp.swift; sourceTree = "<group>"; };
 		618357C061B15C3E8E80913D /* Grav.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Grav.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -176,6 +182,7 @@
 		81CC611757009E75C131812E /* MenuBarIconRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconRenderer.swift; sourceTree = "<group>"; };
 		822AB1974605B1FF90493F9A /* GravOnboardingMockScenes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingMockScenes.swift; sourceTree = "<group>"; };
 		852BD2EC804A1743843856FE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		880AE25C7807B0D37644B9B7 /* ArtifactsQuickLookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtifactsQuickLookView.swift; sourceTree = "<group>"; };
 		888E4277FA52AC0BCA011AC2 /* LiquidGlassActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassActionBar.swift; sourceTree = "<group>"; };
 		894368D065C1C9708F4A800D /* TelemetrySettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetrySettingsPane.swift; sourceTree = "<group>"; };
 		89DB957442A77B4D96BE4F37 /* AboutSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsPane.swift; sourceTree = "<group>"; };
@@ -204,6 +211,7 @@
 		C3978D7EEA69E801935E810D /* SettingsNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationState.swift; sourceTree = "<group>"; };
 		C5FEA16D62BA28D6673FF57A /* DestructiveCommandParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructiveCommandParserTests.swift; sourceTree = "<group>"; };
 		CAE3AC855B91A25DE4BFBA52 /* GravKeycapBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravKeycapBadge.swift; sourceTree = "<group>"; };
+		CB734C69268C333299408932 /* TasksAndMCPMonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksAndMCPMonitorView.swift; sourceTree = "<group>"; };
 		CCF7798C42F0CFD0241053D9 /* DestructiveCommandParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructiveCommandParser.swift; sourceTree = "<group>"; };
 		CF6518654DDFD3702450F56B /* GlobalHotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotkeyManager.swift; sourceTree = "<group>"; };
 		D80414C1DE01980C28A80A7E /* ExpandedNotchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpandedNotchView.swift; sourceTree = "<group>"; };
@@ -339,6 +347,7 @@
 			children = (
 				EEB8704214D5B8BD94C2F70D /* ANSIStripper.swift */,
 				7374544BF8CD44B6A91F576D /* AntigravityAppDetector.swift */,
+				5AE67EBB45BCAEE88C65CAC5 /* AntigravityRuntimeInspector.swift */,
 				C2E730098AEB351C1ED95E3C /* AntigravityTelemetryStore.swift */,
 				3415985EECA17346AAFB0089 /* ConversationDiscovery.swift */,
 				7B6F9331B5887AA30D02286A /* ConversationSQLiteProbe.swift */,
@@ -358,6 +367,8 @@
 		96C4209462DB50391133173C /* Notch */ = {
 			isa = PBXGroup;
 			children = (
+				28ABDBC0D2B57662A3445A0B /* AntigravitySpotlightOverlayView.swift */,
+				880AE25C7807B0D37644B9B7 /* ArtifactsQuickLookView.swift */,
 				7160022F8CF851ABB1BB5233 /* CodexMiniPetView.swift */,
 				505B023BBFB8599A956A2BD2 /* CollapsedNotchView.swift */,
 				A7C6FC432DEB452FF3AABBC2 /* ExpandedNotchHeaderView.swift */,
@@ -372,6 +383,7 @@
 				FFB7B35F20C3023A4D53AA2D /* ResponseTelemetryTabView.swift */,
 				E7EE32D22339B9911813728D /* SegmentedModeRail.swift */,
 				963418B974EA472DFDB529F9 /* SwarmTelemetryTabView.swift */,
+				CB734C69268C333299408932 /* TasksAndMCPMonitorView.swift */,
 				B0C0F3062C170F4F485AC076 /* TerminalTelemetryTabView.swift */,
 			);
 			path = Notch;
@@ -596,8 +608,11 @@
 				317F03128A8F1809196E1B17 /* AboutSettingsPane.swift in Sources */,
 				76BBBB98AF50A8F1E4B7B446 /* AdaptiveThemePalette.swift in Sources */,
 				15A515F19FE62EC328A910A5 /* AntigravityAppDetector.swift in Sources */,
+				550E5A5FCB1B9D9A5C691FB4 /* AntigravityRuntimeInspector.swift in Sources */,
+				2B9CBE57E453705D10A957B1 /* AntigravitySpotlightOverlayView.swift in Sources */,
 				02FE7E1616846E92273B0631 /* AntigravityTelemetryStore.swift in Sources */,
 				8CA7E9A88CB1F1895C561CB7 /* AppDelegate.swift in Sources */,
+				1F8ED10D4158BDFD6B886EEB /* ArtifactsQuickLookView.swift in Sources */,
 				87E6847E29063A8E39ABED8C /* CodexMiniPetView.swift in Sources */,
 				E8C3EA95A5423B1AD66652C3 /* CodexPetModels.swift in Sources */,
 				8918995A00E79E3C25738670 /* CodexPetsService.swift in Sources */,
@@ -682,6 +697,7 @@
 				99C6DDB49219B483546F383D /* SwarmSubagentWatcher.swift in Sources */,
 				A8EF34D0A303948C1FB2B25C /* SwarmTelemetryTabView.swift in Sources */,
 				0EA0053BE0125B75F89FED9D /* TaskLogTailer.swift in Sources */,
+				E8FBD0070C5D23817BFD42C6 /* TasksAndMCPMonitorView.swift in Sources */,
 				A8348B77222EB7F1CC64241C /* TelemetryModels.swift in Sources */,
 				31ED620382689ACC323BF8AC /* TelemetrySettingsPane.swift in Sources */,
 				FE47946778FACBC1BA49362C /* TerminalTelemetryTabView.swift in Sources */,

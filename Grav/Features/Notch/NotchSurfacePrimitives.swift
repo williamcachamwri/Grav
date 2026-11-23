@@ -217,6 +217,20 @@ enum NotchTelemetryHelpers {
         }
     }
 
+    /// Semantic telemetry color for a given `ToolExecutionStatus`.
+    static func color(for status: ToolExecutionStatus) -> Color {
+        switch status {
+        case .running:
+            return GravPalette.glacialCyan
+        case .succeeded:
+            return GravPalette.emerald
+        case .failed:
+            return GravPalette.coral
+        case .waiting:
+            return GravPalette.fileEdit
+        }
+    }
+
     /// Semantic telemetry color for high-level `TelemetryState`.
     static func color(for state: TelemetryState, isPaused: Bool) -> Color {
         if isPaused {

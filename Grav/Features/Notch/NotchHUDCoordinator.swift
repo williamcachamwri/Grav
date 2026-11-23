@@ -30,6 +30,7 @@ public final class NotchHUDCoordinator {
     @ObservationIgnored private var lastTrackedPinnedState: Bool = false
     @ObservationIgnored private var lastTelemetryPeekAt: Date = .distantPast
     @ObservationIgnored private var accessibilityObserver: NSObjectProtocol?
+    @ObservationIgnored private var spotlightObserver: NSObjectProtocol?
 
     // MARK: - Init
 
@@ -103,9 +104,31 @@ public final class NotchHUDCoordinator {
 
         isInstalled = true
         syncPreferences()
+        startSpotlightObserver()
 
         if preferences.isNotchPinned {
             presenter.expand(reason: .programmatic)
+        }
+    }
+
+    private func startSpotlightObserver() {
+        if let spotlightObserver {
+            NotificationCenter.default.removeObserver(spotlightObserver)
+        }
+        spotlightObserver = NotificationCenter.default.addObserver(
+            forName: .gravOpenNotchSpotlight,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.presenter.phase != .expanded {
+                    self.presenter.expand(reason: .programmatic)
+                    // Allow ExpandedNotchView to mount if it was collapsed before opening Spotlight
+                    try? await Task.sleep(for: .milliseconds(80))
+                    NotificationCenter.default.post(name: .gravOpenNotchSpotlight, object: self)
+                }
+            }
         }
     }
 
@@ -119,6 +142,10 @@ public final class NotchHUDCoordinator {
         if let accessibilityObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObserver)
             self.accessibilityObserver = nil
+        }
+        if let spotlightObserver {
+            NotificationCenter.default.removeObserver(spotlightObserver)
+            self.spotlightObserver = nil
         }
 
         presenter.uninstall()

@@ -562,18 +562,47 @@ public struct CollapsedNotchView: View {
 
     private func idleTrailingSignal(compact: Bool) -> some View {
         HStack(spacing: 6) {
-            if preferences.showCollapsedTokens && store.tokenMetrics.totalTokens > 0 {
+            if let radar = store.activeRadarAlert, !store.isPaused {
+                HStack(spacing: 4) {
+                    NotchSemanticDot(
+                        color: radar.severity == .destructive
+                            ? Color(red: 0.96, green: 0.36, blue: 0.36)
+                            : Color(red: 0.96, green: 0.72, blue: 0.28),
+                        size: 5,
+                        isPulsing: true
+                    )
+                    Text(radar.severity == .destructive ? "Risk" : "Reply")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.86))
+                        .lineLimit(1)
+                }
+            } else if store.unreadSessionCount > 0 && !store.isPaused {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(GravPalette.glacialCyan)
+                        .frame(width: 5, height: 5)
+                    Text(compact ? "\(store.unreadSessionCount)" : "\(store.unreadSessionCount) unread")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(GravPalette.glacialCyan.opacity(0.92))
+                        .lineLimit(1)
+                }
+            } else if preferences.showCollapsedTokens && store.tokenMetrics.totalTokens > 0 {
                 NotchTokenFlowDisplay(
                     metrics: store.tokenMetrics,
                     isStreaming: false,
                     style: .collapsedIdle(compact: compact),
                     reduceMotion: reduceMotion
                 )
-            }
 
-            Circle()
-                .fill(store.connectionStatus.isAppRunning ? GravPalette.emerald.opacity(0.82) : GravPalette.idleDot)
-                .frame(width: 5, height: 5)
+                Circle()
+                    .fill(store.connectionStatus.isAppRunning ? GravPalette.emerald.opacity(0.82) : GravPalette.idleDot)
+                    .frame(width: 5, height: 5)
+            } else {
+                Circle()
+                    .fill(store.connectionStatus.isAppRunning ? GravPalette.emerald.opacity(0.82) : GravPalette.idleDot)
+                    .frame(width: 5, height: 5)
+            }
         }
         .padding(.trailing, 1)
     }

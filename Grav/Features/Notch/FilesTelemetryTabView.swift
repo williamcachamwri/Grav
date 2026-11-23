@@ -27,6 +27,13 @@ public struct FilesTelemetryTabView: View {
         }
     }
 
+    private enum SubMode: String, CaseIterable, Identifiable {
+        case diffs = "Diffs"
+        case artifacts = "Artifacts"
+        var id: String { rawValue }
+    }
+
+    @State private var subMode: SubMode = .diffs
     @State private var activeFilter: FileFilter = .all
     @State private var hoveredFileID: String?
     @State private var copiedFileID: String?
@@ -57,8 +64,12 @@ public struct FilesTelemetryTabView: View {
     }
 
     public var body: some View {
-        Group {
-            if store.fileChanges.isEmpty {
+        VStack(spacing: 4) {
+            filesSubModeBar
+
+            if subMode == .artifacts {
+                ArtifactsQuickLookView(store: store)
+            } else if store.fileChanges.isEmpty {
                 emptyState
             } else {
                 VStack(spacing: 4) {
@@ -131,6 +142,41 @@ public struct FilesTelemetryTabView: View {
         .onDisappear {
             copyFeedbackTask?.cancel()
         }
+    }
+
+    private var filesSubModeBar: some View {
+        HStack(spacing: 6) {
+            ForEach(SubMode.allCases) { mode in
+                let isSelected = subMode == mode
+                let count = mode == .diffs ? store.fileChanges.count : store.sessionArtifacts.count
+                Button {
+                    withAnimation(reduceMotion ? nil : GravMotion.subtleFade) {
+                        subMode = mode
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(mode.rawValue)
+                            .font(.system(size: 10.5, weight: isSelected ? .semibold : .regular))
+                            .foregroundStyle(isSelected ? Color.white.opacity(0.92) : Color.white.opacity(0.42))
+                        if count > 0 {
+                            Text("\(count)")
+                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                .monospacedDigit()
+                                .foregroundStyle(isSelected ? Color.white.opacity(0.58) : Color.white.opacity(0.26))
+                        }
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2.5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                            .fill(isSelected ? Color.white.opacity(0.09) : Color.clear)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 2)
     }
 
     // MARK: - File Row & Inline Diff Drawer

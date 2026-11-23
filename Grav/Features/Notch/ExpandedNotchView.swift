@@ -1,8 +1,12 @@
 import SwiftUI
 
-/// Expanded 120Hz interactive Notch HUD combining clean header telemetry, segmented mode rail,
-/// directional slide tab transitions, ephemeral copy confirmation toast, and full keyboard navigation
-/// (`1`–`3`, `⌘C`, `ESC`) with zero permanent footer clutter.
+extension Notification.Name {
+    static let gravOpenNotchSpotlight = Notification.Name("com.grav.openNotchSpotlight")
+}
+
+/// Expanded 120Hz interactive Notch HUD combining clean header telemetry, live radar banner,
+/// inline FTS5 Spotlight search (`⌘K`), segmented mode rail, directional slide tab transitions,
+/// ephemeral copy confirmation toast, and full keyboard navigation (`1`–`5`, `⌘K`, `⌘C`, `ESC`).
 public struct ExpandedNotchView: View {
     public var store: AntigravityTelemetryStore
     public var preferences: PreferencesStore
@@ -16,6 +20,7 @@ public struct ExpandedNotchView: View {
     @State private var selectedFileID: String?
     @State private var selectedCommandID: String?
     @State private var isTerminalSearchFocused: Bool = false
+    @State private var isShowingSpotlight: Bool = false
     @State private var statusBannerMessage: String?
     @State private var statusBannerTask: Task<Void, Never>?
 
@@ -37,14 +42,38 @@ public struct ExpandedNotchView: View {
                 ExpandedNotchHeaderView(
                     store: store,
                     preferences: preferences,
-                    onOpenSettings: onOpenSettings
+                    onOpenSettings: onOpenSettings,
+                    onOpenSpotlight: {
+                        withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.08)) {
+                            isShowingSpotlight.toggle()
+                        }
+                    }
                 )
+
+                if let radarAlert = store.activeRadarAlert, !isShowingSpotlight {
+                    AntigravityRadarBannerView(
+                        alert: radarAlert,
+                        onFocusAntigravity: {
+                            store.activateAntigravityApp()
+                        },
+                        onDismiss: {
+                            withAnimation(reduceMotion ? nil : GravMotionSpec.settle.animation) {
+                                store.dismissRadarAlert(radarAlert.id)
+                            }
+                        }
+                    )
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .opacity.combined(with: .move(edge: .top))
+                    )
+                }
 
                 SegmentedModeRail(
                     selection: tabBinding,
                     liveCount: store.recentActivity.count,
                     replyCount: store.responses.count,
-                    filesCount: store.fileChanges.count,
+                    filesCount: store.fileChanges.count + store.sessionArtifacts.count,
                     terminalCount: store.commands.count,
                     swarmCount: store.totalAgentsBadgeCount,
                     hasStreamingReply: store.latestResponse?.isStreaming == true && !store.isPaused,
@@ -57,6 +86,36 @@ public struct ExpandedNotchView: View {
                     .clipped()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+            if isShowingSpotlight {
+                AntigravitySpotlightOverlayView(
+                    store: store,
+                    onSelectSession: { conversationID, focusAntigravity in
+                        store.selectSessionByID(conversationID)
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+                            isShowingSpotlight = false
+                        }
+                        if focusAntigravity {
+                            store.activateAntigravityApp()
+                        } else {
+                            showBanner("Switched session")
+                        }
+                    },
+                    onDismiss: {
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+                            isShowingSpotlight = false
+                        }
+                    }
+                )
+                .padding(.top, 30)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(
+                    reduceMotion
+                        ? .opacity
+                        : .opacity.combined(with: .scale(scale: 0.985, anchor: .top))
+                )
+                .zIndex(10)
+            }
 
             if let message = statusBannerMessage {
                 HStack(spacing: 5) {
@@ -88,14 +147,21 @@ public struct ExpandedNotchView: View {
             }
         }
         .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: statusBannerMessage)
+        .animation(reduceMotion ? nil : GravMotionSpec.settle.animation, value: store.activeRadarAlert?.id)
         .background {
             hiddenShortcutControls
         }
         .onKeyPress(keys: [.escape, "1", "2", "3", "4", "5"]) { keyPress in
             handleKeyPress(keyPress)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .gravOpenNotchSpotlight)) { _ in
+            withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.08)) {
+                isShowingSpotlight = true
+            }
+        }
         .onDisappear {
             statusBannerTask?.cancel()
+            isShowingSpotlight = false
         }
     }
 
@@ -179,11 +245,25 @@ public struct ExpandedNotchView: View {
     private var hiddenShortcutControls: some View {
         Group {
             Button("") {
-                onCollapse()
+                if isShowingSpotlight {
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+                        isShowingSpotlight = false
+                    }
+                } else {
+                    onCollapse()
+                }
             }
             .keyboardShortcut(.escape, modifiers: [])
 
-            if !isTerminalSearchFocused {
+            Button("") {
+                GravOnboardingWelcomeAudio.shared.playButtonTap()
+                withAnimation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.08)) {
+                    isShowingSpotlight.toggle()
+                }
+            }
+            .keyboardShortcut("k", modifiers: [.command])
+
+            if !isTerminalSearchFocused && !isShowingSpotlight {
                 Button("") {
                     copyActiveContext()
                 }
@@ -231,10 +311,16 @@ public struct ExpandedNotchView: View {
 
     private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
         if keyPress.key == .escape {
-            onCollapse()
+            if isShowingSpotlight {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+                    isShowingSpotlight = false
+                }
+            } else {
+                onCollapse()
+            }
             return .handled
         }
-        guard !isTerminalSearchFocused, keyPress.modifiers.isEmpty else {
+        guard !isTerminalSearchFocused, !isShowingSpotlight, keyPress.modifiers.isEmpty else {
             return .ignored
         }
         switch keyPress.characters {

@@ -457,6 +457,15 @@ struct ShortcutsSettingsPane: View {
                 SettingsRowDivider()
 
                 SettingRow(
+                    title: "Spotlight Search History",
+                    description: "Full-text FTS5 search across all Antigravity chats, prompts, and replies."
+                ) {
+                    SettingsKeycapPlate(keys: ["⌘", "K"])
+                }
+
+                SettingsRowDivider()
+
+                SettingRow(
                     title: "Copy Log or Diff",
                     description: "Copy the active command log or selected file diff to the clipboard."
                 ) {

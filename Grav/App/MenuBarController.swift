@@ -114,6 +114,13 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
             symbolName: "rectangle.topthird.inset.filled"
         ))
 
+        menu.addItem(makeMenuItem(
+            title: "Search Antigravity History…",
+            action: #selector(handleSearchHistory),
+            keyEquivalent: "",
+            symbolName: "magnifyingglass"
+        ))
+
         let pinItem = makeMenuItem(
             title: "Pin Notch Open",
             action: #selector(handleTogglePinNotch),
@@ -443,6 +450,13 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         guard let submenu = sessionsSubmenu else { return }
         submenu.removeAllItems()
 
+        if let sessionsParentMenuItem {
+            let unread = store.unreadSessionCount
+            sessionsParentMenuItem.title = unread > 0
+                ? "Active Session (\(unread) unread)"
+                : "Active Session"
+        }
+
         if store.sessions.isEmpty {
             let emptyItem = NSMenuItem(title: "No active Antigravity conversations", action: nil, keyEquivalent: "")
             emptyItem.isEnabled = false
@@ -454,7 +468,8 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
                     .replacingOccurrences(of: "</USER_REQUEST>", with: "")
                     .replacingOccurrences(of: "\n", with: " ")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                let label = cleanTitle.isEmpty ? session.id : String(cleanTitle.prefix(48))
+                let baseLabel = cleanTitle.isEmpty ? session.id : String(cleanTitle.prefix(48))
+                let label = store.isSessionUnread(session.id) ? "● \(baseLabel)" : baseLabel
                 let item = makeMenuItem(
                     title: label,
                     action: #selector(handleSelectSession(_:)),
@@ -514,6 +529,10 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func handleToggleNotch() {
         onToggleNotch?()
+    }
+
+    @objc private func handleSearchHistory() {
+        NotificationCenter.default.post(name: .gravOpenNotchSpotlight, object: nil)
     }
 
     @objc private func handleTogglePinNotch() {
