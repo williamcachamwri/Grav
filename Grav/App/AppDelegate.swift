@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let telemetryStore = AntigravityTelemetryStore()
 
     private(set) var notchHUD: NotchHUDCoordinator?
+    private(set) var desktopPet: DesktopPetCoordinator?
     private(set) var menuBarController: MenuBarController?
     private(set) var settingsWindowController: SettingsWindowController?
     private(set) var onboardingWindowController: OnboardingWindowController?
@@ -25,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Run as a pure menu-bar / notch accessory app (no Dock icon)
         NSApp.setActivationPolicy(.accessory)
+        if let brandIcon = NSImage(named: "GravLogo") {
+            NSApp.applicationIconImage = brandIcon
+        }
 
         // Avoid presenting live windows or global event taps when hosted by XCTest
         guard !isRunningUnderXCTest else { return }
@@ -41,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = notification
         telemetryStore.stop()
         notchHUD?.uninstall()
+        desktopPet?.uninstall()
         menuBarController?.uninstall()
         onboardingWindowController?.close()
         settingsWindowController?.closeWindow()
@@ -75,6 +80,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         self.notchHUD = hud
         hud.install()
+
+        let petCoordinator = DesktopPetCoordinator(
+            store: telemetryStore,
+            preferences: preferences,
+            onOpenPetSettings: { [weak self] in
+                self?.openSettings(tab: .miniPet)
+            },
+            onFocusAntigravity: { [weak self] in
+                self?.telemetryStore.activateAntigravityApp()
+            }
+        )
+        self.desktopPet = petCoordinator
+        petCoordinator.install()
 
         let menuBar = MenuBarController(
             store: telemetryStore,

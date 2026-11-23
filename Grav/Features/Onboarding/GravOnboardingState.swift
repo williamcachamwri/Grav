@@ -54,7 +54,7 @@ enum GravOnboardingStep: String, CaseIterable, Identifiable, Hashable, Sendable 
         case .notchHud:
             return "Live agent reasoning, file diffs, and shell output stay tucked inside your MacBook notch until you glance or hover."
         case .miniPet:
-            return "Bring a crisp pixel companion from codex-pets.net right into your Notch — reacting live as Antigravity thinks, edits, and runs."
+            return "Float a crisp pixel companion from codex-pets.net right on your desktop — reacting live with a status bubble as Antigravity works."
         case .preferences:
             return "Tune how Grav starts up, peeks on telemetry events, and renders macOS Liquid Glass chrome."
         }
@@ -133,7 +133,7 @@ enum GravOnboardingChallenge: String, CaseIterable, Identifiable, Hashable, Send
         case .testMiniPetAnimation:
             return "Preview a live Mini Pet animation state"
         case .customizeMiniPet:
-            return "Tune placement, size, or roaming"
+            return "Tune position, size, or status bubble"
         case .reviewPreferences:
             return "Review startup & HUD behavior"
         }

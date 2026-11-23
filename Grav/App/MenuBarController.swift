@@ -342,12 +342,11 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         submenu.removeAllItems()
 
         let showItem = makeMenuItem(
-            title: "Show Mini Pet",
+            title: preferences.miniPetEnabled ? "Tuck Away Pet" : "Show Desktop Pet",
             action: #selector(handleToggleMiniPet),
             keyEquivalent: "",
-            symbolName: "eye"
+            symbolName: preferences.miniPetEnabled ? "eye.slash" : "eye"
         )
-        showItem.state = preferences.miniPetEnabled ? .on : .off
         submenu.addItem(showItem)
 
         let interactItem = makeMenuItem(
@@ -359,9 +358,27 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         interactItem.isEnabled = preferences.miniPetEnabled
         submenu.addItem(interactItem)
 
+        let bubbleItem = makeMenuItem(
+            title: "Live Status Bubble",
+            action: #selector(handleTogglePetBubble),
+            keyEquivalent: "",
+            symbolName: "text.bubble"
+        )
+        bubbleItem.state = preferences.miniPetShowBubble ? .on : .off
+        submenu.addItem(bubbleItem)
+
+        let floatItem = makeMenuItem(
+            title: "Float Above Windows",
+            action: #selector(handleTogglePetAlwaysOnTop),
+            keyEquivalent: "",
+            symbolName: "macwindow.on.rectangle"
+        )
+        floatItem.state = preferences.miniPetAlwaysOnTop ? .on : .off
+        submenu.addItem(floatItem)
+
         submenu.addItem(.separator())
 
-        let placementHeader = NSMenuItem(title: "Placement", action: nil, keyEquivalent: "")
+        let placementHeader = NSMenuItem(title: "Snap Position", action: nil, keyEquivalent: "")
         placementHeader.isEnabled = false
         submenu.addItem(placementHeader)
 
@@ -516,10 +533,24 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         petsStore.triggerInteractionReaction()
     }
 
+    @objc private func handleTogglePetBubble() {
+        preferences.miniPetShowBubble.toggle()
+        refresh()
+    }
+
+    @objc private func handleTogglePetAlwaysOnTop() {
+        preferences.miniPetAlwaysOnTop.toggle()
+        refresh()
+    }
+
     @objc private func handleSelectPetPlacement(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String,
               let placement = MiniPetPlacement(rawValue: raw)
         else { return }
+        if placement != .free {
+            preferences.miniPetOriginX = nil
+            preferences.miniPetOriginY = nil
+        }
         preferences.miniPetPlacement = placement
         preferences.miniPetEnabled = true
         refresh()

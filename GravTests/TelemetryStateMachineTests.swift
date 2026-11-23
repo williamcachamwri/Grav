@@ -853,26 +853,32 @@ final class TelemetryStateMachineTests: XCTestCase {
         let store1 = PreferencesStore(defaults: defaults)
         XCTAssertTrue(store1.miniPetEnabled)
         XCTAssertEqual(store1.activeMiniPetID, "super-saiyan-goku-combat")
-        XCTAssertEqual(store1.miniPetPlacement, .leading)
-        XCTAssertEqual(store1.miniPetSize, 22.0, accuracy: 0.01)
+        XCTAssertEqual(store1.miniPetPlacement, .topRight)
+        XCTAssertEqual(store1.miniPetSize, 84.0, accuracy: 0.01)
         XCTAssertEqual(store1.miniPetSpeed, 1.0, accuracy: 0.01)
+        XCTAssertTrue(store1.miniPetShowBubble)
+        XCTAssertTrue(store1.miniPetAlwaysOnTop)
         XCTAssertEqual(store1.hoverOpenDelay, 0.15, accuracy: 0.001)
         XCTAssertTrue(store1.autoExpandOnNeedsInput)
         XCTAssertTrue(store1.hapticsEnabled)
 
-        store1.miniPetPlacement = .trailing
-        store1.miniPetSize = 26.0
+        store1.miniPetPlacement = .bottomRight
+        store1.miniPetSize = 104.0
         store1.miniPetSpeed = 1.4
         store1.miniPetRoaming = false
+        store1.miniPetShowBubble = false
+        store1.miniPetAlwaysOnTop = false
         store1.hoverOpenDelay = 0.25
         store1.showCollapsedTokens = false
         store1.autoExpandOnNeedsInput = false
 
         let store2 = PreferencesStore(defaults: defaults)
-        XCTAssertEqual(store2.miniPetPlacement, .trailing)
-        XCTAssertEqual(store2.miniPetSize, 26.0, accuracy: 0.01)
+        XCTAssertEqual(store2.miniPetPlacement, .bottomRight)
+        XCTAssertEqual(store2.miniPetSize, 104.0, accuracy: 0.01)
         XCTAssertEqual(store2.miniPetSpeed, 1.4, accuracy: 0.01)
         XCTAssertFalse(store2.miniPetRoaming)
+        XCTAssertFalse(store2.miniPetShowBubble)
+        XCTAssertFalse(store2.miniPetAlwaysOnTop)
         XCTAssertEqual(store2.hoverOpenDelay, 0.25, accuracy: 0.001)
         XCTAssertFalse(store2.showCollapsedTokens)
         XCTAssertFalse(store2.autoExpandOnNeedsInput)

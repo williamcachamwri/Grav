@@ -26,19 +26,6 @@ public struct CollapsedNotchView: View {
         self.preferences = preferences
     }
 
-    private var collapsedPetSize: CGFloat {
-        let maxAllowed = max(16, presenter.geometry.collapsedHeight - 4)
-        return min(CGFloat(preferences.miniPetSize), maxAllowed)
-    }
-
-    private var showsLeadingPet: Bool {
-        preferences.miniPetEnabled && preferences.miniPetPlacement == .leading
-    }
-
-    private var showsTrailingPet: Bool {
-        preferences.miniPetEnabled && preferences.miniPetPlacement == .trailing
-    }
-
     private var effectiveState: TelemetryState {
         store.isPaused ? .idle : store.state
     }
@@ -83,7 +70,7 @@ public struct CollapsedNotchView: View {
     // MARK: - Leading Wing (Pure Grav Logo + Bare Optical Activity Cue)
 
     private func leadingWing(compact: Bool) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
             Button {
                 store.activateAntigravityApp()
             } label: {
@@ -93,19 +80,9 @@ public struct CollapsedNotchView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Open Antigravity")
 
-            if showsLeadingPet {
-                NotchMiniPetBadge(
-                    store: store,
-                    preferences: preferences,
-                    size: collapsedPetSize
-                )
-                .transition(signalTransition)
-            }
-
             leadingActivityCue(compact: compact)
         }
         .animation(reduceMotion ? nil : islandSpring, value: effectiveState)
-        .animation(reduceMotion ? nil : islandSpring, value: showsLeadingPet)
         .animation(reduceMotion ? nil : GravMotion.subtleFade, value: store.isPaused)
     }
 
@@ -266,20 +243,10 @@ public struct CollapsedNotchView: View {
                     }
                 }
             }
-
-            if showsTrailingPet {
-                NotchMiniPetBadge(
-                    store: store,
-                    preferences: preferences,
-                    size: collapsedPetSize
-                )
-                .transition(signalTransition)
-            }
         }
         .animation(reduceMotion ? nil : islandSpring, value: effectiveState)
         .animation(reduceMotion ? nil : islandSpring, value: store.runningTaskCount)
         .animation(reduceMotion ? nil : islandSpring, value: store.activeSwarmSnapshot?.collapsedRatioBadge)
-        .animation(reduceMotion ? nil : islandSpring, value: showsTrailingPet)
     }
 
     private func swarmTrailingSignal(for swarm: SwarmSnapshot, compact: Bool) -> some View {

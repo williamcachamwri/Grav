@@ -54,6 +54,9 @@ public final class SettingsWindowController: NSWindowController, NSWindowDelegat
         // Elevate to regular app so Grav appears in the menu bar and takes key focus cleanly.
         if !didElevateActivationPolicy {
             NSApp.setActivationPolicy(.regular)
+            if let brandIcon = NSImage(named: "GravLogo") {
+                NSApp.applicationIconImage = brandIcon
+            }
             didElevateActivationPolicy = true
         }
 

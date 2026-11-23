@@ -248,44 +248,58 @@ public struct SettingsSearchEntry: Identifiable, Hashable, Sendable {
             // Mini Pet
             SettingsSearchEntry(
                 .miniPet,
-                section: "Notch Mini Pet",
-                title: "Show Mini Pet",
-                detail: "Display a reactive Codex pixel companion inside Grav's Notch HUD.",
-                keywords: ["pet", "codex", "goku", "toggle", "enable"]
+                section: "Desktop Companion",
+                title: "Show Floating Desktop Pet",
+                detail: "Keep a reactive Codex pixel companion floating on your desktop.",
+                keywords: ["pet", "codex", "goku", "toggle", "enable", "tuck away", "desktop"]
             ),
             SettingsSearchEntry(
                 .miniPet,
-                section: "Notch Mini Pet",
-                title: "Pet Placement",
-                detail: "Place the Mini Pet on the leading wing, trailing wing, or expanded HUD only.",
-                keywords: ["position", "leading", "trailing", "expanded"]
+                section: "Desktop Companion",
+                title: "Snap Position",
+                detail: "Snap the floating desktop pet to Top Right, Bottom Right, Bottom Left, or drag freely.",
+                keywords: ["position", "corner", "top right", "bottom right", "drag", "free"]
             ),
             SettingsSearchEntry(
                 .miniPet,
-                section: "Notch Mini Pet",
+                section: "Desktop Companion",
                 title: "Pet Size",
-                detail: "Adjust pixel height of the Mini Pet inside the collapsed Notch pill.",
-                keywords: ["scale", "height", "size", "slider"]
+                detail: "Adjust size of the floating desktop pet from 48 pt to 144 pt.",
+                keywords: ["scale", "height", "size", "resize", "slider"]
             ),
             SettingsSearchEntry(
                 .miniPet,
-                section: "Notch Mini Pet",
+                section: "Desktop Companion",
                 title: "Animation Speed",
                 detail: "Speed up or slow down the Mini Pet's sprite frame rate.",
                 keywords: ["fps", "cadence", "tempo", "speed"]
             ),
             SettingsSearchEntry(
                 .miniPet,
-                section: "Notch Mini Pet",
-                title: "Idle Roaming & Glances",
+                section: "Desktop Companion",
+                title: "Live Status Bubble",
+                detail: "Display Antigravity's live focus, diff, or prompt directly below the pet.",
+                keywords: ["bubble", "speech", "tooltip", "status", "codex"]
+            ),
+            SettingsSearchEntry(
+                .miniPet,
+                section: "Desktop Companion",
+                title: "Float Above All Windows",
+                detail: "Keep the desktop pet floating over apps across all macOS Spaces.",
+                keywords: ["always on top", "floating", "overlay", "spaces"]
+            ),
+            SettingsSearchEntry(
+                .miniPet,
+                section: "Desktop Companion",
+                title: "Idle Roaming & Patrol",
                 detail: "Allow the Mini Pet to look around and patrol while Antigravity is idle.",
                 keywords: ["roam", "patrol", "look", "idle"]
             ),
             SettingsSearchEntry(
                 .miniPet,
-                section: "Notch Mini Pet",
+                section: "Desktop Companion",
                 title: "Click to Interact",
-                detail: "Click the Mini Pet in the Notch to trigger wave and jump animations.",
+                detail: "Click the desktop pet to trigger wave and jump animations.",
                 keywords: ["click", "tap", "wave", "jump", "interact"]
             ),
             SettingsSearchEntry(

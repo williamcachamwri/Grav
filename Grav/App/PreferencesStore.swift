@@ -44,7 +44,7 @@ public enum GravPreferenceKeys {
     public static let showMenuBarIcon = "grav.showMenuBarIcon"
     public static let playSounds = "grav.playSounds"
 
-    // Mini Pet preferences
+    // Mini Pet preferences (Codex-style floating desktop companion)
     public static let miniPetEnabled = "grav.miniPetEnabled"
     public static let activeMiniPetID = "grav.activeMiniPetID"
     public static let miniPetPlacement = "grav.miniPetPlacement"
@@ -52,6 +52,10 @@ public enum GravPreferenceKeys {
     public static let miniPetSpeed = "grav.miniPetSpeed"
     public static let miniPetInteractiveClick = "grav.miniPetInteractiveClick"
     public static let miniPetRoaming = "grav.miniPetRoaming"
+    public static let miniPetShowBubble = "grav.miniPetShowBubble"
+    public static let miniPetAlwaysOnTop = "grav.miniPetAlwaysOnTop"
+    public static let miniPetOriginX = "grav.miniPetOriginX"
+    public static let miniPetOriginY = "grav.miniPetOriginY"
 
     // Expanded Notch HUD & UI customizations
     public static let hoverOpenDelay = "grav.hoverOpenDelay"
@@ -134,6 +138,36 @@ public final class PreferencesStore {
         didSet { defaults.set(miniPetRoaming, forKey: GravPreferenceKeys.miniPetRoaming) }
     }
 
+    public var miniPetShowBubble: Bool {
+        didSet { defaults.set(miniPetShowBubble, forKey: GravPreferenceKeys.miniPetShowBubble) }
+    }
+
+    public var miniPetAlwaysOnTop: Bool {
+        didSet { defaults.set(miniPetAlwaysOnTop, forKey: GravPreferenceKeys.miniPetAlwaysOnTop) }
+    }
+
+    /// Saved screen X coordinate when user drags the desktop pet freely (`nil` uses `miniPetPlacement` snap).
+    public var miniPetOriginX: Double? {
+        didSet {
+            if let miniPetOriginX {
+                defaults.set(miniPetOriginX, forKey: GravPreferenceKeys.miniPetOriginX)
+            } else {
+                defaults.removeObject(forKey: GravPreferenceKeys.miniPetOriginX)
+            }
+        }
+    }
+
+    /// Saved screen Y coordinate when user drags the desktop pet freely (`nil` uses `miniPetPlacement` snap).
+    public var miniPetOriginY: Double? {
+        didSet {
+            if let miniPetOriginY {
+                defaults.set(miniPetOriginY, forKey: GravPreferenceKeys.miniPetOriginY)
+            } else {
+                defaults.removeObject(forKey: GravPreferenceKeys.miniPetOriginY)
+            }
+        }
+    }
+
     // MARK: - Expanded Notch HUD & UI Customizations
 
     public var hoverOpenDelay: Double {
@@ -187,14 +221,19 @@ public final class PreferencesStore {
         {
             self.miniPetPlacement = parsedPlacement
         } else {
-            self.miniPetPlacement = .leading
+            self.miniPetPlacement = .topRight
         }
-        let storedPetSize = defaults.object(forKey: GravPreferenceKeys.miniPetSize) as? Double ?? 22.0
-        self.miniPetSize = min(32.0, max(16.0, storedPetSize))
+        let storedPetSize = defaults.object(forKey: GravPreferenceKeys.miniPetSize) as? Double ?? 84.0
+        // Migrate legacy tiny Notch-era values (< 48) cleanly to the floating desktop default (84 pt)
+        self.miniPetSize = storedPetSize < 48.0 ? 84.0 : min(144.0, max(48.0, storedPetSize))
         let storedPetSpeed = defaults.object(forKey: GravPreferenceKeys.miniPetSpeed) as? Double ?? 1.0
         self.miniPetSpeed = min(2.0, max(0.5, storedPetSpeed))
         self.miniPetInteractiveClick = defaults.object(forKey: GravPreferenceKeys.miniPetInteractiveClick) as? Bool ?? true
         self.miniPetRoaming = defaults.object(forKey: GravPreferenceKeys.miniPetRoaming) as? Bool ?? true
+        self.miniPetShowBubble = defaults.object(forKey: GravPreferenceKeys.miniPetShowBubble) as? Bool ?? true
+        self.miniPetAlwaysOnTop = defaults.object(forKey: GravPreferenceKeys.miniPetAlwaysOnTop) as? Bool ?? true
+        self.miniPetOriginX = defaults.object(forKey: GravPreferenceKeys.miniPetOriginX) as? Double
+        self.miniPetOriginY = defaults.object(forKey: GravPreferenceKeys.miniPetOriginY) as? Double
 
         let storedHoverDelay = defaults.object(forKey: GravPreferenceKeys.hoverOpenDelay) as? Double ?? 0.15
         self.hoverOpenDelay = min(0.50, max(0.05, storedHoverDelay))

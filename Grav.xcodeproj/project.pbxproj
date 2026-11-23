@@ -43,6 +43,7 @@
 		4580DCAAA4A4BC098EDE595C /* GravButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6D0C56A09AC458AF195BB2 /* GravButtonStyles.swift */; };
 		45F518C3D7C1769690E52D52 /* MenuBarIconRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81CC611757009E75C131812E /* MenuBarIconRenderer.swift */; };
 		47A7BD35D8CD93D9FF066423 /* ProportionalDiffBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A7DDBE2B628D9E16B0F25E /* ProportionalDiffBar.swift */; };
+		4A19BAF538A83BA145E1E9E3 /* DesktopPetCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 429E6F7EDCD1B8795342874C /* DesktopPetCoordinator.swift */; };
 		4F58DD65B1AA05667BA4155A /* GravOnboardingStepRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C6E389E281027F8D41C3CEE /* GravOnboardingStepRail.swift */; };
 		4F79D28498B57147E9EEDE98 /* GravOnboardingMockScenes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 822AB1974605B1FF90493F9A /* GravOnboardingMockScenes.swift */; };
 		4FC91CA7AAF32386126A315B /* GravGlassTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55D9BA2AF11A6EC06321550 /* GravGlassTokens.swift */; };
@@ -93,6 +94,7 @@
 		DD0ABF5CABD8F77A3D6574B9 /* GeneralSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72CD0B6FECEE6F1844388B13 /* GeneralSettingsPane.swift */; };
 		DD268DF32CD8F6632534C956 /* LiveTelemetryTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FCDFDB2CAD4122B82BB0F56 /* LiveTelemetryTabView.swift */; };
 		E031E6062709194FAB3D56F2 /* GravMotionSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25A9D7374949A50509394FF1 /* GravMotionSpec.swift */; };
+		E13FA59EAAA2801275DABD10 /* DesktopPetOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABF01EFE3FC18E5E14F2F396 /* DesktopPetOverlayView.swift */; };
 		E37B1CE4EB53B218A266DE6B /* EventClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E08A338BAAE53631D2537EE /* EventClassifierTests.swift */; };
 		E622AF6644EA2504BCBD04B3 /* LiquidGlassSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 027AFD6E734A2F3F62FDB9E9 /* LiquidGlassSurface.swift */; };
 		E6D2F905233F3F58A3B4E4A0 /* SettingsSidebarProfileHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E1EEF8C1F84D3C98FEC473 /* SettingsSidebarProfileHeader.swift */; };
@@ -143,6 +145,7 @@
 		3FCDFDB2CAD4122B82BB0F56 /* LiveTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTelemetryTabView.swift; sourceTree = "<group>"; };
 		40E846C8A8D0F975578DC4A3 /* TelemetryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryModels.swift; sourceTree = "<group>"; };
 		4288E0F5116729219BEF8C7F /* LiquidGlassSegmentedControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassSegmentedControl.swift; sourceTree = "<group>"; };
+		429E6F7EDCD1B8795342874C /* DesktopPetCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopPetCoordinator.swift; sourceTree = "<group>"; };
 		492EBDF0A1F66AF48FA59A0E /* LiquidGlassVibrancy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassVibrancy.swift; sourceTree = "<group>"; };
 		49D9D0878C3CE388D1D66853 /* GravUnevenRoundedRectangle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravUnevenRoundedRectangle.swift; sourceTree = "<group>"; };
 		505B023BBFB8599A956A2BD2 /* CollapsedNotchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollapsedNotchView.swift; sourceTree = "<group>"; };
@@ -187,6 +190,7 @@
 		A189B95D103E3C1285184C3F /* FilesTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesTelemetryTabView.swift; sourceTree = "<group>"; };
 		A1F7C8358277B92CA02CE052 /* GravMockDesktopCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravMockDesktopCanvas.swift; sourceTree = "<group>"; };
 		A7C6FC432DEB452FF3AABBC2 /* ExpandedNotchHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpandedNotchHeaderView.swift; sourceTree = "<group>"; };
+		ABF01EFE3FC18E5E14F2F396 /* DesktopPetOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopPetOverlayView.swift; sourceTree = "<group>"; };
 		AF72E703711EF7C02C996F6F /* GravOnboardingChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingChrome.swift; sourceTree = "<group>"; };
 		B0C0F3062C170F4F485AC076 /* TerminalTelemetryTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalTelemetryTabView.swift; sourceTree = "<group>"; };
 		B0ED16A6DD522EF786F805CC /* GravOnboardingInstructionPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravOnboardingInstructionPanel.swift; sourceTree = "<group>"; };
@@ -255,6 +259,15 @@
 				FA1E15D49525AA2E6D379F50 /* super-saiyan-goku-combat.webp */,
 			);
 			path = DefaultPet;
+			sourceTree = "<group>";
+		};
+		20283A8A5AD3D6318D4906E5 /* Pets */ = {
+			isa = PBXGroup;
+			children = (
+				429E6F7EDCD1B8795342874C /* DesktopPetCoordinator.swift */,
+				ABF01EFE3FC18E5E14F2F396 /* DesktopPetOverlayView.swift */,
+			);
+			path = Pets;
 			sourceTree = "<group>";
 		};
 		69E51BFF9D37DD69D65DFE23 /* App */ = {
@@ -400,6 +413,7 @@
 			children = (
 				96C4209462DB50391133173C /* Notch */,
 				F5CA6B1BD140FBF0329FE559 /* Onboarding */,
+				20283A8A5AD3D6318D4906E5 /* Pets */,
 				778D5CDA438004CA6079A110 /* Settings */,
 			);
 			path = Features;
@@ -582,6 +596,8 @@
 				F0CA558E222110D05A0873EB /* ConversationDiscovery.swift in Sources */,
 				B92DE6AAE0187418B453176D /* ConversationSQLiteProbe.swift in Sources */,
 				32E53235DF117842E30B3DA4 /* DesignTokens.swift in Sources */,
+				4A19BAF538A83BA145E1E9E3 /* DesktopPetCoordinator.swift in Sources */,
+				E13FA59EAAA2801275DABD10 /* DesktopPetOverlayView.swift in Sources */,
 				4252B890306B307D9FEEC9D4 /* DestructiveCommandParser.swift in Sources */,
 				2296303BDAE924F5CE36F00D /* DiffComputer.swift in Sources */,
 				857C6479C9E63071925061DE /* EventClassifier.swift in Sources */,

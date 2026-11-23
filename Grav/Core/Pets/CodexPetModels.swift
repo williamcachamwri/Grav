@@ -1,18 +1,20 @@
 import Foundation
 
-/// Where the Codex Mini Pet sits inside Grav's Notch HUD.
+/// Preferred screen anchor for Grav's floating desktop Codex Mini Pet.
 public enum MiniPetPlacement: String, CaseIterable, Identifiable, Sendable {
-    case leading = "leading"
-    case trailing = "trailing"
-    case expandedOnly = "expandedOnly"
+    case topRight = "topRight"
+    case bottomRight = "bottomRight"
+    case bottomLeft = "bottomLeft"
+    case free = "free"
 
     public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
-        case .leading: return "Leading"
-        case .trailing: return "Trailing"
-        case .expandedOnly: return "Expanded Only"
+        case .topRight: return "Top Right"
+        case .bottomRight: return "Bottom Right"
+        case .bottomLeft: return "Bottom Left"
+        case .free: return "Free"
         }
     }
 }
