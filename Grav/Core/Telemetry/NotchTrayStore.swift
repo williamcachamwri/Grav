@@ -115,8 +115,6 @@ public final class NotchTrayStore {
     public var isTrayOpenRequested: Bool = false
     /// True while a drag cursor is directly hovering inside the Notch drop surface.
     public var isDropTargeted: Bool = false
-    /// True while hovering specifically over the left Instant-Send drop pod.
-    public var isQuickSendDropTargeted: Bool = false
     /// True when the active macOS drag pasteboard contains at least one image.
     public var globalDragHasImage: Bool = false
     /// Approximate item count on the active macOS drag pasteboard.

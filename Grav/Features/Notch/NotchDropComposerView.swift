@@ -160,8 +160,6 @@ public struct NotchDropComposerView: View {
 
     @State private var hoveredItemID: String?
     @State private var hoveredQueueID: String?
-    @State private var isQuickPodHovered: Bool = false
-    @State private var isQuickPodDropTargeted: Bool = false
     @State private var isShelfDropTargeted: Bool = false
     @State private var isAccessibilityTrusted: Bool = false
     @State private var sendLaunchImpulse: Bool = false
@@ -205,15 +203,10 @@ public struct NotchDropComposerView: View {
         @Bindable var tray = trayStore
 
         VStack(alignment: .leading, spacing: 9) {
-            // 1. boring.notch-inspired Dual-Zone Drop Stage (Instant Send Pod + Expansive Drop Shelf)
-            HStack(spacing: 10) {
-                quickSendPod
-                    .frame(width: shelfHeight, height: shelfHeight)
-
-                dropShelfBay
-                    .frame(maxWidth: .infinity, minHeight: shelfHeight, maxHeight: shelfHeight)
-            }
-            .animation(reduceMotion ? nil : .spring(duration: 0.30, bounce: 0.16), value: shelfHeight)
+            // 1. Full-width boring.notch-inspired Drop Shelf Bay
+            dropShelfBay
+                .frame(maxWidth: .infinity, minHeight: shelfHeight, maxHeight: shelfHeight)
+                .animation(reduceMotion ? nil : .spring(duration: 0.30, bounce: 0.16), value: shelfHeight)
 
             // 2. Seamless Borderless Obsidian Prompt Composer + Target Switcher
             seamlessPromptSection(draftBinding: $tray.draftPrompt)
@@ -261,110 +254,16 @@ public struct NotchDropComposerView: View {
             removeImagePasteMonitor()
             isInputFocused = false
             trayStore.isDropTargeted = false
-            trayStore.isQuickSendDropTargeted = false
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             isAccessibilityTrusted = trayStore.isAccessibilityTrustedForAutoSend
         }
     }
 
-    // MARK: - Left Pod: boring.notch FileShareView-Inspired Instant Send Pod
-
-    private var quickSendPod: some View {
-        let highlighted = isQuickPodDropTargeted || trayStore.isQuickSendDropTargeted
-        return ZStack {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(highlighted ? 0.11 : (isQuickPodHovered ? 0.065 : 0.04)),
-                            Color.white.opacity(highlighted ? 0.05 : 0.018),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(
-                            highlighted
-                                ? Color.white.opacity(0.75)
-                                : Color.white.opacity(isQuickPodHovered ? 0.22 : 0.11),
-                            style: StrokeStyle(
-                                lineWidth: highlighted ? 1.8 : 1.0,
-                                lineCap: .round,
-                                dash: highlighted ? [7, 5] : [6, 5]
-                            )
-                        )
-                )
-
-            VStack(spacing: 6) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(highlighted ? 0.18 : 0.085))
-                        .frame(width: 40, height: 40)
-
-                    Image(systemName: highlighted ? "paperplane.fill" : "arrow.up.forward.app")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(highlighted ? Color.white : Color.white.opacity(0.76))
-                        .scaleEffect(!reduceMotion && highlighted ? 1.12 : 1.0)
-                        .offset(y: !reduceMotion && highlighted ? -1.5 : 0)
-                }
-
-                Text(highlighted ? "Send Now" : "Quick Send")
-                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(highlighted ? 0.96 : 0.72))
-                    .lineLimit(1)
-            }
-            .padding(6)
-
-            // Native AppKit drop catcher dedicated to this Quick Send pod
-            NotchNativeDropBridgeView(
-                isCatchingActive: isNativeDragCatching,
-                onTargetedChanged: { targeted in
-                    isQuickPodDropTargeted = targeted
-                    trayStore.isQuickSendDropTargeted = targeted
-                    if targeted {
-                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-                    }
-                },
-                onDropPasteboard: { pb in
-                    let added = trayStore.stageFromPasteboard(pb, allowPlainText: true)
-                    if added > 0 {
-                        completeDragDropAndQuickSend()
-                    }
-                    return added
-                },
-                onPromisedURLs: { urls in
-                    let added = trayStore.stageFileURLs(urls)
-                    if added > 0 {
-                        completeDragDropAndQuickSend()
-                    }
-                }
-            )
-        }
-        .scaleEffect(!reduceMotion && highlighted ? 1.025 : 1.0)
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .onTapGesture {
-            browseLocalFiles()
-        }
-        .onHover { hovering in
-            isQuickPodHovered = hovering
-        }
-        .onDrop(of: [.fileURL, .url, .image, .png, .tiff, .plainText, .data], isTargeted: $isQuickPodDropTargeted) { providers in
-            trayStore.handleDrop(providers: providers) {
-                completeDragDropAndQuickSend()
-            }
-        }
-        .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.74), value: highlighted)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isQuickPodHovered)
-        .help("Drop image/file to send immediately to Antigravity, or click to browse")
-    }
-
-    // MARK: - Right Bay: boring.notch ShelfView-Inspired Expansive Drop Shelf
+    // MARK: - boring.notch ShelfView-Inspired Expansive Drop Shelf
 
     private var dropShelfBay: some View {
-        let targeted = isShelfDropTargeted || (trayStore.isDropTargeted && !trayStore.isQuickSendDropTargeted)
+        let targeted = isShelfDropTargeted || trayStore.isDropTargeted
         return ZStack {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.white.opacity(targeted ? 0.065 : 0.024))
@@ -383,7 +282,7 @@ public struct NotchDropComposerView: View {
                 )
 
             if trayStore.stagedItems.isEmpty {
-                // Clean boring.notch empty drop bay with live magnetic spring cue
+                // Clean boring.notch empty drop bay with live magnetic spring cue (click to browse files)
                 VStack(spacing: 6) {
                     Image(systemName: targeted ? "arrow.down.circle.fill" : "tray.and.arrow.down.fill")
                         .symbolRenderingMode(.hierarchical)
@@ -399,12 +298,16 @@ public struct NotchDropComposerView: View {
                         .font(.system(size: 12.5, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.white.opacity(targeted ? 0.96 : 0.66))
 
-                    Text("Stage with your prompt · drag out anytime · ⌘V paste")
+                    Text("Click to browse · drag out anytime · ⌘V paste")
                         .font(.system(size: 9.5, weight: .regular))
                         .foregroundStyle(Color.white.opacity(0.30))
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .onTapGesture {
+                    browseLocalFiles()
+                }
             } else {
                 // boring.notch ShelfItemView-inspired horizontal thumbnail strip
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -774,8 +677,9 @@ public struct NotchDropComposerView: View {
         if fileCount > 0 {
             return "Write instruction for \(fileCount) file\(fileCount == 1 ? "" : "s")… (⌘↵ send)"
         }
+        let cleanTitle = activeSessionShortTitle.trimmingCharacters(in: CharacterSet(charactersIn: ".… "))
         return trayStore.sendTarget == .activeSession
-            ? "Message \(activeSessionShortTitle)… (↵ queue · ⌘↵ send)"
+            ? "Message \(cleanTitle)… (↵ queue · ⌘↵ send)"
             : "Start a new conversation… (↵ queue · ⌘↵ send)"
     }
 
@@ -869,23 +773,11 @@ public struct NotchDropComposerView: View {
         trayStore.isGlobalDragActive = false
         trayStore.isGlobalDragNearNotch = false
         trayStore.isDropTargeted = false
-        trayStore.isQuickSendDropTargeted = false
         isShelfDropTargeted = false
-        isQuickPodDropTargeted = false
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         GravOnboardingWelcomeAudio.shared.playButtonTap()
         onShowToast(count == 1 ? "Staged on Notch Shelf" : "Staged \(count) items on Shelf")
         activateNotchPanelForTyping()
-    }
-
-    private func completeDragDropAndQuickSend() {
-        trayStore.isGlobalDragActive = false
-        trayStore.isGlobalDragNearNotch = false
-        trayStore.isDropTargeted = false
-        trayStore.isQuickSendDropTargeted = false
-        isShelfDropTargeted = false
-        isQuickPodDropTargeted = false
-        sendToAntigravityChat()
     }
 
     private func triggerCaptureShutterPulse() {

@@ -576,7 +576,6 @@ public final class NotchHUDCoordinator {
         let tray = NotchTrayStore.shared
         tray.isGlobalDragNearNotch = false
         tray.isDropTargeted = false
-        tray.isQuickSendDropTargeted = false
 
         // Smooth 480ms debounce just like boring.notch (`anyDropDebounceTask`) before collapsing.
         dragExitDebounceTask?.cancel()
@@ -585,8 +584,7 @@ public final class NotchHUDCoordinator {
             guard !Task.isCancelled, let self else { return }
             let tray = NotchTrayStore.shared
             guard !self.hasEnteredNotchRegion,
-                  !tray.isDropTargeted,
-                  !tray.isQuickSendDropTargeted
+                  !tray.isDropTargeted
             else { return }
 
             let justDropped = Date().timeIntervalSince(tray.lastDropCompletedAt) < 1.5
@@ -617,7 +615,6 @@ public final class NotchHUDCoordinator {
             tray.isGlobalDragActive = false
             tray.isGlobalDragNearNotch = false
             tray.isDropTargeted = false
-            tray.isQuickSendDropTargeted = false
 
             if self.dragAutoCollapsePauseActive {
                 self.dragAutoCollapsePauseActive = false
